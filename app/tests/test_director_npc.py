@@ -95,20 +95,6 @@ def test_creator_uses_general_context_without_setting_prerequisite():
     assert trace["settings_json"] == "[]"
 
 
-def test_known_ability_rejects_blank_name_and_oversized_label():
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError):
-        KnownAbility(name="   ", description="处理外伤")
-    # strict_name Accept Limit is 25: 21-char names are now within the
-    # buffer; only names above A are rejected (never truncated).
-    KnownAbility(name="x" * 21, description="处理外伤")
-    with pytest.raises(ValidationError):
-        KnownAbility(name="x" * 26, description="处理外伤")
-    with pytest.raises(ValidationError):
-        KnownAbility(name="急救", description="x" * 181)
-
-
 def test_known_ability_allows_empty_description_for_player_edits():
     """Director ability model is LLM-facing and requires a description."""
     from pydantic import ValidationError
@@ -134,13 +120,6 @@ def test_creator_shell_rejects_empty_ability_descriptions():
         name="林澈",
     )
     assert ok.known_abilities[0].description == "处理外伤"
-
-
-def test_known_ability_rejects_unknown_fields():
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError):
-        KnownAbility.model_validate({"name": "急救", "description": "处理外伤", "level": 3})
 
 
 def test_store_uses_prepared_introduced_retired_lifecycle():

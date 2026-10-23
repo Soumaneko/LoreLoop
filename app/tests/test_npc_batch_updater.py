@@ -1,9 +1,12 @@
+from types import SimpleNamespace
+from app.graph import confirmation_nodes
+from app.domain.npc_profile.workflows import NPCConfirmedTurnResult
+from app.domain.core_memory import CoreMemory
+from app.tests.factories.director import make_current_state
 from app.tests.factories.stores import open_npc_profile_store
 import json
-from dataclasses import asdict
 
 import pytest
-from pydantic import ValidationError
 
 from app.core.llm import MockLLM
 
@@ -13,7 +16,7 @@ def _gateway(response=None):
         mock.set_responses([json.dumps(response, ensure_ascii=False)])
     return mock.build_gateway()
 
-from app.core.llm.errors import LLMOutputValidationError, LLMProviderError
+from app.core.llm.errors import LLMProviderError
 from app.domain.confirmed_history import build_turn_documents
 from app.domain.current_state.schemas import (
     CurrentState,
@@ -21,22 +24,12 @@ from app.domain.current_state.schemas import (
     PlayerState,
     SceneState,
 )
-from app.domain.npc_profile.batch_updater import (
-    NPCBatchUpdater,
-    apply_npc_batch_update,
-    build_npc_batch_input,
-)
+from app.domain.npc_profile.batch_updater import NPCBatchUpdater, apply_npc_batch_update
 from app.domain.npc_profile.change_admission import admit_npc_batch_update
-from app.domain.npc_profile.changes import AcceptedNPCAliasChange, NPCBatchCoverage
+from app.domain.npc_profile.changes import NPCBatchCoverage
 from app.domain.npc_profile.identity_resolver import ResolvedNpc
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.npc_profile.turn_contract import (
-    NPCBatchUpdate,
-    NPCBatchUpdateDisplay,
-    NPCBatchUpdateEntry,
-    NPCSceneSummaryDraft,
-    ScalarStableChange,
-)
+from app.domain.npc_profile.turn_contract import NPCBatchUpdateEntry, NPCSceneSummaryDraft, ScalarStableChange
 from app.domain.scene_facts.schemas import (
     AliasRelation,
     NpcPresence,
@@ -165,8 +158,6 @@ def _admit(
     )
 
 
-
-
 def test_admission_applies_valid_stable_change_and_sync():
     result = _admit(
         [_entry("npc_001", scene_summary=_summary(), stable_changes=[_role_change()])],
@@ -181,9 +172,6 @@ def test_admission_applies_valid_stable_change_and_sync():
     assert isinstance(result.coverage, NPCBatchCoverage)
     assert result.coverage.updated_npcs == 1
     assert result.coverage.synced_npcs == 1
-
-
-
 
 
 def test_admission_drops_field_with_invalid_evidence_only():
@@ -210,8 +198,6 @@ def test_admission_drops_field_with_invalid_evidence_only():
     assert "change_evidence_dropped" in {w.code for w in result.warnings}
 
 
-
-
 def test_parse_batch_updates_rejects_known_abilities_but_keeps_other_fields():
     from app.domain.npc_profile.batch_updater import parse_batch_updates
 
@@ -226,54 +212,6 @@ def test_parse_batch_updates_rejects_known_abilities_but_keeps_other_fields():
 
     assert entries[0].stable_changes == []
     assert [warning.code for warning in warnings] == ["invalid_stable_change"]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def test_workflow_resolves_and_applies_to_store():
@@ -319,8 +257,6 @@ def test_workflow_resolves_and_applies_to_store():
         assert result.new_npc_candidates == []
 
 
-
-
 def test_mentioned_only_npc_excluded_from_batch_and_field_output():
     mentions = [_mention("沈孤鸿", presence="mentioned_only")]
     response = {
@@ -352,8 +288,6 @@ def test_mentioned_only_npc_excluded_from_batch_and_field_output():
         profile = store.get_by_id("npc_001")
         assert profile is not None
         assert profile.role is None
-
-
 
 
 def test_scan_union_records_mention_hit_but_never_enters_batch():
@@ -392,26 +326,6 @@ def test_scan_union_records_mention_hit_but_never_enters_batch():
         assert profile.role is None
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _run_processor(mock):
     return NPCBatchUpdater(mock.build_gateway()).process(
         resolved=[
@@ -436,31 +350,6 @@ def test_processor_provider_failure_propagates():
 
     with pytest.raises(LLMProviderError):
         _run_processor(mock)
-
-
-def test_processor_retries_invalid_entry_and_uses_second():
-    first = {
-        "updates": [
-            {"npc_id": "npc_001"},
-            {"bogus": True},
-        ]
-    }
-    second = {
-        "updates": [{
-            "npc_id": "npc_001",
-            "scene_summary": _summary().model_dump(),
-        }]
-    }
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps(first, ensure_ascii=False),
-        json.dumps(second, ensure_ascii=False),
-    ])
-
-    batch = _run_processor(mock)
-
-    assert [entry.npc_id for entry in batch.entries] == ["npc_001"]
-    assert batch.entry_warnings == []
 
 
 def test_parse_scene_summary_dedupes_evidence_without_truncating():
@@ -631,3 +520,53 @@ def test_admission_drops_scene_summary_when_all_evidence_invalid():
     assert "scene_summary_evidence_dropped" in {
         warning.code for warning in result.warnings
     }
+
+
+def test_unmatched_candidate_reaches_npc_update_feedback(
+    monkeypatch,
+):
+    from app.domain.npc_profile.identity_resolver import NpcCandidate
+
+    candidate = NpcCandidate(
+        primary_surface="练气巅峰采药女",
+        presence="appeared",
+        evidence_fact_ids=("f1",),
+    )
+
+    def _apply(**kwargs):
+        return NPCConfirmedTurnResult(
+            process_result=SimpleNamespace(
+                saved_ids=[],
+                new_npc_candidates=[candidate],
+                warnings=[],
+            ),
+            updated_npc_profile_ids=[],
+        )
+
+    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
+    npc_store = open_npc_profile_store(":memory:")
+    state = {
+        "write_db": True,
+        "pipeline_input": SimpleNamespace(
+            turn_index=3,
+            user_input="",
+        ),
+        "trace_id": "trace-npc",
+        "cache": {},
+        "scene_facts": SceneFactSet(scene_focus="药山。"),
+        "effective_scene_text": "药山上有个练气巅峰的采药女。",
+        "updated_state": make_current_state(),
+        "core_memory": CoreMemory(items=[]),
+        "existing_npc_profiles": [],
+        "runtime_services": SimpleNamespace(
+            gateway=lambda **kw: object(),
+            stores=SimpleNamespace(npc_profile=npc_store),
+        ),
+    }
+
+    result = confirmation_nodes.npc_profile_update_node(state)
+
+    assert result["updated_npc_profile_ids"] == []
+    feedback = next(event["data"] for event in result["events"] if "new_npc_candidates" in event["data"])
+    assert [item["name"] for item in feedback["new_npc_candidates"]] == [candidate.primary_surface]
+    npc_store.close()

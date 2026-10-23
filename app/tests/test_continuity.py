@@ -1,32 +1,15 @@
 from app.tests.factories.stores import open_continuity_store
 import hashlib
 import json
-import sqlite3
 
 import pytest
-from pydantic import ValidationError
 
 from app.core.llm import MockLLM
 from app.core.llm.errors import LLMProviderError
 from app.domain.action.schemas import Anchor
-from app.domain.confirmed_history import (
-    build_turn_documents,
-    history_document_text_hash,
-)
-from app.domain.continuity import (
-    ContinuityItem,
-    ContinuityItemDraft,
-    ContinuityProjection,
-    ContinuityProjectionOutput,
-    ContinuityProjectionOutputLoose,
-    ContinuityProjector,
-    ContinuityRetriever,
-    ContinuityService,
-    ContinuityStore,
-    ContinuityUpdateDraft,
-)
+from app.domain.confirmed_history import build_turn_documents
+from app.domain.continuity import ContinuityItem, ContinuityItemDraft, ContinuityProjection, ContinuityProjector, ContinuityRetriever, ContinuityService, ContinuityUpdateDraft
 from app.domain.current_state import CurrentState, PlayerState, SceneState, WorldClock
-from app.core.llm.schema import schema_json
 
 def _draft(
     *,
@@ -139,7 +122,6 @@ def test_projector_sends_complete_active_ledger_in_one_llm_call():
 
     assert result.operations == []
     assert len(gateway.calls) == 1
-    assert gateway.calls[0]["output_schema"] is ContinuityProjectionOutputLoose
     output_schema = json.loads(
         gateway.calls[0]["input_data"]["output_schema_json"]
     )

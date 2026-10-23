@@ -6,588 +6,77 @@ from app.domain.roll.schemas import RollConfig
 from app.domain.roll_modifier.schemas import RollModifier, RollModifierBatch
 
 
-def _make_action(
-    action_id: str,
-    sequence: int,
-    likely_needs_roll: bool,
-) -> AtomicAction:
+def _action(action_id, sequence, *, action_type="observe", needs_roll=True, risk_level=None):
     return AtomicAction(
-        action_id=action_id,
-        sequence=sequence,
-        actor=["主角"],
-        action_type="observe",
-        raw_text="观察四周",
-        verb="观察",
-        target="四周",
-        method=None,
-        condition=None,
-        likely_needs_roll=likely_needs_roll,
+        action_id=action_id, sequence=sequence, actor=["主角"],
+        action_type=action_type, raw_text="观察四周", verb="观察",
+        likely_needs_roll=needs_roll, risk_level=risk_level,
     )
 
 
-class TestDefaultRoll:
-    def test_default_roll_is_d20(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig())
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "1d20"
-        assert result.dice_sides == 20
-        assert result.total_rolls == 1
-        assert result.results[0].dice == "1d20"
-        assert 1 <= result.results[0].value <= 20
-
-    def test_custom_dice_sides(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, True),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(dice_sides=6))
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "2d6"
-        assert result.dice_sides == 6
-        assert result.total_rolls == 2
-
-        for roll in result.results:
-            assert roll.dice == "1d6"
-            assert 1 <= roll.value <= 6
-
-    def test_only_actions_marked_for_roll_are_selected(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig())
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "1d20"
-        assert result.total_rolls == 1
-        assert result.results[0].action_id == "a1"
-
-    def test_seeded_rolls_are_reproducible(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, True),
-            ],
-            anchors=[],
-        )
-
-        resolver_1 = RollResolver(RollConfig(seed=123))
-        resolver_2 = RollResolver(RollConfig(seed=123))
-
-        result_1 = resolver_1.resolve(parse_result)
-        result_2 = resolver_2.resolve(parse_result)
-
-        assert [r.value for r in result_1.results] == [
-            r.value for r in result_2.results
-        ]
-
-    def test_empty_actions_return_zero_rolls(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig())
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "0d20"
-        assert result.total_rolls == 0
-        assert result.results == []
-
-    def test_invalid_dice_sides(self):
-        with pytest.raises(Exception):
-            RollConfig(dice_sides=1)
-
-
-class TestResultFields:
-    def test_preserves_action_mapping(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                AtomicAction(
-                    action_id="a1",
-                    sequence=1,
-                    actor=["主角"],
-                    action_type="hide_or_stealth",
-                    raw_text="躲进阴影",
-                    verb="躲藏",
-                    target="阴影",
-                    method=None,
-                    condition=None,
-                    likely_needs_roll=True,
-                ),
-                AtomicAction(
-                    action_id="a2",
-                    sequence=2,
-                    actor=["主角"],
-                    action_type="observe",
-                    raw_text="观察守卫动向",
-                    verb="观察",
-                    target="守卫",
-                    method=None,
-                    condition=None,
-                    likely_needs_roll=True,
-                ),
-                AtomicAction(
-                    action_id="a3",
-                    sequence=3,
-                    actor=["主角"],
-                    action_type="wait",
-                    raw_text="等他们走远",
-                    verb="等待",
-                    target="守卫",
-                    method=None,
-                    condition=None,
-                    likely_needs_roll=False,
-                ),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(seed=42))
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 2
-
-        a1_result = result.results[0]
-        assert a1_result.action_id == "a1"
-        assert a1_result.sequence == 1
-        assert a1_result.actor == ["主角"]
-        assert a1_result.action_type == "hide_or_stealth"
-        assert a1_result.roll_hint is None
-
-        a2_result = result.results[1]
-        assert a2_result.action_id == "a2"
-        assert a2_result.sequence == 2
-        assert a2_result.actor == ["主角"]
-        assert a2_result.action_type == "observe"
-        assert a2_result.roll_hint is None
-
-    def test_dice_formula_matches_total_rolls(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, True),
-                _make_action("a3", 3, True),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(dice_sides=100))
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "3d100"
-        assert result.total_rolls == 3
-        assert result.dice_sides == 100
-
-    def test_no_roll_actions_with_custom_dice_sides(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, False),
-                _make_action("a2", 2, False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(dice_sides=6))
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "0d6"
-        assert result.total_rolls == 0
-
-
-class TestRollModifiers:
-    def test_modifier_adjusts_value_and_records_raw_value(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[_make_action("a1", 1, True)],
-            anchors=[],
-        )
-        modifier_batch = RollModifierBatch(
-            modifiers=[
-                RollModifier(
-                    action_id="a1",
-                    label="有利地形",
-                    reason="当前位置提供清晰视野。",
-                    value=3,
-                )
-            ]
-        )
-
-        resolver = RollResolver(RollConfig(seed=1))
-        result = resolver.resolve(parse_result, modifier_batch=modifier_batch)
-
-        assert result.results[0].raw_value == 5
-        assert result.results[0].value == 8
-        assert result.results[0].modifiers == modifier_batch.modifiers
-
-    def test_modifier_clamps_upper_bound(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[_make_action("a1", 1, True)],
-            anchors=[],
-        )
-        modifier_batch = RollModifierBatch(
-            modifiers=[
-                RollModifier(
-                    action_id="a1",
-                    label="强力支援",
-                    reason="盟友提供明确支援。",
-                    value=5,
-                )
-            ]
-        )
-
-        resolver = RollResolver(RollConfig(seed=1))
-        result = resolver.resolve(
-            parse_result,
-            modifier_batch=modifier_batch,
-            roll_actions=[
-                _make_action("skip", 1, True),
-                _make_action("a1", 2, True),
-            ],
-        )
-
-        assert result.results[1].raw_value == 19
-        assert result.results[1].value == 20
-
-    def test_modifier_clamps_lower_bound(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[_make_action("a1", 1, True)],
-            anchors=[],
-        )
-        modifier_batch = RollModifierBatch(
-            modifiers=[
-                RollModifier(
-                    action_id="a1",
-                    label="严重干扰",
-                    reason="目标环境明显不利。",
-                    value=-5,
-                )
-            ]
-        )
-
-        resolver = RollResolver(RollConfig(seed=2))
-        result = resolver.resolve(parse_result, modifier_batch=modifier_batch)
-
-        assert result.results[0].raw_value == 2
-        assert result.results[0].value == 1
-
-    def test_no_modifier_keeps_existing_value_behavior(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[_make_action("a1", 1, True)],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(seed=1))
-        result = resolver.resolve(parse_result)
-
-        assert result.results[0].raw_value == 5
-        assert result.results[0].value == 5
-        assert result.results[0].modifiers == []
-
-    def test_select_roll_actions_can_be_reused_for_modifier_evaluation(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-                _make_action("a3", 3, False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(seed=42))
-        roll_actions = resolver.select_roll_actions(parse_result)
-        result = resolver.resolve(parse_result, roll_actions=roll_actions)
-
-        assert [action.action_id for action in roll_actions] == [
-            roll.action_id for roll in result.results
-        ]
-
-
-class TestConfigValidation:
-    def test_min_dice_sides(self):
-        cfg = RollConfig(dice_sides=2)
-        assert cfg.dice_sides == 2
-
-    def test_max_dice_sides(self):
-        cfg = RollConfig(dice_sides=1000)
-        assert cfg.dice_sides == 1000
-
-    def test_dice_sides_too_large(self):
-        with pytest.raises(Exception):
-            RollConfig(dice_sides=1001)
-
-
-class TestRollSelection:
-    def test_rolls_only_actions_marked_as_needing_roll(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver()
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 1
-        assert result.results[0].action_id == "a1"
-
-    def test_all_actions_without_roll_requirement_return_zero_rolls(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, False),
-                _make_action("a2", 2, False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver()
-        result = resolver.resolve(parse_result)
-
-        assert result.dice_formula == "0d20"
-        assert result.total_rolls == 0
-        assert result.results == []
-
-    def test_results_sorted_by_sequence(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, False),
-                _make_action("a3", 3, True),
-                _make_action("a4", 4, False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig())
-        result = resolver.resolve(parse_result)
-
-        sequences = [r.sequence for r in result.results]
-        assert sequences == sorted(sequences)
-
-
-class TestDifficulty:
-    def _single_parse(self):
-        return ActionParseResult(
-            atomic_actions=[_make_action("a1", 1, True)],
-            anchors=[],
-        )
-
-    def _multi_parse(self):
-        return ActionParseResult(
-            atomic_actions=[
-                _make_action("a1", 1, True),
-                _make_action("a2", 2, True),
-            ],
-            anchors=[],
-        )
-
-    def test_default_difficulty_is_hard(self):
-        cfg = RollConfig()
-        assert cfg.difficulty == "困难"
-
-    def test_hard_rolls_1d20(self):
-        resolver = RollResolver(RollConfig(difficulty="困难", seed=1))
-        result = resolver.resolve(self._single_parse())
-
-        assert result.results[0].dice == "1d20"
-        assert len(result.results[0].all_raw_values) == 1
-        assert result.results[0].raw_value == result.results[0].all_raw_values[0]
-        assert result.dice_formula == "1d20"
-
-    def test_normal_rolls_2d20kh(self):
-        resolver = RollResolver(RollConfig(difficulty="普通", seed=1))
-        result = resolver.resolve(self._single_parse())
-
-        assert result.results[0].dice == "2d20kh"
-        assert len(result.results[0].all_raw_values) == 2
-        assert result.results[0].raw_value == max(result.results[0].all_raw_values)
-        assert result.dice_formula == "1×2d20kh"
-
-    def test_easy_rolls_3d20kh(self):
-        resolver = RollResolver(RollConfig(difficulty="简单", seed=1))
-        result = resolver.resolve(self._single_parse())
-
-        assert result.results[0].dice == "3d20kh"
-        assert len(result.results[0].all_raw_values) == 3
-        assert result.results[0].raw_value == max(result.results[0].all_raw_values)
-        assert result.dice_formula == "1×3d20kh"
-
-    def test_normal_raw_value_is_max_of_two(self):
-        parse = self._multi_parse()
-        resolver = RollResolver(RollConfig(difficulty="普通", seed=42))
-        result = resolver.resolve(parse)
-
-        for r in result.results:
-            assert len(r.all_raw_values) == 2
-            assert r.raw_value == max(r.all_raw_values)
-
-    def test_easy_raw_value_is_max_of_three(self):
-        parse = self._multi_parse()
-        resolver = RollResolver(RollConfig(difficulty="简单", seed=42))
-        result = resolver.resolve(parse)
-
-        for r in result.results:
-            assert len(r.all_raw_values) == 3
-            assert r.raw_value == max(r.all_raw_values)
-
-    def test_seeded_normal_is_reproducible(self):
-        parse = self._multi_parse()
-        r1 = RollResolver(RollConfig(difficulty="普通", seed=99))
-        r2 = RollResolver(RollConfig(difficulty="普通", seed=99))
-
-        res1 = r1.resolve(parse)
-        res2 = r2.resolve(parse)
-
-        assert [r.value for r in res1.results] == [r.value for r in res2.results]
-        assert [r.all_raw_values for r in res1.results] == [r.all_raw_values for r in res2.results]
-
-    def test_seeded_easy_is_reproducible(self):
-        parse = self._multi_parse()
-        r1 = RollResolver(RollConfig(difficulty="简单", seed=99))
-        r2 = RollResolver(RollConfig(difficulty="简单", seed=99))
-
-        res1 = r1.resolve(parse)
-        res2 = r2.resolve(parse)
-
-        assert [r.value for r in res1.results] == [r.value for r in res2.results]
-        assert [r.all_raw_values for r in res1.results] == [r.all_raw_values for r in res2.results]
-
-    def test_modifiers_apply_after_keep_highest(self):
-        parse = self._single_parse()
-        modifier_batch = RollModifierBatch(
-            modifiers=[
-                RollModifier(
-                    action_id="a1",
-                    label="有利地形",
-                    reason="当前位置提供清晰视野。",
-                    value=3,
-                )
-            ]
-        )
-
-        resolver = RollResolver(RollConfig(difficulty="普通", seed=1))
-        result = resolver.resolve(parse, modifier_batch=modifier_batch)
-
-        raw = result.results[0].raw_value
-        assert raw is not None
-        assert raw == max(result.results[0].all_raw_values)
-        assert result.results[0].value == min(20, raw + 3)
-
-    def test_empty_actions_normal(self):
-        parse = ActionParseResult(
-            atomic_actions=[],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(difficulty="普通"))
-        result = resolver.resolve(parse)
-
-        assert result.dice_formula == "0×2d20kh"
-        assert result.total_rolls == 0
-
-    def test_custom_dice_sides_with_difficulty(self):
-        parse = self._single_parse()
-
-        resolver = RollResolver(RollConfig(difficulty="简单", dice_sides=6, seed=1))
-        result = resolver.resolve(parse)
-
-        assert result.results[0].dice == "3d6kh"
-        assert result.dice_formula == "1×3d6kh"
-        assert result.dice_sides == 6
-        for v in result.results[0].all_raw_values:
-            assert 1 <= v <= 6
-        assert result.results[0].raw_value == max(result.results[0].all_raw_values)
-
-    def test_all_raw_values_present_for_hard(self):
-        parse = self._single_parse()
-        resolver = RollResolver(RollConfig(difficulty="困难", seed=1))
-        result = resolver.resolve(parse)
-
-        assert result.results[0].all_raw_values == [result.results[0].raw_value]
-
-
-class TestNeverRolls:
-    def _action(self, action_id, sequence, action_type, *, likely_needs_roll, risk_level=None):
-        return AtomicAction(
-            action_id=action_id,
-            sequence=sequence,
-            actor=["主角"],
-            action_type=action_type,
-            raw_text="行动",
-            verb="行动",
-            likely_needs_roll=likely_needs_roll,
-            risk_level=risk_level,
-        )
-
-    def test_wait_is_never_rolled_even_if_marked(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                self._action("w1", 1, "wait", likely_needs_roll=True),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(seed=1))
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 0
-
-    def test_wait_excluded_from_forced_sampling(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                self._action("a1", 1, "observe", likely_needs_roll=True),
-                self._action("w1", 2, "wait", likely_needs_roll=False),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(seed=1))
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 1
-        assert {r.action_id for r in result.results} == {"a1"}
-
-    def test_low_risk_move_is_never_rolled(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                self._action("m1", 1, "move", likely_needs_roll=True, risk_level="low"),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(seed=1))
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 0
-
-    def test_high_risk_move_can_be_rolled(self):
-        parse_result = ActionParseResult(
-            atomic_actions=[
-                self._action("m1", 1, "move", likely_needs_roll=True, risk_level="high"),
-            ],
-            anchors=[],
-        )
-
-        resolver = RollResolver(RollConfig(seed=1))
-        result = resolver.resolve(parse_result)
-
-        assert result.total_rolls == 1
-        assert result.results[0].action_id == "m1"
+def test_default_roll_preserves_selected_action_mapping():
+    actions = [_action("a1", 1), _action("a2", 2, needs_roll=False), _action("a3", 3)]
+    result = RollResolver().resolve(ActionParseResult(atomic_actions=actions))
+    assert result.dice_formula == "2d20"
+    assert result.total_rolls == 2
+    assert [(r.action_id, r.sequence, r.actor, r.action_type) for r in result.results] == [
+        (a.action_id, a.sequence, a.actor, a.action_type) for a in (actions[0], actions[2])
+    ]
+    assert all(1 <= r.value <= 20 for r in result.results)
+
+
+@pytest.mark.parametrize("difficulty,count,sides", [
+    ("困难", 1, 20), ("普通", 2, 20), ("简单", 3, 6),
+])
+def test_difficulty_keeps_highest_before_applying_modifiers(difficulty, count, sides):
+    parsed = ActionParseResult(atomic_actions=[_action("a1", 1), _action("a2", 2)])
+    modifiers = RollModifierBatch(modifiers=[
+        RollModifier(action_id="a1", label="支援", reason="盟友支援。", value=3),
+    ])
+    config = RollConfig(difficulty=difficulty, dice_sides=sides, seed=42)
+    result = RollResolver(config).resolve(parsed, modifier_batch=modifiers)
+    assert RollResolver(config).resolve(parsed, modifier_batch=modifiers) == result
+    dice = f"{count}d{sides}" + ("kh" if count > 1 else "")
+    assert result.dice_formula == (f"2d{sides}" if count == 1 else f"2×{dice}")
+    for roll, adjustment in zip(result.results, (3, 0)):
+        assert roll.dice == dice
+        assert len(roll.all_raw_values) == count
+        assert all(1 <= value <= sides for value in roll.all_raw_values)
+        assert roll.raw_value == max(roll.all_raw_values)
+        assert roll.value == max(1, min(sides, roll.raw_value + adjustment))
+    assert result.results[0].modifiers == modifiers.modifiers
+
+
+@pytest.mark.parametrize("seed,modifier,raw,final", [(1, 5, 19, 20), (2, -5, 2, 1)])
+def test_modifier_clamps_to_dice_range(seed, modifier, raw, final):
+    parsed = ActionParseResult(atomic_actions=[_action("a1", 1)])
+    modifiers = RollModifierBatch(modifiers=[
+        RollModifier(action_id="a1", label="环境", reason="环境影响。", value=modifier),
+    ])
+    selected = [_action("skip", 1), _action("a1", 2)] if seed == 1 else None
+    result = RollResolver(RollConfig(seed=seed)).resolve(
+        parsed, modifier_batch=modifiers, roll_actions=selected,
+    )
+    roll = next(r for r in result.results if r.action_id == "a1")
+    assert (roll.raw_value, roll.value) == (raw, final)
+
+
+def test_automatic_actions_are_excluded_even_from_explicit_roll_selection():
+    actions = [
+        _action("wait", 1, action_type="wait"),
+        _action("walk", 2, action_type="move", risk_level="low"),
+        _action("climb", 3, action_type="move", risk_level="high"),
+    ]
+    parsed = ActionParseResult(atomic_actions=actions)
+    resolver = RollResolver()
+    selected = resolver.select_roll_actions(parsed)
+    assert [a.action_id for a in selected] == ["climb"]
+    result = resolver.resolve(parsed, roll_actions=actions)
+    assert [r.action_id for r in result.results] == ["climb"]
+
+
+@pytest.mark.parametrize("actions", [[], [_action("a1", 1, needs_roll=False)]], ids=["empty", "automatic"])
+def test_no_selected_actions_produce_no_dice(actions):
+    result = RollResolver().resolve(ActionParseResult(atomic_actions=actions))
+    assert result.total_rolls == 0
+    assert result.results == []

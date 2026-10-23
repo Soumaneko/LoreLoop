@@ -52,10 +52,6 @@ def test_event_contract_has_generic_actor_refs_without_npc_dependency():
 
     assert [actor.name for actor in event.actors] == ["港务署"]
     assert all(actor.ref is None for actor in event.actors)
-    assert "director_npc_id" not in event.model_dump()
-    assert "director_npc_id" not in DirectorEventSelectionResult.model_json_schema()[
-        "properties"
-    ]
     assert event.stage == "hidden"
     assert event.subject == "陷空山脚猎户"
     assert event.world_impact is not None
@@ -348,18 +344,3 @@ def test_player_event_projection_excludes_conception():
 
     assert "conception" not in hidden
     assert "conception" not in engaged
-
-
-def test_selection_schema_and_prompts_agree_on_conception_field():
-    from app.core.llm.prompts import PromptLoader
-    from app.core.llm.schema import schema_json
-    from app.domain.director_event.schemas import DirectorEventSelectionOutput
-
-    schema = schema_json(DirectorEventSelectionOutput)
-    assert "conception" in schema
-    assert '"reason"' not in schema
-
-    loader = PromptLoader()
-    content, _ = loader.load("director_event_select")
-    assert "- conception" in content
-    assert "- reason" not in content

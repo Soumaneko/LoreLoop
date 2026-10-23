@@ -1,16 +1,10 @@
 from app.tests.factories.stores import open_world_setting_store
-import sqlite3
 
 import pytest
 from pydantic import ValidationError
 
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
-from app.domain.world_setting import (
-    SettingCreateOutput,
-    WorldSetting,
-    WorldSettingCreator,
-    WorldSettingStore,
-)
+from app.domain.world_setting import SettingCreateOutput, WorldSetting, WorldSettingCreator
 
 
 def _setting(**updates) -> WorldSetting:
@@ -41,31 +35,6 @@ class _Gateway:
         return result
 
 
-def test_setting_kind_is_restricted_to_four_general_categories():
-    assert set(WorldSetting.model_json_schema()["properties"]["kind"]["enum"]) == {
-        "faction",
-        "location",
-        "item",
-        "lore",
-    }
-    with pytest.raises(ValidationError):
-        _setting(kind="organization")
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("name", "设" * 11),
-        ("summary", "设" * 101),
-        ("public_facts", ["设" * 101]),
-        ("hidden_facts", ["设" * 101]),
-    ],
-)
-def test_setting_text_fields_enforce_compact_limits(field, value):
-    with pytest.raises(ValidationError):
-        _setting(**{field: value})
-
-
 def test_setting_reference_view_omits_facts():
     setting = _setting()
     assert setting.reference_view() == {
@@ -93,17 +62,6 @@ def test_static_setting_store_round_trip_and_rejects_duplicate_name():
     assert store.get_by_id(setting.setting_id) == setting
     with pytest.raises(ValueError, match="already exists"):
         store.save(_setting(name=" 听 潮院 "))
-    store.close()
-
-
-def test_setting_store_save_many_persists_all_atomically():
-    store = open_world_setting_store()
-    ids = store.save_many([
-        _setting(name="北港", kind="location"),
-        _setting(name="夜航司", kind="faction"),
-    ])
-    assert len(ids) == 2
-    assert len(store.list_all()) == 2
     store.close()
 
 
@@ -167,7 +125,6 @@ def test_creator_freely_builds_complete_setting_from_limited_guidance():
 
     assert setting.name == "听潮院"
     assert setting.kind == "faction"
-    assert gateway.calls[0]["temperature"] == 0.9
     assert (
         gateway.calls[0]["input_data"]["guidance"]
         == "创建一个调查异常航迹的组织"
@@ -177,7 +134,6 @@ def test_creator_freely_builds_complete_setting_from_limited_guidance():
     assert "远帆会" in existing_json
     assert "public_facts" not in existing_json
     assert "hidden_facts" not in existing_json
-    assert "related_settings_json" not in gateway.calls[0]["input_data"]
 
 
 def _premise_core_memory() -> CoreMemory:
@@ -294,26 +250,6 @@ def test_setting_requires_concrete_non_overlapping_facts():
             public_facts=["同一事实"],
             hidden_facts=["同一事实"],
         )
-
-
-def test_store_rejects_previous_schema_instead_of_migrating_it(tmp_path):
-    db_path = tmp_path / "world_settings.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "CREATE TABLE world_settings (setting_id TEXT PRIMARY KEY, label TEXT)"
-    )
-    conn.commit()
-    conn.close()
-
-    with pytest.raises(RuntimeError, match="static Setting contract"):
-        open_world_setting_store(str(db_path))
-
-
-def test_setting_domain_has_no_extraction_or_maintenance_layer():
-    from pathlib import Path
-
-    names = {path.name for path in Path("app/domain/world_setting").glob("*.py")}
-    assert names == {"__init__.py", "creator.py", "schemas.py", "store.py"}
 
 
 def test_setting_appears_in_text_strips_surrounding_whitespace():

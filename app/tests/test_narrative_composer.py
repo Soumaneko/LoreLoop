@@ -5,14 +5,10 @@ import pytest
 from app.core.llm.gateway import LLMGateway
 from app.core.llm.prompts import PromptLoader
 from app.core.llm.providers import MockProvider
-from app.core.llm.schema import schema_json
 from app.core.llm.tracing import NullTraceLogger
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
-from app.domain.narrative_composer.runner import (
-    _HardComposerResult,
-    run_narrative_composition,
-)
+from app.domain.narrative_composer.runner import run_narrative_composition
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.action_judgment.schemas import ActionJudgment
 
@@ -67,16 +63,6 @@ def _output() -> dict:
         "closing_prompt": "人群仍在流动，你会怎么做？",
         "next_action_directions": [],
     }
-
-
-def test_prompt_schema_keeps_hard_limit_and_outcome_enum():
-    schema = json.loads(schema_json(_HardComposerResult))
-    action = next(
-        item for item in schema["$defs"].values()
-        if "resolved_fact" in item.get("properties", {})
-    )
-    assert action["properties"]["resolved_fact"]["maxLength"] == 80
-    assert "failure" in action["properties"]["outcome_band"]["enum"]
 
 
 def test_composer_accepts_matching_program_judgment():

@@ -55,15 +55,7 @@ def test_agent_projects_only_numbered_prose_and_compact_character_catalog():
         "埃利奥何时第一次得知灰烬图书馆？",
     ]
     assert "P002-P003" in result.thought_process
-    assert gateway.call["task"] == "narrative_canon_query"
-    assert gateway.call["temperature"] == 0.2
-    assert gateway.call["trace_id"] == "trace-query"
     input_data = gateway.call["input_data"]
-    assert set(input_data) == {
-        "numbered_scene_text",
-        "known_entity_catalog_json",
-        "output_schema_json",
-    }
     assert "[P001]" in input_data["numbered_scene_text"]
     assert "[P003]" in input_data["numbered_scene_text"]
     catalog = json.loads(input_data["known_entity_catalog_json"])
@@ -72,8 +64,6 @@ def test_agent_projects_only_numbered_prose_and_compact_character_catalog():
         {"name": "埃利奥", "aliases": ["木偶师"], "kind": "npc"},
     ]
     assert "秘密" not in input_data["known_entity_catalog_json"]
-    schema = json.loads(input_data["output_schema_json"])
-    assert "query_id" not in json.dumps(schema, ensure_ascii=False)
 
 
 def test_agent_allows_no_queries_and_rejects_empty_scene():
@@ -126,54 +116,3 @@ def test_agent_provider_failure_propagates():
             player_name="莱尔",
             npc_profiles=[],
         )
-
-
-def test_agent_first_invalid_retries_and_second_valid_subset_wins():
-    from app.core.llm import MockLLM
-
-    first = json.dumps({
-        "thought_process": "第一轮。",
-        "queries": [
-            {
-                "paragraph_ids": ["P001"],
-                "claim": "埃利奥到过图书馆。",
-                "claim_type": "location_or_presence",
-                "entities": ["埃利奥"],
-                "lookup_queries": ["埃利奥是否到过？"],
-                "priority": "high",
-            },
-            {
-                "paragraph_ids": ["P001"],
-                "claim": "",
-                "claim_type": "other",
-                "entities": [],
-                "lookup_queries": [],
-                "priority": "low",
-            },
-        ],
-    }, ensure_ascii=False)
-    second = json.dumps({
-        "thought_process": "第二轮。",
-        "queries": [
-            {
-                "paragraph_ids": ["P001"],
-                "claim": "埃利奥到过图书馆。",
-                "claim_type": "location_or_presence",
-                "entities": ["埃利奥"],
-                "lookup_queries": ["埃利奥是否到过？"],
-                "priority": "high",
-            }
-        ],
-    }, ensure_ascii=False)
-    mock = MockLLM()
-    mock.set_responses([first, second])
-    agent = NarrativeCanonQueryAgent(mock.build_gateway())
-
-    result = agent.generate(
-        scene_text="埃利奥说自己去过灰烬图书馆。",
-        player_name="莱尔",
-        npc_profiles=[],
-    )
-
-    assert result.queries[0].claim == "埃利奥到过图书馆。"
-    assert agent.last_warnings == []

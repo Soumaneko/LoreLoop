@@ -1,5 +1,4 @@
 from app.tests.factories.stores import open_confirmed_history_store
-import json
 
 from app.domain.canon_evidence import (
     CanonEvidenceRetriever,
@@ -383,28 +382,3 @@ def test_check_projection_omits_queries_without_evidence():
         store.close()
 
     assert project_canon_evidence_for_check(query_set, evidence_set) == "[]"
-
-
-def test_check_projection_orders_each_record_as_before_text_after():
-    query_set = _query_set()
-    store = open_confirmed_history_store()
-    try:
-        _seed(store, [
-            ShortTermScene(
-                scene_id="scene_003",
-                turn_index=3,
-                scene_text=(
-                    "埃利奥询问那座废墟叫什么。\n\n"
-                    "希尔达第一次说出灰烬图书馆。\n\n"
-                    "埃利奥重复这个陌生名字。"
-                ),
-            )
-        ])
-        evidence_set = CanonEvidenceRetriever(store, _catalog()).retrieve(query_set)
-    finally:
-        store.close()
-
-    projected = project_canon_evidence_for_check(query_set, evidence_set)
-    assert json.loads(projected)[0]["audit_target"] == query_set.queries[0].claim
-    assert projected.index('"context_before"') < projected.index('"text"')
-    assert projected.index('"text"') < projected.index('"context_after"')

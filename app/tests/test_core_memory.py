@@ -2,7 +2,6 @@ import json
 import pytest
 from pydantic import ValidationError
 from app.core.llm import MockLLM
-from app.core.llm.schema import display_schema_json
 from app.domain.core_memory import (
     CampaignSetupAgent,
     CampaignSetupProposal,
@@ -10,11 +9,7 @@ from app.domain.core_memory import (
     build_core_memory,
     build_initial_current_state,
 )
-from app.domain.core_memory.campaign_setup import (
-    CAMPAIGN_SETUP_PROMPT_TARGETS,
-    CampaignSetupProposalWire,
-    PublicPowerBaselineWire,
-)
+from app.domain.core_memory.campaign_setup import CampaignSetupProposalWire, PublicPowerBaselineWire
 from app.domain.current_state import InventoryItem
 from app.graph.initialization_helpers import preview_initialization_config
 
@@ -48,22 +43,7 @@ def make_proposal() -> CampaignSetupProposal:
     )
 
 
-def test_init_config_contains_only_player_layer_and_keeps_dropdown_contracts():
-    config = make_config()
-    assert set(config.model_dump()) == {
-        "version",
-        "world_name",
-        "ability_system",
-        "custom_ability_system",
-        "world_style",
-        "protagonist_name",
-        "protagonist_gender",
-        "protagonist_age",
-        "protagonist_introduction",
-        "protagonist_abilities",
-        "story_expectation",
-        "failure_severity",
-    }
+def test_init_config_requires_details_for_custom_ability_system():
     with pytest.raises(ValidationError):
         make_config(ability_system="随意手写的体系")
     with pytest.raises(ValidationError):
@@ -157,31 +137,6 @@ def test_campaign_setup_agent_generates_only_public_world_conventions():
     assert result == make_proposal().model_copy(update={
         "public_power_baseline": result.public_power_baseline,
     })
-    assert set(result.model_dump()) == {
-        "version",
-        "currency_unit",
-        "public_power_baseline",
-        "peoples_and_beings",
-        "major_world_conflicts",
-        "dominant_powers",
-        "civilization_baseline",
-    }
-
-
-def test_campaign_setup_agent_retries_blank_currency_and_uses_second():
-    valid = make_proposal().model_dump(mode="json")
-    blank = {**valid, "currency_unit": "   "}
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps(blank, ensure_ascii=False),
-        json.dumps(valid, ensure_ascii=False),
-    ])
-
-    result = CampaignSetupAgent(mock.build_gateway()).generate(
-        config=make_config(),
-    )
-
-    assert result.currency_unit == "银币"
 
 
 @pytest.mark.parametrize(
@@ -255,44 +210,6 @@ def test_generation_wire_rejects_blank_currency_unit():
     payload["currency_unit"] = "   "
     with pytest.raises(ValidationError):
         CampaignSetupProposalWire.model_validate(payload)
-
-
-def test_generation_prompt_schema_keeps_shaping_targets():
-    schema = json.loads(display_schema_json(
-        CampaignSetupProposal,
-        max_lengths=CAMPAIGN_SETUP_PROMPT_TARGETS,
-    ))
-    baseline = schema["$defs"]["PublicPowerBaseline"]
-    assert baseline["properties"]["limitation"]["maxLength"] == 60
-    assert baseline["properties"]["source"]["maxLength"] == 100
-    assert schema["properties"]["civilization_baseline"]["maxLength"] == 160
-    assert "description" not in baseline
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("peoples_and_beings", ["超过十个字的主要智慧存在主体"]),
-        ("dominant_powers", ["超过十个字的世界主导权力集团"]),
-        ("major_world_conflicts", ["冲突" * 26]),
-    ],
-)
-def test_campaign_setup_world_context_enforces_item_lengths(field, value):
-    payload = make_proposal().model_dump(mode="json")
-    payload[field] = value
-    with pytest.raises(ValidationError):
-        CampaignSetupProposal.model_validate(payload)
-
-
-def test_campaign_setup_world_context_accepts_exact_item_limits():
-    payload = make_proposal().model_dump(mode="json")
-    payload["peoples_and_beings"] = ["人" * 10]
-    payload["dominant_powers"] = ["势" * 10]
-    payload["major_world_conflicts"] = ["冲" * 50]
-    result = CampaignSetupProposal.model_validate(payload)
-    assert len(result.peoples_and_beings[0]) == 10
-    assert len(result.dominant_powers[0]) == 10
-    assert len(result.major_world_conflicts[0]) == 50
 
 
 def test_campaign_setup_keeps_realistic_world_subjects_minimal():

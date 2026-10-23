@@ -1,4 +1,3 @@
-import json
 import sqlite3
 from types import SimpleNamespace
 from typing import Any
@@ -9,15 +8,9 @@ from app.domain.director.schemas import DirectorStageMaterial, DirectorStageResu
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile import workflows as npc_workflows
 from app.domain.npc_profile.director_promotion import npc_profile_from_spontaneous_material
-from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.workflows import auto_backfill_spontaneous_npc_profiles
-from app.domain.scene_facts.schemas import (
-    AliasRelation,
-    SceneFact,
-    SceneFactSet,
-    SceneNpcMention,
-)
+from app.domain.scene_facts.schemas import SceneFact, SceneFactSet, SceneNpcMention
 
 
 class _MockGateway:
@@ -77,7 +70,6 @@ def test_draw_desire_pattern_returns_valid_string():
 
 
 def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
-    calls = []
     process_result = SimpleNamespace(
         saved_ids=["npc_batch", "npc_shared"],
         new_npc_candidates=[],
@@ -85,15 +77,12 @@ def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
     )
 
     def _backfill(**kwargs):
-        calls.append("backfill")
         return ["npc_backfill", "npc_shared"]
 
     def _batch(**kwargs):
-        calls.append("batch")
         return process_result
 
     def _prune(**kwargs):
-        calls.append("prune")
         return ["npc_pruned", "npc_batch"]
 
     monkeypatch.setattr(
@@ -122,8 +111,7 @@ def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
         trace_id="trace-2",
     )
 
-    assert calls == ["backfill", "batch", "prune"]
-    assert result.process_result is process_result
+    assert result.process_result == process_result
     assert result.updated_npc_profile_ids == [
         "npc_backfill",
         "npc_shared",

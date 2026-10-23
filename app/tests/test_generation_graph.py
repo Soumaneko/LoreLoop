@@ -108,147 +108,54 @@ def test_generate_turn_stream_forwards_state_events(monkeypatch):
     ]
 
 
-def test_reroll_creates_next_version_in_same_group(
-    monkeypatch,
-    configure_runtime_services,
-):
-    turn_id = "turn_v1"
-    group_id = "group_1"
-    state_before = make_default_state()
+def test_rephrase_saves_new_prose_with_the_selected_action_outcome(configure_runtime_services, monkeypatch):
+    from app.domain.action_judgment.schemas import ActionJudgment
+    from app.domain.narrative_composer.schemas import NarrativeComposerResult
+    from app.tests.factories.domains import make_player_resolution
+
     runtime = get_campaign_runtime()
-    runtime.pending_turns.add(make_pending_turn(
-        turn_id=turn_id,
-        group_id=group_id,
-        user_input="观察门外",
-        max_chars=900,
-        state_before=state_before,
-        outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
-        scene_result=SceneWriterResult(scene_text="版本一"),
-        turn_index=3,
-        short_term_memory=ShortTermMemory(),
-    ))
-    captured = {}
-    order = []
-
-    class _StateStore:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return None
-
-        def load_or_default(self):
-            order.append("state_loaded")
-            return state_before
-
-    def _retry_stream(user_input, difficulty, max_chars, **kwargs):
-        order.append("retry_generation_started")
-        captured.update({
-            "user_input": user_input,
-            "difficulty": difficulty,
-            "max_chars": max_chars,
-            **kwargs,
-        })
-        yield {"step": "scene_written", "data": {"turn_id": "turn_v2"}}
-
-    configure_runtime_services(current_state=_StateStore)
-    monkeypatch.setattr(generation_graph, "_generate_turn_stream", _retry_stream)
-
-    try:
-        events = list(generation_graph.reroll_turn_stream(turn_id))
-        old_version_retained = turn_id in runtime.pending_turns
-    finally:
-        runtime.pending_turns.remove(turn_id)
-
-    assert events[0]["step"] == "reroll_started"
-    assert order == [
-        "state_loaded",
-        "retry_generation_started",
-    ]
-    assert captured == {
-        "user_input": "观察门外",
-        "difficulty": "普通",
-        "max_chars": 900,
-        "group_id": group_id,
-        "version_index": 2,
-    }
-    assert old_version_retained is True
-    assert events[-1]["data"]["turn_id"] == "turn_v2"
-
-
-def test_rephrase_reuses_selected_composer_context_without_full_generation(
-    monkeypatch,
-    configure_runtime_services,
-):
-    turn_id = "turn_v1"
-    group_id = "group_1"
-    state_before = make_default_state()
-    context = NarrativeComposerContext(user_input="观察门外", current_state=state_before, core_memory=CoreMemory(items=[]))
-    director_stage = DirectorStageResult(reasoning="门外来人。")
-    short_term = ShortTermMemory()
-    runtime = get_campaign_runtime()
-    runtime.pending_turns.add(make_pending_turn(
-        turn_id=turn_id,
-        group_id=group_id,
-        user_input="观察门外",
-        max_chars=900,
-        state_before=state_before,
-        context=context,
-        outline=PlotOutlineResult(scene_stopping_point="门外传来脚步声。"),
-        scene_result=SceneWriterResult(scene_text="版本一"),
-        director_stage=director_stage,
-        turn_index=3,
-        short_term_memory=short_term,
-    ))
-    player_resolution = runtime.pending_turns.get(turn_id).player_resolution
-    captured = {}
-    graph = object()
-
-    class _StateStore:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return None
-
-        def load_or_default(self):
-            return state_before
-
-    def _stream(state, selected_graph, **kwargs):
-        captured.update({"state": state, "graph": selected_graph, **kwargs})
-        yield {"step": "scene_written", "data": {"turn_id": "turn_v2"}}
-
-    configure_runtime_services(current_state=_StateStore)
-    monkeypatch.setattr(
-        generation_graph,
-        "build_rephrase_graph",
-        lambda **_kwargs: graph,
+    state = make_default_state()
+    judgment = ActionJudgment(
+        action_id="A1", sequence=1, actor=[state.player.name], action_type="observe",
+        action_text="观察门外", resolution_source="roll", outcome_band="partial_success",
     )
-    monkeypatch.setattr(generation_graph, "_stream_generation_graph", _stream)
-    monkeypatch.setattr(
-        generation_graph,
-        "_generate_turn_stream",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("full generation must not run")
-        ),
+    context = NarrativeComposerContext(
+        user_input=judgment.action_text, current_state=state,
+        core_memory=CoreMemory(items=[]), action_judgments=[judgment],
     )
+    resolution = make_player_resolution()
+    resolution.actions[0].action_text = judgment.action_text
+    source = make_pending_turn(context=context, state_before=state, player_resolution=resolution)
+    runtime.pending_turns.add(source)
 
-    try:
-        events = list(generation_graph.rephrase_turn_stream(turn_id))
-    finally:
-        runtime.pending_turns.remove(turn_id)
+    class Composer:
+        def __init__(self, gateway):
+            pass
 
-    state = captured["state"]
-    assert captured["graph"] is graph
-    assert captured["group_id"] == group_id
-    assert captured["version_index"] == 2
-    assert state["context"] is context
-    assert state["action_judgments"] is context.action_judgments
-    assert state["player_resolution"] is player_resolution
-    assert state["current_state"] is state_before
-    assert state["short_term_memory"] is short_term
-    assert state["director_stage"] is director_stage
-    assert events[-1]["data"]["turn_id"] == "turn_v2"
+        def compose(self, context, **kwargs):
+            assert context.user_input == source.user_input
+            assert context.action_judgments == [judgment]
+            return NarrativeComposerResult(
+                action_resolutions=[{
+                    "action_id": judgment.action_id, "outcome_band": judgment.outcome_band,
+                    "resolved_fact": "你看清门外有人，但未认出身份。",
+                }],
+                scene_stopping_point="门外的人仍在等候。",
+                planned_events=[{"event_id": "e1", "event_fact": "你观察门外。", "linked_outcome_ids": ["A1"]}],
+                scene_reasoning="依照原判定改写观察经过。", scene_text="你从门缝看到等候的人影。",
+                closing_prompt="人影仍未离开。",
+            )
+
+    configure_runtime_services(gateway_factory=lambda **kw: SimpleNamespace(set_trace_context=lambda **kw: None))
+    monkeypatch.setattr(generation_nodes, "NarrativeComposerAgent", Composer)
+    monkeypatch.setattr(generation_graph, "canon_validation_enabled", lambda: False)
+    list(generation_graph.rephrase_turn_stream(source.turn_id))
+    original, revised = runtime.pending_turns.variants(source.group_id)
+    assert revised.version_index == 2
+    assert revised.scene_result.scene_text == "你从门缝看到等候的人影。"
+    assert revised.context.action_judgments == original.context.action_judgments
+    assert revised.player_resolution == original.player_resolution
+    assert original.scene_result.scene_text == source.scene_result.scene_text
 
 
 def test_feedback_rewrite_cancellation_after_first_event_closes_uow(

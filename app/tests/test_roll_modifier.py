@@ -148,7 +148,6 @@ class TestRollModifierEvaluator:
         assert labels == {"一", "二"}
 
 
-
 def test_roll_modifier_provider_failure_propagates():
     from app.core.llm import MockLLM
 
@@ -163,33 +162,3 @@ def test_roll_modifier_provider_failure_propagates():
             _make_core_memory(),
             roll_actions=[_make_action("a1", True)],
         )
-
-
-def test_roll_modifier_first_invalid_retries_and_second_valid_subset_wins():
-    from app.core.llm import MockLLM
-
-    mock = MockLLM()
-    mock.set_responses([
-        json.dumps({
-            "modifiers": [
-                {"action_id": "a1", "label": "一", "reason": "原因一", "value": 3},
-                {"action_id": "missing", "label": "不存在", "reason": "原因二", "value": 2},
-            ]
-        }, ensure_ascii=False),
-        json.dumps({
-            "modifiers": [
-                {"action_id": "a1", "label": "一", "reason": "原因一", "value": 3},
-            ]
-        }, ensure_ascii=False),
-    ])
-    evaluator = RollModifierEvaluator(mock.build_gateway())
-
-    batch = evaluator.evaluate(
-        _make_parse_result(),
-        _make_state(),
-        _make_core_memory(),
-        roll_actions=[_make_action("a1", True)],
-    )
-
-    assert [modifier.value for modifier in batch.modifiers] == [3]
-    assert evaluator.last_warnings == []

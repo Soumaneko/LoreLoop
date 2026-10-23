@@ -1,16 +1,9 @@
-from app.tests.factories.stores import open_npc_profile_store
-import pytest
 
 import json
-from types import SimpleNamespace
-from pydantic import ValidationError
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import WorldClock
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.npc_profile.workflows import NPCConfirmedTurnResult
-from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.director.confirmation import DirectorConfirmationExecutor
-from app.graph import confirmation_nodes
 from app.runtime.paths import CampaignPaths
 from app.runtime.uow import CampaignUnitOfWork
 from app.tests.factories.director import ScriptedDirectorGateway
@@ -257,58 +250,6 @@ def test_confirmation_agent_observes_only_prepared_director_npcs(tmp_path):
     assert "director_npc_conf_introduced" not in {
         item["npc_id"] for item in observation["resources"]["drafts"]
     }
-
-
-def test_npc_update_node_projects_unmatched_candidate_to_debug_event(
-    monkeypatch,
-):
-    from app.domain.npc_profile.identity_resolver import NpcCandidate
-
-    candidate = NpcCandidate(
-        primary_surface="练气巅峰采药女",
-        presence="appeared",
-        evidence_fact_ids=("f1",),
-    )
-
-    def _apply(**kwargs):
-        return NPCConfirmedTurnResult(
-            process_result=SimpleNamespace(
-                saved_ids=[],
-                new_npc_candidates=[candidate],
-                warnings=[],
-            ),
-            updated_npc_profile_ids=[],
-        )
-
-    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
-    npc_store = open_npc_profile_store(":memory:")
-    state = {
-        "write_db": True,
-        "pipeline_input": SimpleNamespace(
-            turn_index=3,
-            user_input="",
-        ),
-        "trace_id": "trace-npc",
-        "cache": {},
-        "scene_facts": SceneFactSet(scene_focus="药山。"),
-        "effective_scene_text": "药山上有个练气巅峰的采药女。",
-        "updated_state": make_current_state(),
-        "core_memory": CoreMemory(items=[]),
-        "existing_npc_profiles": [],
-        "runtime_services": SimpleNamespace(
-            gateway=lambda **kw: object(),
-            stores=SimpleNamespace(npc_profile=npc_store),
-        ),
-    }
-
-    result = confirmation_nodes.npc_profile_update_node(state)
-
-    assert result["updated_npc_profile_ids"] == []
-    assert result["events"][0]["data"]["new_npc_candidates"] == [{
-        "name": "练气巅峰采药女",
-        "alias_surfaces": [],
-    }]
-    npc_store.close()
 
 
 def test_confirmation_observation_two_tier_npcs(tmp_path):

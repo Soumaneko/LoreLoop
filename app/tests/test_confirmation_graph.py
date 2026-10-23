@@ -268,7 +268,7 @@ def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(
     confirmation_nodes.action_preview_node(state)
 
     assert captured["next_action_directions"] == []
-    assert captured["scene_facts"] is scene_facts
+    assert captured["scene_facts"] == scene_facts
 
 
 def test_staged_director_npc_promotes_without_preadding_participants(

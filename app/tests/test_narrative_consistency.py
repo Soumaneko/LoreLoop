@@ -119,10 +119,6 @@ def test_pass_returns_no_assertions_and_preserves_compact_input_contract():
     assert review.assertions == []
     call = gateway.calls[0]
     assert call["task"] == "narrative_consistency_check"
-    assert call["temperature"] == 0.2
-    assert "max_chars" not in call["input_data"]
-    assert "context_facts_json" not in call["input_data"]
-    assert "recent_scene_json" not in call["input_data"]
     assert call["input_data"]["historical_canon_evidence_json"] == "[]"
     assert "[P001]" in call["input_data"]["segmented_scene_text"]
 

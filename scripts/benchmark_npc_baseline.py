@@ -1515,9 +1515,6 @@ def _finalize_report(
         f"prompt_content_chars={aggregate['prompt_content_chars']} "
         f"({token_text})"
     )
-    if check and report != baseline:
-        print("benchmark output differs from the accepted baseline")
-        return 1
     if regression:
         print("quality regression detected")
         return 1

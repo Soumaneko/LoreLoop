@@ -54,8 +54,8 @@ improvement and does not block the baseline.
 The default backend is `batch`; bare invocations exercise the production path:
 
 ```bash
-PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py            # compare + no regression gate
-PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --check    # require byte-for-byte baseline agreement
+PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py            # compare quality and display report differences
+PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --check    # reject quality regressions; display other report differences
 PYTHONPATH=. uv run python scripts/benchmark_npc_baseline.py --update-baseline
 ```
 
@@ -126,8 +126,9 @@ aggregate; token figures are `null` until a real `--record` run.
 The offline path (`--check`) replays the recorded `npc_batch_update` outputs
 through a stub gateway and re-runs `apply_npc_batch_update` exactly as
 production does (fixed `admitted_at`): same resolution order, admission,
-warning order, and store mutation. The report is byte-for-byte comparable
-across runs and across `PYTHONHASHSEED` values.
+warning order, and store mutation. Report differences remain available for review. The check fails on per-case
+quality regressions, forbidden results, or domain invariant regressions;
+changes to observations such as token usage do not fail the check.
 
 ## Last-scene contracts
 

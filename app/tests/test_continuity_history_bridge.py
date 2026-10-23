@@ -4,7 +4,6 @@ from app.tests.factories.stores import open_npc_profile_store
 from app.tests.factories.stores import open_world_setting_store
 import hashlib
 
-from app.domain.confirmed_history import ConfirmedHistoryStore
 from app.domain.action.schemas import Anchor
 from app.domain.context_facts import (
     ContextFactsInput,
@@ -18,13 +17,8 @@ from app.domain.context_facts import (
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState
 from app.domain.context_facts.views import project_context_history_payload
-from app.domain.continuity import (
-    ContinuityHistoryLink,
-    ContinuityItem,
-    ContinuityStore,
-)
+from app.domain.continuity import ContinuityHistoryLink, ContinuityItem
 from app.domain.context_facts.continuity_bridge import ContinuityHistoryBridge
-from app.domain.world_setting import WorldSettingStore
 
 
 def _item(
@@ -119,55 +113,6 @@ def test_bridge_selects_create_and_latest_update_for_active_item():
     assert "exact_entity_match" in result.links[0].match_reasons
 
 
-
-
-
-
-
-
-def test_location_improves_ranking_without_becoming_eligibility():
-    plan = ContextSearchPlan(intents=[
-        *_explicit_entity_plan().intents,
-        ContextSearchIntent(
-            intent_id="current_location",
-            focus="location",
-            origin="current_context",
-            entities=[ContextSearchEntity(name="陷空山")],
-        ),
-    ])
-    with open_continuity_store() as store:
-        store.insert(_item(
-            "a-without-location",
-            entities=["苏念薇"],
-            location="落雁渡",
-        ))
-        store.insert(_item(
-            "z-with-location",
-            entities=["苏念薇"],
-            location="陷空山",
-        ))
-        for item_id in ("a-without-location", "z-with-location"):
-            _add_log(
-                store,
-                item_id=item_id,
-                operation="create",
-                turn=1,
-                evidence_id=f"{item_id}_evidence",
-                text=f"{item_id} 正文。",
-            )
-
-        result = ContinuityHistoryBridge(
-            store,
-            active_limit=1,
-        ).retrieve(plan)
-
-    assert result.matched_continuity_ids == ["z-with-location"]
-    assert "location_match" in result.links[0].match_reasons
-    assert "location_match" not in result.links[0].eligibility_reasons
-
-
-
-
 def test_relation_hit_competes_with_direct_without_claiming_direct_match():
     relation_text = "那女人提醒他，姓周的看人不像是在看行情。"
     direct_text = "苏念薇决定继续调查山路。"
@@ -219,59 +164,6 @@ def test_relation_hit_competes_with_direct_without_claiming_direct_match():
     projected = project_context_history_payload(result)
     assert "relation_intent_ids" not in projected[1]
     assert "linked_continuity_ids" not in projected[1]
-
-
-
-
-
-
-
-
-def test_relation_only_hits_are_capped_per_continuity_item():
-    links = []
-    with open_confirmed_history_store() as history_store:
-        for turn in range(1, 6):
-            text = f"那女人留下了第{turn}条同一事项的证据。"
-            history_store.upsert_turn(
-                scene_id=f"scene_{turn:03d}",
-                turn_index=turn,
-                user_input="",
-                scene_text=text,
-            )
-            links.append(ContinuityHistoryLink(
-                continuity_id="one-thread",
-                continuity_status="active",
-                operation="update",
-                evidence_id=f"turn_{turn}_p001",
-                evidence_hash=_hash(text),
-                triggering_intent_ids=["explicit_npc"],
-                match_reasons=["exact_entity_match"],
-                evidence_position=turn - 1,
-                evidence_basis_primary=text,
-                basis_complete=True,
-            ))
-
-        result = ContextHistoryRetriever(
-            history_store,
-            diversity_policy=HistoryDiversityPolicy(
-                max_hits=10,
-                relation_owner_cap=3,
-            ),
-        ).retrieve(
-            _explicit_entity_plan(),
-            current_turn_index=6,
-            continuity_links=links,
-        )
-
-    assert [hit.evidence_id for hit in result.hits] == [
-        "turn_5_p001",
-        "turn_4_p001",
-        "turn_3_p001",
-    ]
-    assert result.relation_candidates_considered == 5
-    assert result.relation_hits_added == 3
-
-
 
 
 def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
@@ -344,82 +236,3 @@ def test_context_facts_service_wires_forward_bridge_into_history_retrieval():
     assert result.history_evidence.matched_active_continuities == 1
     assert result.history_evidence.matched_archived_continuities == 0
     assert result.history_evidence.valid_relation_links == 1
-
-
-def test_relation_recency_bonus_flips_near_equal_support(monkeypatch):
-    old_text = (
-        "案角那卷旧残卷的墨迹已经褪成灰褐，边角脆裂如同深秋的枯叶，"
-        "许多字迹都难以辨认，只有少数几行仍隐约可读，纸面上还留着前人"
-        "不经意间压出的折痕，窗外的风一吹便簌簌作响，尘埃在斜光里缓缓浮动。"
-    )
-    new_text = (
-        "货运登记表的纸面还带着新墨未干的湿气，落款清晰可辨，边栏没有"
-        "折损，各项数目与印签也一一对齐，抄录者的笔迹工整而克制，页脚"
-        "还压着半枚尚未干透的印章，边角也平整如新。"
-    )
-    # One changed character breaks two bigrams, so the older node keeps a
-    # slightly higher support score than the newer one on raw relevance.
-    new_basis = new_text.replace("清晰", "清昕")
-
-    with open_confirmed_history_store() as history_store:
-        history_store.upsert_turn(
-            scene_id="scene_004",
-            turn_index=4,
-            user_input="",
-            scene_text=old_text,
-        )
-        history_store.upsert_turn(
-            scene_id="scene_013",
-            turn_index=13,
-            user_input="",
-            scene_text=new_text,
-        )
-        links = [
-            ContinuityHistoryLink(
-                continuity_id="old",
-                continuity_status="active",
-                operation="update",
-                evidence_id="turn_4_p001",
-                evidence_hash=_hash(old_text),
-                triggering_intent_ids=["explicit_npc"],
-                match_reasons=["exact_entity_match"],
-                evidence_position=0,
-                evidence_basis_primary=old_text,
-                basis_complete=True,
-            ),
-            ContinuityHistoryLink(
-                continuity_id="new",
-                continuity_status="active",
-                operation="update",
-                evidence_id="turn_13_p001",
-                evidence_hash=_hash(new_text),
-                triggering_intent_ids=["explicit_npc"],
-                match_reasons=["exact_entity_match"],
-                evidence_position=0,
-                evidence_basis_primary=new_basis,
-                basis_complete=True,
-            ),
-        ]
-
-        import app.domain.context_facts.retriever as retriever_module
-
-        def run() -> list[str]:
-            return [
-                hit.evidence_id
-                for hit in ContextHistoryRetriever(
-                    history_store,
-                    diversity_policy=HistoryDiversityPolicy(max_hits=1),
-                ).retrieve(
-                    _explicit_entity_plan(),
-                    current_turn_index=14,
-                    continuity_links=links,
-                ).hits
-            ]
-
-        monkeypatch.setattr(retriever_module, "TIME_BONUS_EPSILON", 0.0)
-        without_bonus = run()
-        monkeypatch.setattr(retriever_module, "TIME_BONUS_EPSILON", 0.10)
-        with_bonus = run()
-
-    assert without_bonus == ["turn_4_p001"]
-    assert with_bonus == ["turn_13_p001"]

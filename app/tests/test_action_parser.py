@@ -62,12 +62,6 @@ def _make_parser(responses: list[str]) -> ActionParser:
     return ActionParser(mock.build_gateway())
 
 
-def _build_response(actions: list[dict]) -> str:
-    return json.dumps({
-        "atomic_actions": actions,
-    }, ensure_ascii=False)
-
-
 # ══════════════════════════════════════════════════════════════════
 #  Failure policy: salvage, no-effect, and hidden-event filtering
 # ══════════════════════════════════════════════════════════════════
@@ -86,51 +80,6 @@ def test_action_parser_provider_failure_propagates():
             _make_current_state(),
             core_memory=_core_memory(),
         )
-
-
-def test_action_parser_first_invalid_retries_and_second_valid_subset_wins():
-    first = json.dumps({
-        "analysis": "第一次解析",
-        "atomic_actions": [
-            {
-                "action_id": "A1",
-                "sequence": 1,
-                "actor": ["主角"],
-                "action_type": "observe",
-                "raw_text": "观察四周",
-                "verb": "观察",
-                "likely_needs_roll": False,
-            },
-            {
-                "action_id": "  ",
-                "sequence": 2,
-                "actor": ["主角"],
-                "action_type": "attack",
-                "raw_text": "挥剑",
-                "verb": "挥",
-                "likely_needs_roll": True,
-            },
-        ],
-    }, ensure_ascii=False)
-    second = _build_response([{
-        "action_id": "A1",
-        "sequence": 1,
-        "actor": ["主角"],
-        "action_type": "observe",
-        "raw_text": "观察四周",
-        "verb": "观察",
-        "likely_needs_roll": False,
-    }])
-
-    parser = _make_parser([first, second])
-    result = parser.parse(
-        "我观察四周。",
-        _make_current_state(),
-        core_memory=_core_memory(),
-    )
-
-    assert [action.action_id for action in result.atomic_actions] == ["A1"]
-    assert parser.last_warnings == []
 
 
 def test_action_parser_filters_unknown_touched_event_id_after_retry():

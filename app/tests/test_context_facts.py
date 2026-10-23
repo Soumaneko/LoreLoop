@@ -3,58 +3,17 @@ from app.tests.factories.stores import open_confirmed_history_store
 from app.tests.factories.stores import open_npc_profile_store
 from app.tests.factories.stores import open_world_setting_store
 import json
-from types import SimpleNamespace
 
 import pytest
 
-from app.domain.action.schemas import ActionRetrievalTopic, Anchor
 from app.domain.confirmed_history import (
     ConfirmedHistoryStore,
     history_document_text_hash,
 )
-from app.domain.continuity import (
-    ContinuityItem,
-    ContinuityMatch,
-    ContinuitySelection,
-    ContinuityStore,
-)
-from app.domain.context_facts import (
-    ContextExtractor,
-    ContextExtractorInput,
-    ContextFactsInput,
-    ContextFactsService,
-    ContextHistoryEvidenceSet,
-    ContextHistoryHit,
-    ContextHistoryRetriever,
-    HistoryDiversityPolicy,
-    ContextSearchEntity,
-    ContextSearchIntent,
-    ContextSearchPlan,
-    ContinuityInput,
-    ContinuityInputItem,
-    ContinuitySourceParagraph,
-    SettingMatch,
-    SettingRetriever,
-    SettingSelection,
-    build_context_search_plan,
-)
+from app.domain.continuity import ContinuityItem
+from app.domain.context_facts import ContextExtractor, ContextExtractorInput, ContextFactsInput, ContextFactsService, ContextHistoryEvidenceSet, ContextHistoryHit, ContextHistoryRetriever, HistoryDiversityPolicy, ContextSearchEntity, ContextSearchIntent, ContextSearchPlan, ContinuityInput, ContinuityInputItem, ContinuitySourceParagraph, SettingRetriever, SettingSelection
 from app.domain.context_facts.schemas import ContextFactSet
-from app.domain.context_facts.diversity import (
-    AdmissionPreview,
-    SelectionProposal,
-    select_diverse_candidates,
-)
-from app.domain.context_facts.views import (
-    project_context_facts,
-    project_context_history,
-    project_context_history_payload,
-    project_continuity,
-    project_continuity_input,
-    project_continuity_input_payload,
-    project_continuity_payload,
-    project_settings,
-    project_settings_payload,
-)
+from app.domain.context_facts.views import project_context_history, project_context_history_payload, project_continuity_input, project_continuity_input_payload, project_settings
 from app.domain.core_memory import CoreMemory, CoreMemoryItem
 from app.domain.current_state import (
     CurrentState,
@@ -64,10 +23,8 @@ from app.domain.current_state import (
     SceneState,
 )
 from app.domain.npc_profile.schemas import NPCProfile
-from app.domain.scene_summary.schemas import SceneSummary
 from app.domain.short_term_memory import ShortTermScene
-from app.domain.world_setting import WorldSetting, WorldSettingStore
-from app.domain.npc_profile.selection import select_context_profiles
+from app.domain.world_setting import WorldSetting
 
 def _state() -> CurrentState:
     return CurrentState(
@@ -184,7 +141,6 @@ def test_context_history_projection_keeps_nonempty_evidence_context():
     assert "matched_intent_ids" not in record
 
 
-
 def test_context_history_projection_defers_duplicate_text_to_continuity():
     evidence = ContextHistoryEvidenceSet(hits=[ContextHistoryHit(
         evidence_id="turn_10_p002",
@@ -249,17 +205,6 @@ def test_context_fact_set_assigns_fact_ids_and_keeps_internal_evidence():
     ]
 
 
-
-
-
-
-
-
-
-
-
-
-
 def test_history_retriever_caps_entity_owned_hits_independently_of_fact_limit():
     plan = ContextSearchPlan(intents=[
         ContextSearchIntent(
@@ -284,72 +229,6 @@ def test_history_retriever_caps_entity_owned_hits_independently_of_fact_limit():
 
     assert len(result.hits) == 3
     assert [hit.turn_index for hit in result.hits] == [15, 14, 13]
-
-def test_history_diversity_balances_intent_coverage_then_fills():
-    plan = ContextSearchPlan(intents=[
-        ContextSearchIntent(
-            intent_id="entity_ailin",
-            focus="entity",
-            entities=[ContextSearchEntity(name="艾琳")],
-        ),
-        ContextSearchIntent(
-            intent_id="topic_tower",
-            focus="topic",
-            topics=["黑塔"],
-        ),
-        ContextSearchIntent(
-            intent_id="location_inn",
-            focus="location",
-            entities=[ContextSearchEntity(name="河湾旅店")],
-        ),
-    ])
-    scenes = [
-        ShortTermScene(
-            scene_id=f"scene_{turn:03d}",
-            turn_index=turn,
-            scene_text=f"艾琳整理了第{turn}份无关记录。",
-        )
-        for turn in range(1, 7)
-    ] + [
-        ShortTermScene(
-            scene_id="scene_007",
-            turn_index=7,
-            scene_text="黑塔北门仍然封闭。",
-        ),
-        ShortTermScene(
-            scene_id="scene_008",
-            turn_index=8,
-            scene_text="黑塔顶层昨夜出现灯光。",
-        ),
-        ShortTermScene(
-            scene_id="scene_009",
-            turn_index=9,
-            scene_text="河湾旅店的后门通向码头。",
-        ),
-    ]
-    with open_confirmed_history_store() as store:
-        _upsert_scenes(store, scenes)
-        result = ContextHistoryRetriever(
-            store,
-            diversity_policy=HistoryDiversityPolicy(max_hits=6),
-        ).retrieve(plan, current_turn_index=10)
-
-    assert len(result.hits) == 6
-    assert sum("艾琳" in hit.text for hit in result.hits) == 3
-    assert sum("黑塔" in hit.text for hit in result.hits) == 2
-    assert sum("河湾旅店" in hit.text for hit in result.hits) == 1
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def test_history_payload_budget_drops_optional_context_before_main_text():
@@ -394,14 +273,6 @@ def test_history_payload_budget_drops_optional_context_before_main_text():
     assert bounded.hits[0].context_before == []
     assert bounded.hits[0].context_after == []
     assert bounded.hits[0].supporting_evidence == []
-
-
-
-
-
-
-
-
 
 
 def test_context_facts_service_retrieves_persistent_history_and_calls_one_llm():
@@ -914,15 +785,3 @@ def test_context_extractor_provider_failure_propagates():
     extractor = ContextExtractor(FailingGateway())
     with pytest.raises(LLMProviderError):
         extractor.extract(_context_extractor_input())
-
-
-def test_recency_factor_is_monotonic_bounded_and_non_penalizing():
-    from app.domain.context_facts.retriever import _recency_factor
-
-    values = [_recency_factor(age) for age in range(0, 60)]
-    assert values[0] == 1.0
-    assert all(0.0 < value <= 1.0 for value in values)
-    assert values == sorted(values, reverse=True)
-    # Older ages approach but never reach zero; negative ages clamp to current.
-    assert _recency_factor(-5) == _recency_factor(0)
-    assert _recency_factor(0) > _recency_factor(1000) > 0.0

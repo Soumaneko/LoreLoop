@@ -1898,7 +1898,8 @@ The Context History benchmark checker reports differences against
 recall, forbidden evidence and domain invariant regressions (38 cases, benchmark
 version 3,
 must recall `42/42`, weighted recall `135/137`, and zero forbidden evidence or
-invariant violations). The NPC pipeline benchmark agrees with
+invariant violations). The NPC pipeline benchmark uses the same per-case
+quality-regression policy and reports other differences against
 `benchmarks/npc_baseline/baseline_batch.json` (25 cases, weighted `285/291`,
 20 logical calls). `baseline.json` records the SHA-256 of `cases.json`. These
 figures are recorded checkpoints for the existing tools. Choose comparisons
@@ -1926,6 +1927,13 @@ modules for data conversion, draft preservation and confirmation outcomes.
 Confirmation checks cover unknown results preventing resubmission and successful
 saves surviving a later refresh failure. Packaging checks derive
 application metadata from `APP_VERSION` and check the actual action references.
+
+Tests are grouped by the owning domain: NPC selection and NPC update feedback
+live with NPC tests; retrieval benchmarks own ranking comparisons. Graph tests
+check usable pending results, authoritative outcomes and saved initialization,
+while related cases share their input construction. Ordinary model assignment
+and framework-default checks are omitted. Original accepted prose and protected
+fields are still compared exactly where their content is the contract.
 
 Verification of infrastructure changes focuses on preserved player behavior:
 generation leaves editable pending content; confirmation accepts the selected

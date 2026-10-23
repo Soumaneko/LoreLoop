@@ -1,9 +1,6 @@
 from app.tests.factories.domains import make_pending_turn
-from app.core.client_error import ClientValidationError
-import concurrent.futures
 import threading
 from concurrent.futures import CancelledError
-from types import SimpleNamespace
 
 import pytest
 
@@ -11,10 +8,9 @@ from app import api
 from app.core.cancellation import CancellationToken, commit_if_not_cancelled
 from app.core.client_error import ClientValidationError
 from app.core.diagnostics import DiagnosticLogger
-from app.core.llm.token_usage import get_trace_token_usage, publish_token_usage
+from app.core.llm.token_usage import get_trace_token_usage
 from app.runtime.operation_models import OperationEventBuffer
 from app.runtime.operations import OperationManager
-from app.runtime.session import get_campaign_runtime
 
 
 @pytest.fixture
@@ -77,10 +73,6 @@ def test_operation_manager_drains_stream_and_retains_result_and_events():
         manager.shutdown()
 
 
-
-
-
-
 def test_running_operation_cancels_at_checkpoint_without_emitting_failure():
     manager = OperationManager("campaign-1", max_workers=1)
     waiting = threading.Event()
@@ -114,12 +106,6 @@ def test_running_operation_cancels_at_checkpoint_without_emitting_failure():
     finally:
         release.set()
         manager.shutdown()
-
-
-
-
-
-
 
 
 def test_cancelled_operation_cannot_cross_final_commit_boundary():
@@ -207,8 +193,6 @@ def test_operation_manager_records_stream_failure_without_losing_prior_events(
         manager.shutdown()
 
 
-
-
 def test_terminal_operation_remains_recoverable_until_acknowledged():
     manager = OperationManager("campaign-1", max_workers=1)
 
@@ -238,14 +222,6 @@ def test_terminal_operation_remains_recoverable_until_acknowledged():
         )
     finally:
         manager.shutdown()
-
-
-
-
-
-
-
-
 
 
 def test_request_id_is_idempotent_for_the_same_operation_type():
@@ -288,8 +264,6 @@ def test_request_id_is_idempotent_for_the_same_operation_type():
         manager.shutdown()
 
 
-
-
 def test_exclusive_key_rejects_parallel_operation_and_releases_on_finish():
     manager = OperationManager("campaign-1", max_workers=2)
     started = threading.Event()
@@ -330,101 +304,38 @@ def test_exclusive_key_rejects_parallel_operation_and_releases_on_finish():
         manager.shutdown()
 
 
-def test_public_api_starts_generation_as_background_operation(
-    monkeypatch,
-    configured_runtime,
-):
+@pytest.mark.parametrize("kind", ["generation", "confirmation"])
+def test_player_pipeline_runs_as_recoverable_operation(monkeypatch, configured_runtime, kind):
     runtime = configured_runtime
-    captured = {}
+    pending = make_pending_turn(turn_id="turn-confirm", user_input="推开石门")
+    if kind == "confirmation":
+        runtime.pending_turns.add(pending)
 
-    def generation_stream(user_input, difficulty, max_chars):
-        captured.update({
-            "user_input": user_input,
-            "difficulty": difficulty,
-            "max_chars": max_chars,
-        })
+    def pipeline(value, **options):
+        if kind == "generation":
+            assert value == "调查钟楼"
+            assert options["difficulty"] == "普通"
+            assert options["max_chars"] == 1200
+        else:
+            assert value == pending.turn_id
+            assert options["scene_text"] == "修改后的正文"
+            assert options["write_db"] is True
         yield {"step": "scene_written", "data": {"turn_id": "turn-1"}}
+        return {"turn_id": "turn-1"}
 
-    monkeypatch.setattr(api, "generate_turn_stream", generation_stream)
-
-    operation_id = api.start_generation_operation(
-        "调查钟楼",
-        difficulty="普通",
-        max_chars=1200,
-        request_id="request-public-api",
-    )
+    if kind == "generation":
+        monkeypatch.setattr(api, "generate_turn_stream", pipeline)
+        operation_id = api.start_generation_operation("调查钟楼", difficulty="普通", max_chars=1200)
+    else:
+        monkeypatch.setattr(api, "confirm_stream", pipeline)
+        operation_id = api.start_confirmation_operation(pending.turn_id, scene_text="修改后的正文")
     snapshot = runtime.operations.wait(operation_id, timeout=2)
-
     assert snapshot.status == "succeeded"
-    assert snapshot.operation_type == "generation"
-    assert snapshot.metadata == {"user_input": "调查钟楼"}
+    assert snapshot.result == {"turn_id": "turn-1"}
     assert snapshot.requires_ack is True
-    assert snapshot.supersedes_recoverable_types == ()
-    assert captured == {
-        "user_input": "调查钟楼",
-        "difficulty": "普通",
-        "max_chars": 1200,
-    }
-
-
-
-
-
-
-def test_public_api_starts_confirmation_with_pending_turn_metadata(
-    monkeypatch,
-    configured_runtime,
-):
-    runtime = configured_runtime
-    runtime.pending_turns.add(make_pending_turn(
-        turn_id="turn-confirm",
-        group_id="group-confirm",
-        version_index=1,
-        user_input="推开石门",
-    ))
-    captured = {}
-
-    def confirmation_stream(turn_id, *, write_db, scene_text):
-        captured.update({
-            "turn_id": turn_id,
-            "write_db": write_db,
-            "scene_text": scene_text,
-        })
-        yield {"step": "confirmation_started", "data": {"turn_id": turn_id}}
-
-    monkeypatch.setattr(api, "confirm_stream", confirmation_stream)
-
-    operation_id = api.start_confirmation_operation(
-        "turn-confirm",
-        write_db=True,
-        scene_text="修改后的正文",
-        request_id="request-confirm-api",
-    )
-    snapshot = runtime.operations.wait(operation_id, timeout=2)
-
-    assert snapshot.status == "succeeded"
-    assert snapshot.operation_type == "confirmation"
-    assert snapshot.metadata == {
-        "turn_id": "turn-confirm",
-        "kind": "turn",
-        "user_input": "推开石门",
-        "write_db": True,
-    }
-    assert snapshot.supersedes_recoverable_types == (
-        "generation",
-        "rephrase",
-        "reroll",
-        "feedback_rewrite",
-        "opening_rewrite",
-        "initialization_opening",
-    )
-    assert captured == {
-        "turn_id": "turn-confirm",
-        "write_db": True,
-        "scene_text": "修改后的正文",
-    }
-
-
+    if kind == "confirmation":
+        assert snapshot.metadata["turn_id"] == pending.turn_id
+    assert operation_id in {op.operation_id for op in runtime.operations.list(recoverable_only=True)}
 
 
 def test_submit_callable_runs_inside_operation_executor():
