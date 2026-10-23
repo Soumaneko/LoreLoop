@@ -1728,6 +1728,20 @@ advanced extension, available only on openai_chat.
 
 ## 19. Player, Debug, and Operation Surfaces
 
+The player entry module `app.js` owns bootstrap, cross-feature reload/recovery
+dispatch, and the reading/generation flow. `initialization.js` owns initialization
+DOM bindings, form stages, drafts, submission, and operation subscriptions; it
+reuses the existing draft and campaign-setup helpers. Application coordination
+uses explicit callbacks rather than importing the entry module.
+
+Operation changes pass through `app.js::setOperationMode`, which updates the
+DOM-free state setter and refreshes controls. Pending-card controls and confirmation
+progress update in place, preserving the scene editor and its unsaved text.
+`renderPending` still rebuilds content when scene data or the selected variant
+changes. `confirmation.js` uses the same state callback while retaining outcome
+verification and recovery. This separates control updates from content replacement
+so feature changes do not erase drafts merely by changing operation status.
+
 The player surface provides:
 
 - initialization;

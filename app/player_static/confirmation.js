@@ -1,6 +1,6 @@
 export function createConfirmationActions({
   state, activePending, selectedVariant, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY,
-  setMode, renderPending, renderControls, renderAll, readDraft, newRequestId,
+  setMode, renderAll, readDraft, newRequestId,
   handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
   refreshRecords, refreshRecordsAfterTurn, showToast, showError, stream, subscribe,
   request, loadAll, tokenUsage
@@ -38,7 +38,7 @@ export function createConfirmationActions({
     const confirmation = { turnId: variant.turn_id, saveId: state.activeSave };
     let completed = false;
     sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
-    setMode("confirming"); renderPending(); renderControls();
+    setMode("confirming");
     try {
       const operationId = await stream("/api/player/confirm", {
         turn_id: variant.turn_id,
@@ -77,8 +77,6 @@ export function createConfirmationActions({
     let completed = false;
     sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
     setMode("confirming");
-    renderPending();
-    renderControls();
     try {
       await subscribe(
         `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,

@@ -416,7 +416,7 @@ const activePending = () => ({variants: [variant]});
 const selectedVariant = () => variant;
 const sessionStorage = {setItem() {}, removeItem() {}};
 const CONFIRMATION_IN_FLIGHT_KEY = "confirmation";
-const setMode = () => {}, renderPending = () => {}, renderControls = () => {}, renderAll = () => {};
+const setMode = () => {}, renderAll = () => {};
 const readDraft = () => "text", newRequestId = () => "request";
 const handleConfirmationEvent = () => {}, acknowledgeHandledOperation = async () => {};
 const acknowledgeFailedOperation = async () => {}, refreshRecords = () => {};
@@ -431,7 +431,7 @@ const tokenUsage = {getVariantUsage: () => null, getCurrentPendingUsage: () => (
 const {createConfirmationActions} = await import("__MODULE_URL__");
 const {confirmTurn} = createConfirmationActions({
   state, activePending, selectedVariant, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY,
-  setMode, renderPending, renderControls, renderAll, readDraft, newRequestId,
+  setMode, renderAll, readDraft, newRequestId,
   handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
   refreshRecords, refreshRecordsAfterTurn, showToast, showError, stream, subscribe: async () => {},
   request, loadAll, tokenUsage
@@ -476,7 +476,7 @@ import assert from "node:assert/strict";
 const state = {activeSave:"save-1"};
 const sessionStorage = {setItem() {}, removeItem() {}};
 const CONFIRMATION_IN_FLIGHT_KEY = "confirmation";
-const setMode = () => {}, renderPending = () => {}, renderControls = () => {};
+const setMode = () => {};
 const subscribe = async () => {}, handleConfirmationEvent = () => {};
 const acknowledgeHandledOperation = async () => {}, acknowledgeFailedOperation = async () => {};
 const refreshRecords = () => {}, refreshRecordsAfterTurn = () => {}, showToast = () => {};
@@ -485,7 +485,7 @@ let result;
 const showError = (error, fallback, options) => { result = {error, ...options}; };
 const {createConfirmationActions} = await import("__MODULE_URL__");
 const {resumeConfirmationOperation} = createConfirmationActions({
-  state, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY, setMode, renderPending, renderControls,
+  state, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY, setMode,
   subscribe, handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
   refreshRecords, refreshRecordsAfterTurn, showToast, loadAll, showError, renderAll: () => {},
 });
