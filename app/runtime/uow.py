@@ -38,46 +38,19 @@ class CampaignUnitOfWork:
         paths: CampaignPaths,
         *,
         write: bool = False,
-        expected_epoch: int | None = None,
         runtime_ref: object | None = None,
     ):
         self.paths = paths
         self.write = write
-        # Phase 4 epoch guard: runtime stamps expected connection_epoch at creation
-        self._expected_epoch: int | None = expected_epoch
         self._runtime_ref: object | None = runtime_ref
         self._conn: sqlite3.Connection | None = None
         self._stores: dict[str, object] = {}
         self._bootstrapped = False
         self._closed = False
 
-    def _current_control_epoch(self) -> int | None:
-        """Read current control epoch; raises if the control DB is unreadable."""
-        control = self.paths.data_dir / ".runtime" / "control.db"
-        if not control.is_file():
-            raise RuntimeError("control.db is missing")
-        conn = connect_sqlite(control)
-        try:
-            row = conn.execute("SELECT connection_epoch FROM control_state WHERE id=1").fetchone()
-            if row is None:
-                raise RuntimeError("control_state is missing")
-            return int(row["connection_epoch"])
-        finally:
-            conn.close()
-
-    def _check_epoch(self) -> None:
-        if self._expected_epoch is None:
-            return
-        cur = self._current_control_epoch()
-        if int(cur) != int(self._expected_epoch):
-            raise RuntimeError(
-                f"stale UoW: expected connection_epoch={self._expected_epoch}, current={cur}"
-            )
-
     def _get_conn(self) -> sqlite3.Connection:
         if self._closed:
             raise RuntimeError("UoW is closed")
-        self._check_epoch()
         if self._conn is None:
             self.paths.data_dir.mkdir(parents=True, exist_ok=True)
             self._conn = connect_sqlite(self.paths.campaign_db)
@@ -166,13 +139,9 @@ class CampaignUnitOfWork:
         SAVEPOINTs through the shared ``transaction()`` helper.
         """
         self._ensure_bootstrapped()
-        # Guard before entering transaction so a stale UoW cannot start writes on old revision
-        self._check_epoch()
         conn = self._get_conn()
         if not immediate or conn.in_transaction:
             yield conn
-            # Re-check before returning so commit path also observes epoch race
-            self._check_epoch()
             return
         conn.execute("BEGIN IMMEDIATE")
         try:
@@ -181,8 +150,6 @@ class CampaignUnitOfWork:
             conn.rollback()
             raise
         else:
-            # Check epoch before commit: restore may have advanced epoch while we held connection
-            self._check_epoch()
             conn.commit()
 
     @property

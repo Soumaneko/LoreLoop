@@ -135,7 +135,7 @@ def test_save_manager_and_resolution_agree_on_stale_active(tmp_path):
             == newer
         )
     finally:
-        runtime.close(wait_for_jobs=True)
+        runtime.close()
 
 
 def test_concurrent_first_runtime_access_yields_single_instance(tmp_path):

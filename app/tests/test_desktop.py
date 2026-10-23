@@ -190,8 +190,8 @@ def test_run_desktop_uses_random_loopback_server_and_cleans_up(tmp_path):
             calls["cancelled"] = True
             return 0
 
-        def close(self, *, wait_for_jobs):
-            calls["closed"] = wait_for_jobs
+        def close(self):
+            calls["closed"] = True
 
     run_desktop(
         paths,
@@ -234,8 +234,8 @@ def test_run_desktop_cleans_up_when_webview_fails(tmp_path):
             calls.append("cancel")
             return 0
 
-        def close(self, *, wait_for_jobs):
-            calls.append(("close", wait_for_jobs))
+        def close(self):
+            calls.append(("close", True))
 
     with pytest.raises(RuntimeError, match="GUI failed"):
         run_desktop(

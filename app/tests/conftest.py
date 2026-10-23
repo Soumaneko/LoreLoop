@@ -75,4 +75,4 @@ def isolate_default_campaign_runtime(tmp_path):
     finally:
         runtime.pending_turns.clear()
         runtime.pending_openings.clear()
-        runtime.close(wait_for_jobs=True)
+        runtime.close()

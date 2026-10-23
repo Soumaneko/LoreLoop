@@ -21,10 +21,7 @@ def open_campaign_resources(paths: CampaignPaths) -> OpenedCampaignResources:
     ensure_campaign_database(paths)
     history = CampaignHistory(paths.data_dir)
     history.recover_interrupted()
-    stores = CampaignUnitOfWork(
-        paths,
-        expected_epoch=history.connection_epoch,
-    )
+    stores = CampaignUnitOfWork(paths)
     try:
         initialization = InitializationStore(paths.initialization_json)
     except BaseException:

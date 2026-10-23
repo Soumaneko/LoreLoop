@@ -77,31 +77,6 @@ def test_invalid_snapshot_preserves_progress_and_live_json(tmp_path, damage):
     reopened.close()
 
 
-def test_stale_uow_rejected_after_restore(tmp_path):
-    paths = _valid_campaign(tmp_path)
-    hist = CampaignHistory(paths.data_dir)
-    hist.save_pending(turn_id="t1", kind="turn", group_id="g1", turn_index=1, payload={"turn_id": "t1"})
-    hist.begin_confirmation("t1", write_db=True, scene_text=None)
-    with hist._campaign_connect() as campaign:
-        campaign.execute("BEGIN")
-        hist.record_confirmation(campaign, "t1", scene_text="场景正文")
-    hist.complete_confirmation("t1", "g1")
-    epoch_before = hist.connection_epoch
-    # Keep the old epoch without holding a database connection across offline restore.
-    stale = CampaignUnitOfWork(paths, expected_epoch=epoch_before)
-    hist.undo()
-    with pytest.raises(RuntimeError, match="stale UoW"):
-        stale._get_conn().execute("SELECT 1")
-    with pytest.raises(RuntimeError, match="stale UoW"):
-        with stale.transaction():
-            pass
-    stale.close()
-    hist.redo()
-    with CampaignUnitOfWork(paths) as fresh:
-        with fresh.current_state as store:
-            assert store.load() is None
-
-
 def test_quiesce_blocks_new_uow_and_times_out(tmp_path):
     paths = _valid_campaign(tmp_path)
     rt = CampaignRuntime("q", paths=paths, max_workers=1)
@@ -117,6 +92,9 @@ def test_quiesce_blocks_new_uow_and_times_out(tmp_path):
     u2.close()
     # After close, wait should succeed
     rt._wait_for_active_uows(timeout=0.1)
+    with rt._pause_connections():
+        with pytest.raises(RuntimeError, match="offline restore"):
+            rt.uow()
     rt.close()
 
 
@@ -134,6 +112,12 @@ def test_reconfigure_invalidates_old_operation_uow(tmp_path):
     assert old_uow.is_closed
     with pytest.raises(RuntimeError, match="UoW is closed"):
         old_uow._get_conn()
+    with pytest.raises(RuntimeError, match="UoW is closed"):
+        with old_uow.transaction():
+            pass
+    with rt.uow() as fresh:
+        with fresh.current_state as store:
+            assert store.load() is None
     rt.close()
 
 

@@ -29,9 +29,8 @@ class RuntimeServices:
         an independent transaction boundary must create a fresh unit so writes
         do not share a connection with other operations.
 
-        Phase 4: when a runtime factory is injected it is used so the UoW
-        participates in quiesce/epoch guard.  Without one (bare tests), create
-        a standalone UoW bound to this services' own paths.
+        The runtime factory registers owned connections for close-before-restore.
+        Standalone services bind their UoW to their own paths.
         """
         if self.uow_factory is not None:
             return self.uow_factory(write=write)

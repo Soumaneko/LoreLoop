@@ -94,14 +94,13 @@ def _ensure_control_schema(db_path: Path) -> None:
             );
             CREATE TABLE IF NOT EXISTS control_state (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                connection_epoch INTEGER NOT NULL DEFAULT 0,
                 restore_target TEXT,
                 updated_at TEXT NOT NULL
             );
             """
         )
         conn.execute(
-            "INSERT OR IGNORE INTO control_state(id, connection_epoch, updated_at) VALUES (1, 0, ?)",
+            "INSERT OR IGNORE INTO control_state(id, updated_at) VALUES (1, ?)",
             (_now(),),
         )
 
@@ -126,12 +125,8 @@ class CampaignHistory:
 
     @contextmanager
     def _campaign_connect(self) -> Iterator[sqlite3.Connection]:
-        conn = connect_sqlite(self.campaign_db)
-        try:
-            with conn:
-                yield conn
-        finally:
-            conn.close()
+        with self._lock, closing(connect_sqlite(self.campaign_db)) as conn, conn:
+            yield conn
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -157,18 +152,8 @@ class CampaignHistory:
 
     def get_control_state(self) -> dict[str, Any]:
         with self._connect() as conn:
-            row = conn.execute("SELECT connection_epoch, restore_target FROM control_state WHERE id=1").fetchone()
-        return {"connection_epoch": int(row["connection_epoch"]), "restore_target": row["restore_target"]}
-
-    @property
-    def connection_epoch(self) -> int:
-        return self.get_control_state()["connection_epoch"]
-
-    def _advance_epoch(self, conn: sqlite3.Connection) -> None:
-        conn.execute(
-            "UPDATE control_state SET connection_epoch=connection_epoch+1, updated_at=? WHERE id=1",
-            (_now(),),
-        )
+            row = conn.execute("SELECT restore_target FROM control_state WHERE id=1").fetchone()
+        return {"restore_target": row["restore_target"]}
 
     def save_pending(
         self,
@@ -522,7 +507,6 @@ class CampaignHistory:
             "undo_count": applied, "redo_count": undone,
             "redo_pending_turn_ids": self.redo_pending_turn_ids() if undone else [],
             "snapshots": [dict(r) for r in rows],
-            "connection_epoch": self.connection_epoch,
         }
 
     @staticmethod
@@ -567,8 +551,7 @@ class CampaignHistory:
                 conn.execute("UPDATE control_state SET restore_target=NULL WHERE id=1")
             raise
         with self._connect() as conn:
-            conn.execute("UPDATE control_state SET restore_target=NULL WHERE id=1")
-            self._advance_epoch(conn)
+            conn.execute("UPDATE control_state SET restore_target=NULL, updated_at=? WHERE id=1", (_now(),))
 
     def _discard_redo_locked(self, conn) -> list[sqlite3.Row]:
         rows = conn.execute(

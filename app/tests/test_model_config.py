@@ -676,7 +676,7 @@ def test_runtime_hot_swap_rebuilds_services_for_future_work(tmp_path):
             "x-opencode-session"
         ] == "794wNhtK"
     finally:
-        runtime.close(wait_for_jobs=True)
+        runtime.close()
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI only")

@@ -185,8 +185,9 @@ def load_confirmation_outcome(save_id: str, turn_id: str) -> dict[str, str]:
     if not save_id or not turn_id or save_id != runtime.campaign_id:
         return {"outcome": "unknown"}
     if runtime._restore_error:
-        return {"outcome": "unknown"}
-    if runtime._restore_gate_closed:
+        if runtime.history.get_control_state()["restore_target"] is not None:
+            return {"outcome": "unknown"}
+    elif runtime._restore_gate_closed:
         return {"outcome": "in_progress"}
     record = runtime.history.get_transaction(turn_id)
     status = record["status"] if record else None

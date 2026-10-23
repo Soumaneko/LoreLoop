@@ -70,14 +70,14 @@ raw values, using the structured snapshot for generated values awaiting edits. D
 saving never runs the submit contract - completeness is checked only at
 `initialization_opening` - and a failed save keeps the dialog open to retry.
 `.runtime/control.db` stores pending scenes, runtime notices, the bounded
-Undo/Redo snapshot list (`.snapshots/`), and `connection_epoch`.
+Undo/Redo snapshot list (`.snapshots/`).
 
 Keeping domain writes and the saved confirmation fact in one database lets
 SQLite provide turn-level atomicity. The separate control store retains drafts
 and undo positions while story progress is restored. Application preferences
 keep their own lifecycle so narrative Undo preserves the player's settings.
 
-New saves initialize the current schemas and start with `connection_epoch=0`.
+New saves initialize the current schemas.
 Startup validates existing databases and initializes missing ones. Current
 schema versions identify the supported storage layout; unreadable or incompatible
 files retain their original contents. Unrelated files beside save files remain
@@ -117,19 +117,30 @@ When retrying an Undo/Redo with a pending file-installation target, recovery
 completes that target and returns its operation result without advancing to
 another turn.
 
-The runtime restores through its existing offline entry: stop new operation
-UoWs, wait for active work and maintenance, close the session connection, stage
-and validate snapshot files, replace them, advance `connection_epoch`, and
-reopen the session. SQLite files use the shared schema/foreign-key/quick-check
+The runtime reserves lifecycle work against new task submissions, lets accepted
+operations and maintenance finish, then pauses new UoWs and waits for owned
+connections to close. Undo/Redo close the session connection, stage and validate
+snapshot files, replace them, and reopen the session through the existing
+offline entry. SQLite files use the shared schema/foreign-key/quick-check
 validation; JSON files are parsed before installation. A rejected snapshot
 leaves the current save open for continued play. File replacement uses
 same-directory temporaries, `os.replace`, and filesystem synchronization where
-supported. Production operation UoWs carry `expected_epoch` and participate in
-the quiesce barrier. During file installation, `control_state.restore_target` names the snapshot
-being installed. Successful installation clears the target and advances the
-connection epoch together; reopening completes an interrupted installation
-before opening domain stores. Connection registration and epoch guards remain
-the active connection-lifecycle implementation.
+supported. Runtime UoW creation and registration share one critical section;
+closing a UoW releases its connection and wakes the lifecycle waiter. A closed
+UoW stays closed. During file installation, `control_state.restore_target` names
+the snapshot being installed. Successful installation clears the target;
+reopening completes an interrupted installation before opening domain stores.
+An unfinished installation keeps new connections paused until recovery succeeds.
+Saved confirmation results remain queryable after bookkeeping-only failures.
+Their short campaign connections share the history restore lock, so result
+polling finishes before file replacement or reads after it completes.
+
+Switching saves prepares the target before releasing the previous session.
+Target activation and reopening the original save after a late failure use the
+same resource setup. Closing the runtime waits for accepted work and owned
+connections, then closes the task executors and session stores. The existing
+shutdown entry requests cancellation before desktop cleanup waits for completion.
+`generation_cache_epoch` remains the runtime-local generation-prefix cache key.
 
 Save copy and export require the source to have no pending content and
 create a quiesced staging snapshot. SQLite files are copied through the backup

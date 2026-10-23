@@ -91,7 +91,7 @@ def run_desktop(
             except BaseException as error:
                 cleanup_errors.append(error)
         try:
-            runtime.close(wait_for_jobs=True)
+            runtime.close()
         except BaseException as error:
             cleanup_errors.append(error)
         if cleanup_errors and not active_failure:

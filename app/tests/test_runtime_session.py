@@ -23,8 +23,6 @@ def test_open_campaign_resources_recovers_before_uow_and_closes_on_failure(
     events = []
 
     class History:
-        connection_epoch = 7
-
         def __init__(self, data_dir):
             events.append(("history", data_dir))
 
@@ -32,8 +30,8 @@ def test_open_campaign_resources_recovers_before_uow_and_closes_on_failure(
             events.append(("recover", None))
 
     class Stores:
-        def __init__(self, paths, *, expected_epoch):
-            events.append(("stores", expected_epoch))
+        def __init__(self, paths):
+            events.append(("stores", paths))
             self.is_closed = False
 
         def close(self):
@@ -65,7 +63,7 @@ def test_open_campaign_resources_recovers_before_uow_and_closes_on_failure(
         ("ensure", paths),
         ("history", paths.data_dir),
         ("recover", None),
-        ("stores", 7),
+        ("stores", paths),
         ("initialization", None),
         ("close", None),
     ]
@@ -221,6 +219,12 @@ def test_reconfigure_reopens_old_campaign_after_late_target_failure(
     old_paths = CampaignPaths.from_data_dir(tmp_path / "old")
     runtime = CampaignRuntime("old", paths=old_paths, max_workers=1)
     target_paths = CampaignPaths.from_data_dir(tmp_path / "target")
+    with runtime.stores.current_state as store:
+        store.save(make_default_state().model_copy(update={"player": PlayerState(name="旧存档")}))
+    target = open_campaign_resources(target_paths)
+    with target.stores.current_state as store:
+        store.save(make_default_state().model_copy(update={"player": PlayerState(name="目标存档")}))
+    target.stores.close()
     restore_pending = runtime._restore_pending_transactions
     attempts = 0
 
@@ -243,24 +247,33 @@ def test_reconfigure_reopens_old_campaign_after_late_target_failure(
         assert runtime.campaign_id == "old"
         assert runtime.paths == old_paths
         assert runtime.stores.is_closed is False
-        assert runtime.stores._expected_epoch == runtime.history.connection_epoch
         with runtime.uow() as uow:
-            uow._get_conn().execute("SELECT 1").fetchone()
+            with uow.current_state as store:
+                assert store.load().player.name == "旧存档"
+        runtime.reconfigure("target", target_paths)
+        with runtime.uow() as uow:
+            with uow.current_state as store:
+                assert store.load().player.name == "目标存档"
     finally:
         runtime.close()
 
 
 def test_save_task_blocks_new_pipeline_submission(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
     runtime = CampaignRuntime(
         "save-task",
         paths=CampaignPaths.from_data_dir(tmp_path / "save-task"),
         max_workers=1,
     )
     try:
-        with runtime.save_task():
-            with pytest.raises(ClientValidationError, match="save management task"):
-                with runtime.operation_submission():
-                    pass
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with runtime.save_task():
+                with pytest.raises(ClientValidationError, match="save management task"):
+                    with runtime.operation_submission():
+                        pass
+                with pytest.raises(ClientValidationError, match="save management task"):
+                    executor.submit(runtime.reconfigure, "other", runtime.paths).result(timeout=2)
     finally:
         runtime.close()
 
