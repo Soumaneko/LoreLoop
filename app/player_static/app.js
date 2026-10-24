@@ -288,7 +288,7 @@ function setInputHintText(actionText) {
 
 function renderControls({ updateNavigation = true } = {}) {
   const busy = saveManagerBusy || modelConfigBusy || ["booting", "needs_model", "generating", "confirming", "switching"].includes(state.mode);
-  const pending = Boolean(activePending());
+  const pending = activePending();
   els.statusPill.dataset.mode = state.mode;
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
 
@@ -3230,7 +3230,8 @@ async function rewriteFromFeedback() {
 async function generateTurn() {
   const userInput = els.playerInput.value.trim();
   const pending = activePending();
-  if (pending && userInput) {
+  if (pending) {
+    if (pending.kind === "opening" || !selectedVariant() || !userInput) return;
     els.playerInput.value = "";
     autoSizeInput();
     await rewriteFromFeedbackText(userInput);

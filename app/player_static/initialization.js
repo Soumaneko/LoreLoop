@@ -32,6 +32,7 @@ export function createInitialization({
   };
   let initConfigSnapshot = null;
   let campaignSetupCommitted = false;
+  let currentOperation = null;
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -53,36 +54,80 @@ export function createInitialization({
     }
   }
 
+  function canEditConfig() {
+    return !currentOperation && !initConfigSnapshot && !campaignSetupCommitted;
+  }
+
+  function canGenerateSetup(regenerate) {
+    return !currentOperation && !campaignSetupCommitted
+      && (regenerate ? Boolean(initConfigSnapshot) : !initConfigSnapshot);
+  }
+
+  function startOperation(operation) {
+    currentOperation = operation;
+    els.initError.hidden = true;
+    if (operation === "closing") refreshControls();
+    else setOperationMode("generating");
+  }
+
+  function finishOperation() {
+    if (currentOperation === "recovery") {
+      setOperationMode("generating");
+      return;
+    }
+    currentOperation = null;
+    if (state.mode === "generating") {
+      setOperationMode(state.playerState?.needs_init ? "needs_init"
+        : state.playerState?.pending?.length ? "pending" : "idle");
+    } else refreshControls();
+  }
+
+  async function handleOperationFailure(error, operationId = null) {
+    // A disconnected stream may still have a successful result to replay.
+    try {
+      const result = await request("/api/player/operations/recoverable");
+      if (result.operations.some((operation) => operation.recovery_kind === "initialization"
+          && !["failed", "cancelled"].includes(operation.status))) {
+        currentOperation = "recovery";
+      }
+    } catch (lookupError) {
+      currentOperation = "recovery";
+      reportClientError(lookupError, "initialization_recovery_lookup_failed");
+    }
+    if (currentOperation !== "recovery") await acknowledgeFailedOperation(error, operationId);
+    els.initError.textContent = error.message;
+    els.initError.hidden = false;
+  }
+
+  async function reloadAfterFailure() {
+    try {
+      await loadAll({ scroll: null, resumeOperation: false });
+    } catch (reloadError) {
+      currentOperation = "recovery";
+      reportClientError(reloadError, "initialization_reload_failed");
+    }
+  }
+
   async function resumeInitializationOperation(operation) {
+    if (currentOperation) return false;
     const campaignSetup = operation.metadata?.stage === "campaign_setup";
-    setOperationMode("generating");
-    if (!els.initDialog.open) els.initDialog.showModal();
-    const button = campaignSetup ? els.campaignSetupBtn : els.initSubmitBtn;
-    const oldText = button.textContent;
-    button.disabled = true;
-    button.textContent = campaignSetup ? "正在生成……" : "正在生成开场……";
+    startOperation(campaignSetup ? "campaign_setup" : "opening");
+    open();
     try {
       await subscribe(
         `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
         handleInitializationEvent,
       );
       await acknowledgeHandledOperation(operation.operation_id);
-      if (campaignSetup) {
-        setOperationMode("needs_init");
-        return false;
-      } else {
-        els.initDialog.close();
-        return true;
-      }
+      if (campaignSetup) return false;
+      els.initDialog.close();
+      return true;
     } catch (error) {
-      setOperationMode("needs_init");
-      els.initError.textContent = error.message;
-      els.initError.hidden = false;
-      await acknowledgeFailedOperation(error, operation.operation_id);
+      if (!campaignSetup) await reloadAfterFailure();
+      await handleOperationFailure(error, operation.operation_id);
       return false;
     } finally {
-      button.disabled = false;
-      button.textContent = oldText;
+      finishOperation();
     }
   }
 
@@ -254,6 +299,7 @@ export function createInitialization({
   }
 
   async function loadInitializationDraft() {
+    if (currentOperation === "closing") return;
     const committed = state.playerState?.initialization;
     if (
       committed?.phase
@@ -272,7 +318,7 @@ export function createInitialization({
     const draft = result.draft;
     if (!draft) {
       restoreInitializationForm();
-      editInitConfig();
+      showConfigStage();
       return;
     }
     restoreInitializationForm(draft.form);
@@ -282,19 +328,25 @@ export function createInitialization({
         campaign_setup: draft.campaign_setup,
       }, { rawFields: draft.form?.fields });
     } else {
-      editInitConfig();
+      showConfigStage();
     }
   }
 
   async function closeInitializationDialog() {
+    if (currentOperation) {
+      showToast(els.initStageHint.textContent);
+      return;
+    }
+    startOperation("closing");
     try {
       await persistInitializationDraft();
+      els.initDialog.close();
     } catch (error) {
       reportClientError(error, "initialization_draft_save_failed");
       showToast("初始化草稿暂未保存，请重试关闭");
-      return;
+    } finally {
+      finishOperation();
     }
-    els.initDialog.close();
   }
 
   function toggleCustomAbilityField() {
@@ -324,7 +376,10 @@ export function createInitialization({
     descInput.value = description;
     const removeBtn = node("button", "ability-remove-btn", "×");
     removeBtn.type = "button";
-    removeBtn.onclick = () => { row.remove(); updateAddAbilityButton(); };
+    removeBtn.onclick = () => {
+      if (!canEditConfig()) return;
+      row.remove(); updateAddAbilityButton();
+    };
     row.append(nameInput, descInput, removeBtn);
     els.abilityRows.appendChild(row);
     updateAddAbilityButton();
@@ -354,38 +409,24 @@ export function createInitialization({
       const control = els.initForm.elements[name];
       if (control) control.value = value;
     }
-    els.initConfigFields.disabled = true;
-    els.initConfigActions.hidden = true;
-    els.campaignSetupStage.hidden = false;
-    els.campaignSetupActions.hidden = false;
-    setCampaignSetupControlsDisabled(committed);
-    els.editInitConfigBtn.hidden = committed;
-    els.regenerateCampaignSetupBtn.hidden = committed;
-    els.initSubmitBtn.textContent = committed
-      ? "继续生成开场"
-      : "确认惯例并生成开场";
-    els.initStageHint.textContent = committed
-      ? "公开世界惯例和 CoreMemory 已确认。继续生成私有开局基础与开场正文。"
-      : "检查并修改公开世界惯例；提交后将正式建立 CoreMemory，不能返回修改。";
-    els.setupCurrencyUnit.focus();
+    refreshControls();
+    if (!currentOperation && !committed) els.setupCurrencyUnit.focus();
+  }
+
+  function showConfigStage() {
+    initConfigSnapshot = null;
+    campaignSetupCommitted = false;
+    els.initError.hidden = true;
+    refreshControls();
   }
 
   function editInitConfig() {
-    initConfigSnapshot = null;
-    campaignSetupCommitted = false;
-    els.initConfigFields.disabled = false;
-    els.initConfigActions.hidden = false;
-    els.campaignSetupStage.hidden = true;
-    els.campaignSetupActions.hidden = true;
-    setCampaignSetupControlsDisabled(true);
-    els.editInitConfigBtn.hidden = false;
-    els.regenerateCampaignSetupBtn.hidden = false;
-    els.initSubmitBtn.textContent = "确认惯例并生成开场";
-    els.initStageHint.textContent = "填写世界、主角与长期体验要求，然后生成可确认的公开世界惯例。";
-    els.initError.hidden = true;
+    if (currentOperation || campaignSetupCommitted) return;
+    showConfigStage();
   }
 
   async function requestCampaignSetup({ regenerate = false } = {}) {
+    if (!canGenerateSetup(regenerate)) return;
     els.initError.hidden = true;
     let config;
     try {
@@ -399,30 +440,29 @@ export function createInitialization({
       els.initError.hidden = false;
       return;
     }
-    const button = regenerate ? els.regenerateCampaignSetupBtn : els.campaignSetupBtn;
-    button.disabled = true;
-    const oldText = button.textContent;
-    button.textContent = "正在生成……";
-    els.initConfigFields.disabled = true;
+    let submitted = false;
+    startOperation(regenerate ? "regenerate" : "campaign_setup");
     try {
       if (!regenerate) await persistInitializationDraft();
+      submitted = true;
       const operationId = await stream("/api/player/init/campaign-setup", {
         ...config,
         request_id: newRequestId(),
       }, handleInitializationEvent);
       await acknowledgeHandledOperation(operationId);
     } catch (error) {
-      els.initError.textContent = error.message;
-      els.initError.hidden = false;
-      await acknowledgeFailedOperation(error);
+      if (submitted) await handleOperationFailure(error);
+      else {
+        els.initError.textContent = error.message;
+        els.initError.hidden = false;
+      }
     } finally {
-      button.disabled = false;
-      button.textContent = oldText;
-      if (!initConfigSnapshot) els.initConfigFields.disabled = false;
+      finishOperation();
     }
   }
 
   async function initialize() {
+    if (currentOperation) return;
     if (!initConfigSnapshot) {
       els.initError.textContent = "请先生成并确认公开世界惯例";
       els.initError.hidden = false;
@@ -440,36 +480,35 @@ export function createInitialization({
       return;
     }
     const payload = { config: initConfigSnapshot, campaign_setup: campaignSetup };
-    setOperationMode("generating"); els.initSubmitBtn.disabled = true; els.initSubmitBtn.textContent = "正在生成开场……"; els.initError.hidden = true;
+    let submitted = false;
+    startOperation("opening");
     try {
       if (!campaignSetupCommitted) await persistInitializationDraft();
+      submitted = true;
       const operationId = await stream("/api/player/init", {
         ...payload,
         request_id: newRequestId(),
       }, handleInitializationEvent);
       await acknowledgeHandledOperation(operationId);
       els.initDialog.close();
-      await loadAll({ scroll: "instant" });
+      await loadAll({ scroll: "instant", resumeOperation: false });
     }
     catch (error) {
-      await acknowledgeFailedOperation(error);
-      try {
-        await loadAll({ scroll: null, resumeOperation: false });
-      } catch (reloadError) {
-        reportClientError(reloadError, "initialization_reload_failed");
+      if (submitted) {
+        await reloadAfterFailure();
+        await handleOperationFailure(error);
+      } else {
+        els.initError.textContent = error.message;
+        els.initError.hidden = false;
       }
-      setOperationMode("needs_init"); els.initError.textContent = error.message; els.initError.hidden = false;
     }
     finally {
-      els.initSubmitBtn.disabled = false;
-      if (!campaignSetupCommitted) {
-        els.initSubmitBtn.textContent = "确认惯例并生成开场";
-      }
-      refreshControls();
+      finishOperation();
     }
   }
 
   function open() {
+    refreshControls();
     if (!els.initDialog.open) els.initDialog.showModal();
   }
 
@@ -478,8 +517,36 @@ export function createInitialization({
   }
 
   function refreshControls() {
+    const busy = Boolean(currentOperation);
+    const staged = Boolean(initConfigSnapshot);
     els.continueInitBtn.hidden = !state.playerState?.needs_init;
     els.continueInitBtn.disabled = state.mode === "switching";
+    els.initConfigFields.disabled = busy || staged || campaignSetupCommitted;
+    for (const select of els.initConfigFields.querySelectorAll("select")) {
+      select.disabled = els.initConfigFields.disabled;
+    }
+    els.initConfigActions.hidden = staged;
+    els.campaignSetupStage.hidden = !staged;
+    els.campaignSetupActions.hidden = !staged;
+    setCampaignSetupControlsDisabled(busy || !staged || campaignSetupCommitted);
+    els.campaignSetupBtn.disabled = !canGenerateSetup(false);
+    els.regenerateCampaignSetupBtn.disabled = !canGenerateSetup(true);
+    els.editInitConfigBtn.disabled = busy || campaignSetupCommitted;
+    els.editInitConfigBtn.hidden = campaignSetupCommitted;
+    els.regenerateCampaignSetupBtn.hidden = campaignSetupCommitted;
+    els.initSubmitBtn.disabled = busy || !staged;
+    els.closeInitDialogBtn.disabled = busy;
+    els.closeInitDialogBtn.title = busy ? "当前操作完成后可关闭" : "返回故事界面";
+    els.campaignSetupBtn.textContent = currentOperation === "campaign_setup" ? "正在生成……" : "生成公开世界惯例";
+    els.regenerateCampaignSetupBtn.textContent = currentOperation === "regenerate" ? "正在生成……" : "重新生成惯例";
+    els.initSubmitBtn.textContent = currentOperation === "opening" ? "正在生成开场……"
+      : campaignSetupCommitted ? "继续生成开场" : "确认惯例并生成开场";
+    els.initStageHint.textContent = currentOperation === "recovery"
+      ? "任务结果尚未核实，请按 Ctrl+Shift+R 重新加载或重启应用继续恢复；当前不能修改或重新提交。"
+      : busy ? (currentOperation === "closing" ? "正在保存初始化草稿，请稍候。" : "正在处理初始化，请等待当前任务完成。")
+      : campaignSetupCommitted ? "公开世界惯例和 CoreMemory 已确认。继续生成私有开局基础与开场正文。"
+      : staged ? "检查并修改公开世界惯例；提交后将正式建立 CoreMemory，不能返回修改。"
+      : "填写世界、主角与长期体验要求，然后生成可确认的公开世界惯例。";
     syncCustomSelects([
       els.initWorldStyle, els.initAbilitySystem,
       els.initForm.elements.protagonist_gender, els.initForm.elements.failure_severity,
@@ -490,12 +557,13 @@ export function createInitialization({
   function bind() {
     els.initAbilitySystem.onchange = toggleCustomAbilityField;
     els.initWorldStyle.onchange = toggleCustomWorldStyleField;
-    els.addAbilityBtn.onclick = () => addAbilityRow();
+    els.addAbilityBtn.onclick = () => { if (canEditConfig()) addAbilityRow(); };
     els.campaignSetupBtn.onclick = () => requestCampaignSetup();
     els.regenerateCampaignSetupBtn.onclick = () => requestCampaignSetup({ regenerate: true });
     els.editInitConfigBtn.onclick = editInitConfig;
     for (const button of els.storyInspirationTags.querySelectorAll("button[data-value]")) {
       button.onclick = () => {
+        if (!canEditConfig()) return;
         const textarea = els.initForm.elements.story_expectation;
         const value = button.dataset.value;
         const existing = textarea.value.trim();
@@ -519,6 +587,7 @@ export function createInitialization({
     enhanceCustomSelect(els.setupPowerLearningDifficulty);
     toggleCustomAbilityField();
     toggleCustomWorldStyleField();
+    refreshControls();
   }
 
   return { bind, loadDraft: loadInitializationDraft, open, hide,

@@ -1734,6 +1734,17 @@ DOM bindings, form stages, drafts, submission, and operation subscriptions; it
 reuses the existing draft and campaign-setup helpers. Application coordination
 uses explicit callbacks rather than importing the entry module.
 
+Initialization serializes setup generation, regeneration, opening submission,
+recovery subscriptions, and closing draft saves with one local operation marker.
+Conflicting actions and fields stay locked through result-draft saving and stream
+completion; native and custom selects share the same disabled state. Closing and
+Escape wait for the current operation; an idle close saves the raw draft first.
+After a failure, controls follow the current stage, keeping committed setup
+read-only. A draft-save failure before setup or opening submission preserves the current
+form and unlocks retry without querying operation recovery, since no operation
+has been submitted. Interrupted or unverified operations
+stay locked for reload/restart recovery, and unconsumed successful results remain unacknowledged for replay.
+
 Operation changes pass through `app.js::setOperationMode`, which updates the
 DOM-free state setter and refreshes controls. Pending-card controls and confirmation
 progress update in place, preserving the scene editor and its unsaved text.
@@ -1753,6 +1764,13 @@ The player surface provides:
 - clickable public NPC/Setting highlights in current and historical prose;
 - a live Records drawer for Continuity, NPC Profiles, World Settings, and (in
   creator mode) a read-only Director Event browser.
+
+While an opening awaits confirmation, the main input and submit button are
+disabled and prompt the player to confirm or regenerate the opening. The submit
+handler also rejects opening feedback before consuming input, preserving existing
+text through button and keyboard entry points. For an ordinary pending turn,
+the main input submits feedback rewrite; without a pending turn, idle input
+submits a new player action.
 
 The HTTP player API currently uses explicit allow-list projections. Local desktop
 error feedback may expose the diagnostic log location or a file location needed
