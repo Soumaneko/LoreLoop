@@ -1,5 +1,5 @@
-// Pure service-management logic for the model settings UI (no DOM).
-// Tested directly with node; app.js only wires these to the DOM.
+// Service-management helpers and Provider options view.
+// model_settings.js owns the editor and list lifecycle.
 
 export const CUSTOM_PRESET = "custom";
 
@@ -105,6 +105,10 @@ export function displayName(service) {
 // not require a re-test.
 export function shouldRequireTest(isNew, connectionChanged) {
   return Boolean(isNew || connectionChanged);
+}
+
+export function canActivateService(service, activeConfigId) {
+  return Boolean(service?.config_id && service.has_api_key && service.config_id !== activeConfigId);
 }
 
 // Public list rows shown on the management page: name, model, active flag.

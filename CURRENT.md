@@ -1726,6 +1726,26 @@ candidates, with editor-session checks on asynchronous UI updates. Key ownership
 and activation follow the existing backend rules. Thinking remains an optional
 advanced extension, available only on openai_chat.
 
+`model_settings.js` owns the service list, editor drafts, connection tests,
+catalog cache/request tokens, and editor sessions. `app.js` binds it once and
+uses its `open` and `isBusy` entries; explicit callbacks check application
+conflicts, refresh controls, and reload the active configuration. Model setup
+remains available in `needs_model`. Editing a service only changes its private
+draft; `state.modelConfig` continues to represent the server's active service.
+
+List loading, explicit catalog refresh, testing, saving, activation, and deletion
+share one busy flag. Conflicting handlers and close/Escape entries check that
+flag, while controls restore Provider identity and protocol restrictions after
+completion. Missing-Key services can be edited but cannot be activated. Ordinary
+catalog enhancement remains asynchronous, with request tokens and editor-session
+checks preventing stale responses from changing a new draft.
+
+Successful writes apply the returned list directly. Application state reloads
+when activation changes or the active service is edited; saving/deleting an
+inactive service keeps the current service. A failed write preserves the draft
+and typed Key. If only the subsequent application reload fails, the successful
+write remains visible and feedback distinguishes it from a failed save.
+
 ## 19. Player, Debug, and Operation Surfaces
 
 The player entry module `app.js` owns bootstrap, cross-feature reload/recovery

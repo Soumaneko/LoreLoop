@@ -201,6 +201,10 @@ eq(
   [{{ config_id: "a", name: "Moonshot", model: "kimi-k3", preset_id: "moonshot", has_api_key: true, active: true }}],
   "list rows",
 );
+const missingKey = {{ ...services[0], config_id: "missing", has_api_key: false }};
+if (m.canActivateService(missingKey, "a")) throw new Error("missing Key must not activate");
+if (m.canActivateService(services[0], "a")) throw new Error("active service must not activate again");
+if (!m.canActivateService(services[0], "other")) throw new Error("keyed inactive service can activate");
 // A draft needs a test only when new or a connection field changed; renaming a
 // Custom alone does not.
 if (m.shouldRequireTest(true, false) !== true) throw new Error("new needs test");
