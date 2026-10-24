@@ -1868,7 +1868,10 @@ The local owner can use two dedicated endpoints, exposed by the creator interfac
 
 Routine automatic record refresh does not redraw while form controls differ
 from their original values, preventing polling from discarding unsaved edits.
-Explicit lifecycle refreshes may intentionally redraw the projection. Periodic
+Lifecycle refreshes follow the same draft protection, including responses that
+arrive during a save. A successful save updates its card before refreshing;
+explicitly discarding edits or changing the active save clears the old dirty
+state so the next projection can replace it. Periodic
 records polling is paused while player work is active (`generating` or
 `confirming`): the timer never fires a `/records` request in those modes, and
 a request already in flight that fails across a mode switch stays silent
@@ -1878,6 +1881,21 @@ then resumes the existing polling behavior. The mode
 switch prompts before discarding dirty record edits; callers must save or
 explicitly discard edits before actions that intentionally replace the records
 projection.
+
+`core_memory_editor.js` owns the Core Memory draft, DOM, loading, saving, and
+close/Escape handlers. `app.js` binds and opens it, supplies action admission,
+and includes its busy state in `playerActionContext`. Uninitialized memory
+shows an explanation and an empty, non-writable editor. Saving locks its inputs,
+add/delete actions, and closing until completion; failures keep the draft and
+successful saves apply the returned items without a second read.
+
+Records editing stays in `app.js` alongside polling and dirty-state ownership.
+Record saves and experience-mode changes share a local busy state that locks
+editing controls and rejects conflicting close, category, and save changes.
+Writes use the shared player action admission, preventing overlap with generation
+or confirmation. Failure restores editable controls and retains the draft;
+disabled fields still participate in dirty detection. Reading and expanding
+record cards remain available during a save.
 
 Cost-and-quality controls live in a dedicated settings-drawer section with one
 independent switch per capability. Each switch shows a compact one-line hint in

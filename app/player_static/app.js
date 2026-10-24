@@ -1,8 +1,9 @@
 import { createRuntimeNotices } from "./runtime_notices.js";
+import { createCoreMemoryEditor } from "./core_memory_editor.js";
 import { createModelSettings } from "./model_settings.js";
 import { createInitialization } from "./initialization.js";
 import { createConfirmationActions } from "./confirmation.js";
-import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, loadCoreMemory, loadEvents, loadRecords, request, saveCoreMemory, saveExperienceMode, stream, subscribe, updateRecord } from "./api.js";
+import { acknowledgeOperation, cancelOperation, downloadSave, importSaveArchive, loadEvents, loadRecords, request, saveExperienceMode, stream, subscribe, updateRecord } from "./api.js";
 import { playerErrorFeedback } from "./error_feedback.js";
 import {
   enhanceCustomSelect,
@@ -63,8 +64,7 @@ const els = {
   experienceModePlayerBtn: $("experienceModePlayerBtn"), experienceModeCreatorBtn: $("experienceModeCreatorBtn"),
   recordsContinuityList: $("recordsContinuityList"), recordsNpcList: $("recordsNpcList"), recordsSettingList: $("recordsSettingList"), recordsEventList: $("recordsEventList"),
   recordsRail: $("recordsRail"), recordsTabContinuity: $("recordsTabContinuity"), recordsTabNpc: $("recordsTabNpc"), recordsTabSetting: $("recordsTabSetting"), recordsTabEvent: $("recordsTabEvent"),
-  openCoreMemoryBtn: $("openCoreMemoryBtn"), coreMemoryDialog: $("coreMemoryDialog"), closeCoreMemoryBtn: $("closeCoreMemoryBtn"),
-  addCoreMemoryBtn: $("addCoreMemoryBtn"), saveCoreMemoryBtn: $("saveCoreMemoryBtn"), coreMemoryList: $("coreMemoryList"), coreMemoryError: $("coreMemoryError"),
+  openCoreMemoryBtn: $("openCoreMemoryBtn"),
   saveSelect: $("saveSelect"), newSaveBtn: $("newSaveBtn"), manageSavesBtn: $("manageSavesBtn"), playerSummary: $("playerSummary"), sceneSummary: $("sceneSummary"), resourceSummary: $("resourceSummary"),
   modelSettingsBtn: $("modelSettingsBtn"),
   feedbackRewriteDialog: $("feedbackRewriteDialog"), feedbackRewriteForm: $("feedbackRewriteForm"),
@@ -87,6 +87,7 @@ let selectedImportFile = null;
 let activeGenerationRun = null;
 let pendingEditor = null;
 let playerWriteBusy = false;
+let recordsSaveBusy = false;
 let confirmationTailSeen = new Set();
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
@@ -260,7 +261,7 @@ function playerActionContext() {
   return {
     mode: state.mode, pending: activePending(), variant: selectedVariant(),
     editing: Boolean(pendingEditor),
-    busy: saveManagerBusy || modelSettings.isBusy() || playerWriteBusy
+    busy: saveManagerBusy || modelSettings.isBusy() || coreMemoryEditor.isBusy() || recordsSaveBusy || playerWriteBusy
       || state.confirmationInFlight || Boolean(activeGenerationRun?.inFlight),
     confirmationUncertain: state.uncertainConfirmation?.saveId === state.activeSave,
   };
@@ -281,6 +282,7 @@ function isCurrentPendingTarget(target) {
 }
 
 function renderControls({ updateNavigation = true } = {}) {
+  coreMemoryEditor.refreshControls();
   const context = playerActionContext();
   const canChange = canChangePlayerState(context);
   const busy = !canChange || context.editing;
@@ -2209,6 +2211,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   state.saves = saves.saves || [];
   const previousSaveId = state.activeSave;
   state.activeSave = saves.active;
+  if (previousSaveId !== state.activeSave) recordsDirty = false;
   ++navigationJumpSequence;
   cancelNavigationSettlement();
   pinnedNavigationKey = null;
@@ -2280,7 +2283,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   );
   renderAll();
   cachePlayerShell();
-  if (state.activeSave) refreshRecords({ force: true });
+  if (state.activeSave) refreshRecords();
   if (recoverableOperations.length) {
     let reloadAfterRecovery = false;
     let autoConfirmAfterRecovery = false;
@@ -2323,6 +2326,7 @@ async function bootstrap() {
   initialization.bind();
   initAutoExpandingTextareas();
   modelSettings.bind();
+  coreMemoryEditor.bind();
   applyUiMode();
   restoreRecordsTabPreference();
   await readerPreferences.load();
@@ -2851,11 +2855,16 @@ async function maybeAutoConfirm() {
 }
 
 function canManageModelSettings() {
-  return !saveManagerBusy && !playerWriteBusy && !state.confirmationInFlight
+  return !saveManagerBusy && !playerWriteBusy && !recordsSaveBusy && !coreMemoryEditor.isBusy() && !state.confirmationInFlight
     && !activeGenerationRun?.inFlight
     && state.uncertainConfirmation?.saveId !== state.activeSave
     && !["booting", "generating", "confirming", "switching"].includes(state.mode);
 }
+
+const coreMemoryEditor = createCoreMemoryEditor({
+  node, canWrite: () => canChangePlayerState(playerActionContext()),
+  onBusyChange: renderControls, showToast, showError,
+});
 
 const modelSettings = createModelSettings({
   canManage: canManageModelSettings, onBusyChange: renderControls,
@@ -3065,6 +3074,7 @@ function restoreRecordsTabPreference() {
 }
 
 function openRecordsTab(tab) {
+  if (recordsSaveBusy) return;
   if (!els.recordsDrawer) return;
   if (els.recordsDrawer.classList.contains("open") && recordsActiveTab === tab) {
     closeRecordsDrawer();
@@ -3078,7 +3088,7 @@ function openRecordsTab(tab) {
       confirmText: "继续切换",
       cancelText: "取消",
     }).then((proceed) => {
-      if (!proceed) return;
+      if (!proceed || recordsSaveBusy) return;
       recordsDirty = false;
       switchRecordsTab(tab);
     });
@@ -3150,6 +3160,7 @@ function applyUiMode() {
 }
 
 async function switchExperienceMode(mode) {
+  if (!canChangePlayerState(playerActionContext())) return;
   if (mode === state.experienceMode) return;
   if (!["player", "creator"].includes(mode)) return;
   if (recordsDirty || recomputeRecordsDirty()) {
@@ -3163,6 +3174,8 @@ async function switchExperienceMode(mode) {
     });
     if (!proceed) return;
   }
+  if (!canChangePlayerState(playerActionContext())) return;
+  setRecordsSaveBusy(true);
   try {
     const result = await saveExperienceMode(mode);
     state.experienceMode = result.experience_mode;
@@ -3172,10 +3185,12 @@ async function switchExperienceMode(mode) {
     recordsDirty = false;
     applyUiMode();
     showToast(result.experience_mode === "creator" ? "已切换到创作者模式" : "已切换到玩家模式");
-    await refreshRecords({ force: true });
   } catch (error) {
     renderExperienceModeToggle();
     showError(error);
+  } finally {
+    setRecordsSaveBusy(false);
+    refreshRecords();
   }
 }
 
@@ -3193,11 +3208,11 @@ function openRecordsDrawer() {
   if (!wasOpen) {
     recordsDirty = false;
     renderRecordsRail();
-    refreshRecords({ force: true });
+    refreshRecords();
   }
 }
 async function closeRecordsDrawer() {
-  if (!els.recordsDrawer || recordsCloseInFlight) return false;
+  if (!els.recordsDrawer || recordsCloseInFlight || recordsSaveBusy) return false;
   recordsCloseInFlight = true;
   try {
     if (els.recordsDrawer.classList.contains("open") && (recordsDirty || recomputeRecordsDirty())) {
@@ -3209,7 +3224,7 @@ async function closeRecordsDrawer() {
         cancelText: "继续编辑",
         isDanger: true,
       });
-      if (!proceed) return false;
+      if (!proceed || recordsSaveBusy) return false;
       recordsDirty = false;
     }
     els.recordsDrawer.classList.remove("open");
@@ -3236,8 +3251,21 @@ function startRecordsPoll() {
 let recordsRefreshInFlight = false;
 let recordsRefreshGeneration = 0;
 let recordsRefreshPending = false;
-let recordsRefreshPendingForce = false;
 let recordsDirty = false;
+let recordsLockedControls = [];
+function setRecordsSaveBusy(busy) {
+  recordsSaveBusy = busy;
+  if (busy) {
+    recordsLockedControls = [...els.recordsDrawer.querySelectorAll(
+      ".record-edit input, .record-edit textarea, .record-edit select, .record-edit button, .record-edit-button",
+    )].map(control => [control, control.disabled]);
+    for (const [control] of recordsLockedControls) control.disabled = true;
+  } else {
+    for (const [control, disabled] of recordsLockedControls) control.disabled = disabled;
+    recordsLockedControls = [];
+  }
+  renderControls();
+}
 let recordsCloseInFlight = false;
 const recordsExpandedIds = new Set();
 function collectFactValues(editor) {
@@ -3259,7 +3287,6 @@ function recomputeRecordsDirty() {
       }
     }
     for (const control of list.querySelectorAll("input, textarea")) {
-      if (control.disabled) continue;
       if (control.closest(".record-fact-editor")) continue;
       if (control.closest(".record-ability-editor")) continue;
       const original = control.dataset.originalValue ?? "";
@@ -3275,13 +3302,12 @@ function recomputeRecordsDirty() {
   }
   return false;
 }
-async function refreshRecords({ force = false } = {}) {
+async function refreshRecords() {
   if (!els.recordsSettingList) return;
   const generation = ++recordsRefreshGeneration;
   const startedMode = state.mode;
   if (recordsRefreshInFlight) {
     recordsRefreshPending = true;
-    recordsRefreshPendingForce = recordsRefreshPendingForce || force;
     return;
   }
   recordsRefreshInFlight = true;
@@ -3289,7 +3315,6 @@ async function refreshRecords({ force = false } = {}) {
     const records = await loadRecords(state.experienceMode === "creator" ? "advanced" : "general");
     if (generation !== recordsRefreshGeneration) {
       recordsRefreshPending = true;
-      recordsRefreshPendingForce = recordsRefreshPendingForce || force;
       return;
     }
     state.records = records;
@@ -3297,7 +3322,7 @@ async function refreshRecords({ force = false } = {}) {
       state.runtimeNotices = records.runtime_notices;
       renderRuntimeNotices();
     }
-    if (force || !recordsDirty) {
+    if (!recordsSaveBusy && !recordsDirty) {
       renderRecords(records);
       recordsDirty = false;
     }
@@ -3322,7 +3347,6 @@ async function refreshRecords({ force = false } = {}) {
   } catch (error) {
     if (generation !== recordsRefreshGeneration) {
       recordsRefreshPending = true;
-      recordsRefreshPendingForce = recordsRefreshPendingForce || force;
       return;
     }
     if (
@@ -3337,19 +3361,16 @@ async function refreshRecords({ force = false } = {}) {
     if (recordsRefreshPending) {
       if (isRecordsPollingPaused(state.mode)) {
         recordsRefreshPending = false;
-        recordsRefreshPendingForce = false;
         return;
       }
-      const pendingForce = recordsRefreshPendingForce;
       recordsRefreshPending = false;
-      recordsRefreshPendingForce = false;
-      refreshRecords({ force: pendingForce });
+      refreshRecords();
     }
   }
 }
 
 function refreshRecordsAfterTurn() {
-  refreshRecords({ force: true });
+  refreshRecords();
 }
 
 function _abilityText(item) {
@@ -3788,6 +3809,7 @@ function buildRecordCard({
     saveBtn.type = "button";
 
     cancelBtn.onclick = () => {
+      if (recordsSaveBusy) return;
       applySourceToControls();
       message.textContent = "";
       message.className = "record-edit-message";
@@ -3796,7 +3818,8 @@ function buildRecordCard({
     };
 
     saveBtn.onclick = async () => {
-      saveBtn.disabled = true;
+      if (!canChangePlayerState(playerActionContext()) || recordsCloseInFlight) return;
+      setRecordsSaveBusy(true);
       message.textContent = "保存中…";
       message.className = "record-edit-message";
       try {
@@ -3823,7 +3846,6 @@ function buildRecordCard({
         if (!Object.keys(values).length) {
           message.textContent = "";
           message.className = "record-edit-message";
-          saveBtn.disabled = false;
           recordsDirty = recomputeRecordsDirty();
           renderView();
           switchToView();
@@ -3836,12 +3858,12 @@ function buildRecordCard({
         renderView();
         switchToView();
         recordsDirty = recomputeRecordsDirty();
-        refreshRecords({ force: !recordsDirty });
+        refreshRecords();
       } catch (error) {
         message.textContent = error?.message || "保存失败";
         message.className = "record-edit-message is-error";
       } finally {
-        saveBtn.disabled = false;
+        setRecordsSaveBusy(false);
       }
     };
 
@@ -3874,6 +3896,7 @@ function buildRecordCard({
   };
 
   editButton.onclick = () => {
+    if (!canChangePlayerState(playerActionContext())) return;
     renderEdit();
     switchToEdit();
   };
@@ -4242,103 +4265,6 @@ function renderEventRecords(events) {
   }
 }
 
-const CORE_MEMORY_KIND_OPTIONS = [
-  ["world_invariant", "世界恒常"],
-  ["protagonist_invariant", "主角恒常"],
-  ["narrative_preference", "叙事偏好"],
-  ["system_convention", "系统惯例"],
-  ["ability_rule", "能力规则"],
-];
-const CORE_MEMORY_STRENGTH_OPTIONS = [
-  ["hard_constraint", "硬约束"],
-  ["strong_preference", "强偏好"],
-];
-const CORE_MEMORY_SOURCE_LABELS = { player: "玩家", campaign_setup: "世界构建" };
-let coreMemoryItems = [];
-
-function _buildCoreMemorySelect(options, value) {
-  const select = node("select");
-  for (const [key, label] of options) {
-    const option = node("option", "", label);
-    option.value = key;
-    if (key === value) option.selected = true;
-    select.appendChild(option);
-  }
-  return select;
-}
-
-function renderCoreMemoryItems(items) {
-  els.coreMemoryList.replaceChildren();
-  if (!items.length) {
-    els.coreMemoryList.appendChild(node("p", "core-memory-empty", "暂无条目。点击「添加条目」开始构建世界基础。"));
-    return;
-  }
-  for (const item of items) {
-    const row = node("div", "core-memory-item");
-    const head = node("div", "core-memory-item-head");
-    const kindSelect = _buildCoreMemorySelect(CORE_MEMORY_KIND_OPTIONS, item.kind);
-    kindSelect.addEventListener("change", () => { item.kind = kindSelect.value; });
-    const strengthSelect = _buildCoreMemorySelect(CORE_MEMORY_STRENGTH_OPTIONS, item.strength);
-    strengthSelect.addEventListener("change", () => { item.strength = strengthSelect.value; });
-    head.appendChild(kindSelect);
-    head.appendChild(strengthSelect);
-    head.appendChild(node("span", "core-memory-item-source", CORE_MEMORY_SOURCE_LABELS[item.source] || item.source || ""));
-    const removeBtn = node("button", "remove-core-memory-btn", "删除");
-    removeBtn.type = "button";
-    removeBtn.onclick = () => {
-      const index = items.indexOf(item);
-      if (index >= 0) items.splice(index, 1);
-      renderCoreMemoryItems(items);
-    };
-    head.appendChild(removeBtn);
-    row.appendChild(head);
-    const textarea = node("textarea");
-    textarea.value = item.content || "";
-    textarea.rows = 3;
-    textarea.addEventListener("input", () => { item.content = textarea.value; });
-    row.appendChild(textarea);
-    els.coreMemoryList.appendChild(row);
-  }
-}
-
-async function openCoreMemoryEditor() {
-  els.coreMemoryError.hidden = true;
-  try {
-    const payload = await loadCoreMemory();
-    if (!payload.initialized) {
-      els.coreMemoryError.textContent = "核心记忆尚未初始化，请先完成世界初始化。";
-      els.coreMemoryError.hidden = false;
-    } else {
-      coreMemoryItems = (payload.items || []).map((item) => ({ ...item }));
-      renderCoreMemoryItems(coreMemoryItems);
-    }
-    els.coreMemoryDialog.showModal();
-  } catch (error) {
-    showError(error);
-  }
-}
-
-function addCoreMemoryItem() {
-  coreMemoryItems.push({ id: "", kind: "narrative_preference", strength: "strong_preference", source: "player", content: "" });
-  renderCoreMemoryItems(coreMemoryItems);
-}
-
-async function saveCoreMemoryEditor() {
-  els.saveCoreMemoryBtn.disabled = true;
-  try {
-    await saveCoreMemory(coreMemoryItems);
-    showToast("核心记忆已更新");
-    const payload = await loadCoreMemory();
-    coreMemoryItems = (payload.items || []).map((item) => ({ ...item }));
-    renderCoreMemoryItems(coreMemoryItems);
-    els.coreMemoryError.hidden = true;
-  } catch (error) {
-    els.coreMemoryError.textContent = error?.message || "保存失败";
-    els.coreMemoryError.hidden = false;
-  } finally {
-    els.saveCoreMemoryBtn.disabled = false;
-  }
-}
 
 function openDrawer() { els.drawer.classList.add("open"); els.drawer.setAttribute("aria-hidden", "false"); els.drawerBackdrop.hidden = false; }
 function closeDrawer() {
@@ -4389,10 +4315,11 @@ if (els.recordsTabContinuity) els.recordsTabContinuity.onclick = () => openRecor
 if (els.recordsTabNpc) els.recordsTabNpc.onclick = () => openRecordsTab("npc");
 if (els.recordsTabSetting) els.recordsTabSetting.onclick = () => openRecordsTab("setting");
 if (els.recordsTabEvent) els.recordsTabEvent.onclick = () => openRecordsTab("event");
-if (els.openCoreMemoryBtn) els.openCoreMemoryBtn.onclick = () => { closeDrawer(); openCoreMemoryEditor(); };
-if (els.closeCoreMemoryBtn) els.closeCoreMemoryBtn.onclick = () => els.coreMemoryDialog.close();
-if (els.addCoreMemoryBtn) els.addCoreMemoryBtn.onclick = addCoreMemoryItem;
-if (els.saveCoreMemoryBtn) els.saveCoreMemoryBtn.onclick = saveCoreMemoryEditor;
+if (els.openCoreMemoryBtn) els.openCoreMemoryBtn.onclick = () => {
+  if (state.mode === "switching" || saveManagerBusy) return;
+  closeDrawer();
+  coreMemoryEditor.open();
+};
 els.drawerBackdrop.onclick = () => { closeDrawer(); closeLeftDrawer(); closeRecordsDrawer(); };
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
 els.newSaveBtn.onclick = () => { els.saveNameInput.value = ""; els.saveDialog.showModal(); window.setTimeout(() => els.saveNameInput.focus(), 0); };
