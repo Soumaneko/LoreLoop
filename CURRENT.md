@@ -1753,6 +1753,29 @@ changes. `confirmation.js` uses the same state callback while retaining outcome
 verification and recovery. This separates control updates from content replacement
 so feature changes do not erase drafts merely by changing operation status.
 
+The DOM-free `state.js` helpers `canChangePlayerState`, `canUsePending`, and
+`canSubmitPlayerInput` supply shared action conditions to controls and handlers.
+`app.js` adds current editor and write ownership through `playerActionContext`.
+Generation, confirmation, save changes, and pending-text writes block conflicting
+actions through their actual request lifetime; displaying or dismissing an error
+does not release an unfinished request. Short writes release ownership after the
+updated save projection is installed, before target-save recovery starts. A save
+change loads its own projection rather than reusing the previous save's cache.
+
+An open scene editor must be saved or cancelled before confirming, selecting
+another candidate scene, or rewriting. Saving locks the editor and conflicting
+save changes; failure keeps the same text and editor. A save switch still asks
+before abandoning an unsaved edit and replaces it only after success. Control
+refreshes and same-target reloads retain the live editor. Actions awaiting a
+confirmation dialog recheck the active save and candidate scene before writing.
+
+`confirmation.js` checks application admission before a new confirmation and
+shares the unresolved save/turn identity with the state projection. Unknown or
+in-progress confirmation results block further writes and save changes across
+all candidates in that save; the outcome verification control stays available.
+Successful confirmation or recovery clears the unresolved identity. The existing
+confirmed-result handling remains authoritative when a later refresh fails.
+
 The player surface provides:
 
 - initialization;

@@ -411,7 +411,7 @@ def test_confirmation_failure_checks_commit_instead_of_pending_ui():
     script = r'''
 import assert from "node:assert/strict";
 const state = {activeSave: "save-1"};
-const variant = {turn_id: "variant-1"};
+let variant = {turn_id: "variant-1"};
 const activePending = () => ({variants: [variant]});
 const selectedVariant = () => variant;
 const sessionStorage = {setItem() {}, removeItem() {}};
@@ -431,7 +431,7 @@ const tokenUsage = {getVariantUsage: () => null, getCurrentPendingUsage: () => (
 const {createConfirmationActions} = await import("__MODULE_URL__");
 const {confirmTurn} = createConfirmationActions({
   state, activePending, selectedVariant, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY,
-  setMode, renderAll, readDraft, newRequestId,
+  setMode, canConfirm: () => true, refreshControls: () => {}, renderAll, readDraft, newRequestId,
   handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
   refreshRecords, refreshRecordsAfterTurn, showToast, showError, stream, subscribe: async () => {},
   request, loadAll, tokenUsage
@@ -446,6 +446,7 @@ disconnected = true;
 await confirmTurn();
 assert.equal(feedback.confirmationOutcome, "unknown");
 const previous = streams;
+variant = {turn_id: "variant-2"};
 await confirmTurn();
 assert.equal(streams, previous, "unknown outcome must not resubmit confirmation");
 lookup = "confirmed";
@@ -480,18 +481,23 @@ const setMode = () => {};
 const subscribe = async () => {}, handleConfirmationEvent = () => {};
 const acknowledgeHandledOperation = async () => {}, acknowledgeFailedOperation = async () => {};
 const refreshRecords = () => {}, refreshRecordsAfterTurn = () => {}, showToast = () => {};
-const loadAll = async () => { throw new Error("refresh failed"); };
+let refreshFails = true;
+const loadAll = async () => { if (refreshFails) throw new Error("refresh failed"); };
 let result;
 const showError = (error, fallback, options) => { result = {error, ...options}; };
 const {createConfirmationActions} = await import("__MODULE_URL__");
 const {resumeConfirmationOperation} = createConfirmationActions({
-  state, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY, setMode,
+  state, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY, setMode, refreshControls: () => {},
   subscribe, handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
   refreshRecords, refreshRecordsAfterTurn, showToast, loadAll, showError, renderAll: () => {},
 });
 await resumeConfirmationOperation({operation_id:"op", metadata:{turn_id:"variant-1"}});
 assert.equal(result.confirmationOutcome, "confirmed");
 assert.equal(result.error.message, "refresh failed");
+refreshFails = false;
+state.uncertainConfirmation = {saveId:"save-1", turnId:"variant-1"};
+await resumeConfirmationOperation({operation_id:"op", metadata:{turn_id:"variant-1"}});
+assert.equal(state.uncertainConfirmation, null, "successful recovery clears the earlier unresolved result");
 '''.replace("__MODULE_URL__", (STATIC_DIR / "confirmation.js").resolve().as_uri())
     _run_js(script)
 

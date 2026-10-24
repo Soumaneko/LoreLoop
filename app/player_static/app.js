@@ -19,6 +19,9 @@ import { createTokenUsageController, pendingFooterMode, renderCardTokenFooter } 
 import {
   activePending,
   applySavedDraft,
+  canChangePlayerState,
+  canUsePending,
+  canSubmitPlayerInput,
   hasDraft,
   modeLabels,
   readDraft,
@@ -126,6 +129,8 @@ let modelProviderPickerOpen = false;
 let modelProvidersExpanded = false;
 let modelEditorSession = 0;
 let activeGenerationRun = null;
+let pendingEditor = null;
+let playerWriteBusy = false;
 let confirmationTailSeen = new Set();
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
@@ -229,7 +234,8 @@ function showError(
   reportClientError(error, "displayed_error");
   state.lastError = error;
   const feedback = playerErrorFeedback(error, fallback, options);
-  setOperationMode("error");
+  if (!options.preserveMode) setOperationMode("error");
+  else renderControls();
   els.errorTitle.textContent = feedback.title;
   els.errorMessage.textContent = feedback.message;
   els.errorCard.hidden = false;
@@ -266,10 +272,18 @@ function showError(
 }
 
 function clearError() {
+  if (state.uncertainConfirmation?.saveId === state.activeSave) {
+    showToast("请先核实上一次确认的结果");
+    return;
+  }
   state.lastError = null;
   els.errorCard.hidden = true;
   els.errorCard.querySelector(".error-retry-btn")?.remove();
   els.errorCard.querySelector(".error-config-btn")?.remove();
+  if (playerActionContext().busy) {
+    renderControls();
+    return;
+  }
   const pending = activePending();
   setOperationMode(!state.modelConfig?.configured ? "needs_model" : state.playerState?.needs_init ? "needs_init" : pending ? "pending" : "idle");
 }
@@ -286,8 +300,34 @@ function setInputHintText(actionText) {
   );
 }
 
+function playerActionContext() {
+  return {
+    mode: state.mode, pending: activePending(), variant: selectedVariant(),
+    editing: Boolean(pendingEditor),
+    busy: saveManagerBusy || modelConfigBusy || playerWriteBusy
+      || state.confirmationInFlight || Boolean(activeGenerationRun?.inFlight),
+    confirmationUncertain: state.uncertainConfirmation?.saveId === state.activeSave,
+  };
+}
+
+function allowPendingAction(variant = selectedVariant()) {
+  if (canUsePending(playerActionContext()) && variant?.turn_id === selectedVariant()?.turn_id) return true;
+  if (pendingEditor) showToast("请先保存或取消正文编辑");
+  return false;
+}
+
+function pendingTarget() {
+  return { saveId: state.activeSave, turnId: selectedVariant()?.turn_id };
+}
+
+function isCurrentPendingTarget(target) {
+  return target.saveId === state.activeSave && target.turnId === selectedVariant()?.turn_id;
+}
+
 function renderControls({ updateNavigation = true } = {}) {
-  const busy = saveManagerBusy || modelConfigBusy || ["booting", "needs_model", "generating", "confirming", "switching"].includes(state.mode);
+  const context = playerActionContext();
+  const canChange = canChangePlayerState(context);
+  const busy = !canChange || context.editing;
   const pending = activePending();
   els.statusPill.dataset.mode = state.mode;
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
@@ -297,7 +337,6 @@ function renderControls({ updateNavigation = true } = {}) {
     els.playerInput.disabled = true;
     els.playerInput.placeholder = "请先确认或重新生成开场";
     setInputHintText("等待确认开场");
-    els.generateBtn.disabled = true;
     const btnSpan = els.generateBtn.querySelector("span");
     if (btnSpan) btnSpan.textContent = "执行行动";
   } else if (pending && !busy) {
@@ -305,7 +344,6 @@ function renderControls({ updateNavigation = true } = {}) {
     els.playerInput.disabled = false;
     els.playerInput.placeholder = "对这段正文有意见？在此输入修改要求（如“写到门前即可停下”）...";
     setInputHintText("提交修改意见");
-    els.generateBtn.disabled = !els.playerInput.value.trim();
     const btnSpan = els.generateBtn.querySelector("span");
     if (btnSpan) btnSpan.textContent = "意见重写";
   } else {
@@ -313,15 +351,16 @@ function renderControls({ updateNavigation = true } = {}) {
     els.playerInput.disabled = busy || state.playerState?.needs_init;
     els.playerInput.placeholder = "你打算怎么做？";
     setInputHintText("执行行动");
-    els.generateBtn.disabled = busy || pending || state.playerState?.needs_init || !els.playerInput.value.trim();
     const btnSpan = els.generateBtn.querySelector("span");
     if (btnSpan) btnSpan.textContent = "执行行动";
   }
 
-  els.saveSelect.disabled = busy;
-  els.newSaveBtn.disabled = busy;
-  els.manageSavesBtn.disabled = busy;
-  els.modelSettingsBtn.disabled = modelConfigBusy || ["generating", "confirming", "switching"].includes(state.mode);
+  els.generateBtn.disabled = !canSubmitPlayerInput(context, els.playerInput.value);
+  els.saveSelect.disabled = !canChange;
+  els.newSaveBtn.disabled = !canChange;
+  els.manageSavesBtn.disabled = !canChange;
+  els.modelSettingsBtn.disabled = context.busy || context.confirmationUncertain
+    || ["generating", "confirming", "switching"].includes(state.mode);
   const controls = state.playerState?.history_controls || {};
   const pendingIds = (activePending()?.variants || []).map((variant) => variant.turn_id);
   const canRedoPending = pendingIds.some((turnId) => (controls.redo_pending_turn_ids || []).includes(turnId));
@@ -1048,20 +1087,26 @@ function _buildPendingFooter(pending, variant) {
 function refreshPendingControls() {
   const pending = activePending();
   if (!pending) return;
+  const context = playerActionContext();
+  const allowed = canUsePending(context);
   const confirming = state.mode === "confirming";
-  const rewriting = pending.kind === "opening" || ["generating", "confirming"].includes(state.mode);
+  const rewriting = !allowed || pending.kind === "opening";
+  if (pendingEditor) {
+    const locked = !canChangePlayerState(context);
+    pendingEditor.editor.disabled = locked;
+    pendingEditor.save.disabled = locked;
+    pendingEditor.cancel.disabled = locked;
+  }
   for (const button of els.pendingCard.querySelectorAll("[data-pending-action]")) {
     const action = button.dataset.pendingAction;
     if (["rephrase", "feedbackRewrite", "reroll", "dropdownTrigger"].includes(action)) {
       button.disabled = rewriting;
-    } else if (action === "rewriteOpening") {
-      button.disabled = ["generating", "confirming"].includes(state.mode);
     } else if (action === "previous") {
-      button.disabled = state.selectedPendingIndex === 0;
+      button.disabled = !allowed || state.selectedPendingIndex === 0;
     } else if (action === "next") {
-      button.disabled = state.selectedPendingIndex === pending.variants.length - 1;
+      button.disabled = !allowed || state.selectedPendingIndex === pending.variants.length - 1;
     } else {
-      button.disabled = confirming;
+      button.disabled = !allowed;
     }
     if (action === "confirm") button.textContent = confirming ? "正在确认……" : "确认采用";
   }
@@ -1080,6 +1125,11 @@ function refreshPendingControls() {
 
 function renderPending() {
   const pending = activePending();
+  if (pendingEditor && isCurrentPendingTarget(pendingEditor) && els.pendingCard.contains(pendingEditor.editor)) {
+    refreshPendingControls();
+    return;
+  }
+  pendingEditor = null;
   if (!pending) {
     if (state.mode !== "generating") showActivePlayerAction("");
     els.pendingCard.hidden = true;
@@ -1168,6 +1218,7 @@ function renderPending() {
 }
 
 function beginEdit(display, closing, actions, variant) {
+  if (!allowPendingAction(variant)) return;
   const editor = node("textarea", "scene-editor");
   editor.value = readDraft(variant);
   const editActions = node("div", "pending-actions");
@@ -1181,10 +1232,17 @@ function beginEdit(display, closing, actions, variant) {
   display.after(editor);
   editor.after(editActions);
 
-  cancel.onclick = () => renderPending();
+  pendingEditor = { ...pendingTarget(), editor, save, cancel };
+  cancel.onclick = () => {
+    if (!canChangePlayerState(playerActionContext()) || !isCurrentPendingTarget(pendingEditor)) return;
+    pendingEditor = null;
+    renderPending(); renderControls();
+  };
   save.onclick = async () => {
-    save.disabled = true;
-    cancel.disabled = true;
+    if (!pendingEditor || !canChangePlayerState(playerActionContext()) || !isCurrentPendingTarget(pendingEditor)) return;
+    const target = pendingTarget();
+    playerWriteBusy = true;
+    renderControls();
     try {
       const result = await request("/api/player/pending/edit", {
         method: "POST",
@@ -1193,16 +1251,20 @@ function beginEdit(display, closing, actions, variant) {
           scene_text: editor.value,
         }),
       });
-      applySavedDraft(variant, result);
+      if (!isCurrentPendingTarget(target)) return;
+      applySavedDraft(selectedVariant(), result);
+      pendingEditor = null;
       renderPending();
       showToast("正文修改已保存");
     } catch (error) {
-      save.disabled = false;
-      cancel.disabled = false;
       showError(error, undefined, { pendingPreserved: true });
+    } finally {
+      playerWriteBusy = false;
+      renderControls();
     }
   };
   editActions.append(cancel, save);
+  renderControls();
   editor.focus();
   window.setTimeout(() => {
     const rect = editor.getBoundingClientRect();
@@ -1219,6 +1281,7 @@ function showConfirmModal({
   cancelText = "取消",
   isDanger = false,
 } = {}) {
+  if (els.codexConfirmDialog?.open) return Promise.resolve(false);
   return new Promise((resolve) => {
     if (!els.codexConfirmDialog) {
       resolve(window.confirm(message));
@@ -1272,14 +1335,17 @@ function showConfirmModal({
 }
 
 async function restoreOriginalScene(variant) {
-  if (!variant || !hasDraft(variant)) return;
+  if (!allowPendingAction(variant) || !hasDraft(variant)) return;
+  const target = pendingTarget();
   const confirmed = await showConfirmModal({
     title: "恢复版本确认",
     message: "恢复后，当前版本已保存的正文修改将被删除。是否继续？",
     confirmText: "恢复原始正文",
     isDanger: true,
   });
-  if (!confirmed) return;
+  if (!confirmed || !isCurrentPendingTarget(target) || !allowPendingAction(variant)) return;
+  playerWriteBusy = true;
+  renderControls();
   try {
     const result = await request("/api/player/pending/edit", {
       method: "POST",
@@ -1288,19 +1354,25 @@ async function restoreOriginalScene(variant) {
         scene_text: null,
       }),
     });
-    applySavedDraft(variant, result);
+    if (!isCurrentPendingTarget(target)) return;
+    applySavedDraft(selectedVariant(), result);
     renderPending();
     showToast("已恢复该版本的原始正文");
   } catch (error) {
     showError(error, undefined, { pendingPreserved: true });
+  } finally {
+    playerWriteBusy = false;
+    renderControls();
   }
 }
 
 function selectVariant(index) {
+  if (!allowPendingAction()) return;
   const pending = activePending();
   if (!pending || index < 0 || index >= pending.variants.length) return;
   state.selectedPendingIndex = index;
   renderPending();
+  renderControls();
   scrollToBottom("instant");
 }
 
@@ -1843,7 +1915,7 @@ function saveActionButton(label, className, action) {
 }
 
 async function runSaveManagerAction(action, successMessage) {
-  if (saveManagerBusy) return;
+  if (!canChangePlayerState(playerActionContext())) return;
   saveManagerBusy = true;
   saveManagerMessage();
   renderSaveManager();
@@ -2743,7 +2815,7 @@ async function deleteModelService(row) {
   }
 }
 
-async function loadAll({ scroll = false, resumeOperation = true, knownModelConfig = null } = {}) {
+async function loadAll({ scroll = false, resumeOperation = true, knownModelConfig = null, completePlayerWrite = false } = {}) {
   state.historyPagingEnabled = false;
   const modelConfig = knownModelConfig || await request("/api/player/model-config");
   state.modelConfig = modelConfig;
@@ -2753,6 +2825,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   }
   const saves = await request("/api/player/saves");
   state.saves = saves.saves || [];
+  const previousSaveId = state.activeSave;
   state.activeSave = saves.active;
   ++navigationJumpSequence;
   cancelNavigationSettlement();
@@ -2788,7 +2861,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     }
     clearGenerationRunMarker();
   }
-  const playerState = preserveCachedState && state.playerState
+  const playerState = preserveCachedState && previousSaveId === state.activeSave && state.playerState
     ? state.playerState
     : await request("/api/player/state");
   if (firstOperation?.recovery_kind !== "confirmation") {
@@ -2800,11 +2873,16 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   state.experienceMode = playerState.experience_mode || "player";
   if (playerState.needs_init) await initialization.loadDraft();
   state.suggestions = playerState.action_preview?.previews || [];
-  state.selectedPendingIndex = Math.max(0, (activePending()?.variants?.length || 1) - 1);
+  const editingIndex = pendingEditor?.saveId === state.activeSave
+    ? activePending()?.variants?.findIndex((variant) => variant.turn_id === pendingEditor.turnId) : -1;
+  state.selectedPendingIndex = editingIndex >= 0 ? editingIndex
+    : Math.max(0, (activePending()?.variants?.length || 1) - 1);
   if (activeGenerationRun && activeGenerationRun.turnIndex === null) {
     activeGenerationRun.turnIndex = nextGeneratedTurnIndex();
     persistGenerationRun();
   }
+  // The write result is installed; target-save recovery may now start its own operation.
+  if (completePlayerWrite) playerWriteBusy = false;
   setOperationMode(
     activeGenerationOperation
       ? "generating"
@@ -2891,6 +2969,7 @@ function prepareGenerationRun(operationType, userInput, operationId = null, opti
     turnIndex: options.turnIndex ?? nextGeneratedTurnIndex(),
     cancellationRequested: Boolean(options.cancellationRequested),
     cancelled: false,
+    inFlight: true,
   };
   persistGenerationRun();
 }
@@ -2901,6 +2980,7 @@ function finishGenerationRun() {
   els.stopGenerationBtn.hidden = true;
   els.stopGenerationBtn.disabled = true;
   els.stopGenerationBtn.textContent = "停止生成";
+  renderControls();
 }
 
 function updateGenerationRunFromEvent(event) {
@@ -2939,7 +3019,7 @@ async function stopActiveGeneration() {
     run.cancellationRequested = false;
     els.stopGenerationBtn.disabled = false;
     els.stopGenerationBtn.textContent = "停止生成";
-    showError(error);
+    showError(error, undefined, { preserveMode: true });
   }
 }
 
@@ -3118,6 +3198,7 @@ async function resumeGenerationOperation(operation) {
         handleGenerationEvent(event, { retryMode });
       },
     );
+    if (activeGenerationRun) activeGenerationRun.inFlight = false;
     await acknowledgeHandledOperation(operation.operation_id);
     if (activeGenerationRun?.cancelled) {
       settleCancelledGeneration({ retryMode, userInput });
@@ -3180,7 +3261,7 @@ function handleConfirmationEvent(event) {
 
 async function rewriteFromFeedbackText(userFeedback) {
   const pending = activePending(); const variant = selectedVariant();
-  if (!pending || !variant || pending.kind === "opening" || !userFeedback) return;
+  if (!allowPendingAction() || pending.kind === "opening" || !userFeedback) return;
   if (els.feedbackRewriteDialog?.open) els.feedbackRewriteDialog.close();
   prepareGenerationRun("feedback_rewrite", pending.user_input || "");
   setOperationMode("generating");
@@ -3196,6 +3277,7 @@ async function rewriteFromFeedbackText(userFeedback) {
       if (event.step === "feedback_rewrite_strategy_selected") decision = event.data;
       handleGenerationEvent(event, { retryMode: "feedback_rewrite" });
     });
+    if (activeGenerationRun) activeGenerationRun.inFlight = false;
     await acknowledgeHandledOperation(operationId);
     if (activeGenerationRun?.cancelled) {
       settleCancelledGeneration({ retryMode: "feedback_rewrite" });
@@ -3230,8 +3312,8 @@ async function rewriteFromFeedback() {
 async function generateTurn() {
   const userInput = els.playerInput.value.trim();
   const pending = activePending();
+  if (!canSubmitPlayerInput(playerActionContext(), userInput)) return;
   if (pending) {
-    if (pending.kind === "opening" || !selectedVariant() || !userInput) return;
     els.playerInput.value = "";
     autoSizeInput();
     await rewriteFromFeedbackText(userInput);
@@ -3249,6 +3331,7 @@ async function generateTurn() {
       difficulty: els.difficultySelect.value,
       request_id: newRequestId(),
     }, (event) => handleGenerationEvent(event));
+    if (activeGenerationRun) activeGenerationRun.inFlight = false;
     await acknowledgeHandledOperation(operationId);
     if (activeGenerationRun?.cancelled) {
       settleCancelledGeneration({ userInput });
@@ -3274,7 +3357,7 @@ async function generateTurn() {
 
 async function retryTurn(retryMode) {
   const pending = activePending(); const variant = selectedVariant();
-  if (!pending || !variant || pending.kind === "opening") return;
+  if (!allowPendingAction() || pending.kind === "opening") return;
   const rephrase = retryMode === "rephrase";
   const endpoint = rephrase ? "rephrase" : "reroll";
   prepareGenerationRun(retryMode, pending.user_input || "");
@@ -3285,6 +3368,7 @@ async function retryTurn(retryMode) {
       turn_id: variant.turn_id,
       request_id: newRequestId(),
     }, (event) => handleGenerationEvent(event, { retryMode }));
+    if (activeGenerationRun) activeGenerationRun.inFlight = false;
     await acknowledgeHandledOperation(operationId);
     if (activeGenerationRun?.cancelled) {
       settleCancelledGeneration({ retryMode });
@@ -3308,7 +3392,8 @@ async function retryTurn(retryMode) {
 
 async function retryOpening() {
   const pending = activePending(); const variant = selectedVariant();
-  if (!pending || !variant || pending.kind !== "opening") return;
+  if (!allowPendingAction() || pending.kind !== "opening") return;
+  const target = pendingTarget();
   if (
     pending.variants.length >= 5
     && !await showConfirmModal({
@@ -3317,6 +3402,7 @@ async function retryOpening() {
       confirmText: "继续生成",
     })
   ) return;
+  if (!isCurrentPendingTarget(target) || !allowPendingAction()) return;
   prepareGenerationRun("opening_rewrite", "");
   setOperationMode("generating");
   startStreaming("正在重新生成开场");
@@ -3325,6 +3411,7 @@ async function retryOpening() {
       turn_id: variant.turn_id,
       request_id: newRequestId(),
     }, (event) => handleGenerationEvent(event, { retryMode: "opening_rewrite" }));
+    if (activeGenerationRun) activeGenerationRun.inFlight = false;
     await acknowledgeHandledOperation(operationId);
     if (activeGenerationRun?.cancelled) {
       settleCancelledGeneration({ retryMode: "opening_rewrite" });
@@ -3347,8 +3434,8 @@ async function retryOpening() {
 }
 
 function openFeedbackRewrite() {
-  const pending = activePending(); const variant = selectedVariant();
-  if (!pending || !variant || pending.kind === "opening") return;
+  const pending = activePending();
+  if (!allowPendingAction() || pending.kind === "opening") return;
   els.feedbackRewriteDialog.showModal();
   window.setTimeout(() => els.feedbackRewriteInput.focus(), 0);
 }
@@ -3399,40 +3486,49 @@ function setOperationMode(mode) {
 
 const { confirmTurn, resumeConfirmationOperation } = createConfirmationActions({
   state, activePending, selectedVariant, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY,
-  setMode: setOperationMode, renderAll, readDraft, newRequestId,
+  setMode: setOperationMode, canConfirm: allowPendingAction, refreshControls: renderControls,
+  renderAll, readDraft, newRequestId,
   handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
   refreshRecords, refreshRecordsAfterTurn, showToast, showError, stream, subscribe,
   request, loadAll, tokenUsage
 });
 
 async function discardPending() {
-  const pending = activePending(); const variant = selectedVariant();
-  if (!pending || !variant) return;
+  const variant = selectedVariant();
+  if (!allowPendingAction()) return;
+  const target = pendingTarget();
   const confirmed = await showConfirmModal({
     title: "删除待确认段落",
     message: "删除全部未确认版本，并回到输入行动之前？",
     confirmText: "确定删除",
     isDanger: true,
   });
-  if (!confirmed) return;
+  if (!confirmed || !isCurrentPendingTarget(target) || !allowPendingAction()) return;
+  playerWriteBusy = true;
   setOperationMode("switching");
   try {
     const result = await request("/api/player/pending/discard", { method: "POST", body: JSON.stringify({ turn_id: variant.turn_id }) });
-    await loadAll(); els.playerInput.value = result.user_input || ""; autoSizeInput(); renderControls(); els.playerInput.focus(); showToast("未确认内容已删除");
+    await loadAll({ completePlayerWrite: true }); els.playerInput.value = result.user_input || ""; autoSizeInput(); renderControls(); els.playerInput.focus(); showToast("未确认内容已删除");
   } catch (error) { showError(error, undefined, { pendingPreserved: true }); }
+  finally { playerWriteBusy = false; renderControls(); }
 }
 
 async function changeHistory(action) {
+  if (!canChangePlayerState(playerActionContext()) || pendingEditor) return;
   const pendingIds = (activePending()?.variants || []).map((variant) => variant.turn_id);
-  const redoPendingIds = state.playerState?.history_controls?.redo_pending_turn_ids || [];
+  const historyControls = state.playerState?.history_controls || {};
+  if (action === "undo" && !historyControls.can_undo || action === "redo" && !historyControls.can_redo) return;
+  const redoPendingIds = historyControls.redo_pending_turn_ids || [];
   if (activePending() && !(action === "redo" && pendingIds.some((id) => redoPendingIds.includes(id)))) return;
+  playerWriteBusy = true;
   setOperationMode("switching");
-  try { await request(`/api/player/history/${action}`, { method: "POST", body: "{}" }); await loadAll({ scroll: "smooth" }); showToast(action === "undo" ? "已撤销上一回合" : "已重做回合"); }
+  try { await request(`/api/player/history/${action}`, { method: "POST", body: "{}" }); await loadAll({ scroll: "smooth", completePlayerWrite: true }); showToast(action === "undo" ? "已撤销上一回合" : "已重做回合"); }
   catch (error) { showError(error); }
+  finally { playerWriteBusy = false; renderControls(); }
 }
 
 async function confirmDiscardUnsavedPendingEdit() {
-  if (!els.pendingCard.querySelector(".scene-editor")) return true;
+  if (!pendingEditor) return true;
   return showConfirmModal({
     title: "放弃当前编辑",
     message: "当前正文仍在编辑，切换存档会丢失尚未保存的修改。是否继续？",
@@ -3442,32 +3538,47 @@ async function confirmDiscardUnsavedPendingEdit() {
 }
 
 async function switchSave(saveId) {
-  if (!saveId || saveId === state.activeSave) return;
-  const canContinue = await confirmDiscardUnsavedPendingEdit();
-  if (!canContinue) {
+  if (!saveId || saveId === state.activeSave || !canChangePlayerState(playerActionContext())) {
     els.saveSelect.value = state.activeSave;
     syncCustomSelect(els.saveSelect);
     return;
   }
+  const target = pendingTarget();
+  const canContinue = await confirmDiscardUnsavedPendingEdit();
+  if (!canContinue || !isCurrentPendingTarget(target) || !canChangePlayerState(playerActionContext())) {
+    els.saveSelect.value = state.activeSave;
+    syncCustomSelect(els.saveSelect);
+    return;
+  }
+  playerWriteBusy = true;
   setOperationMode("switching");
   try {
     await request("/api/player/saves/switch", {
       method: "POST",
       body: JSON.stringify({ save_id: saveId }),
     });
-    state.suggestions = []; await loadAll({ scroll: "instant" }); closeDrawer();
+    state.suggestions = []; await loadAll({ scroll: "instant", completePlayerWrite: true }); closeDrawer();
   } catch (error) { els.saveSelect.value = state.activeSave; syncCustomSelect(els.saveSelect); showError(error); }
+  finally { playerWriteBusy = false; renderControls(); }
 }
 
 async function createSave(name) {
+  if (!canChangePlayerState(playerActionContext())) return;
+  const target = pendingTarget();
   const canContinue = await confirmDiscardUnsavedPendingEdit();
-  if (!canContinue) return;
+  if (!canContinue || !isCurrentPendingTarget(target) || !canChangePlayerState(playerActionContext())) return;
+  playerWriteBusy = true;
   setOperationMode("switching");
-  await request("/api/player/saves/create", {
-    method: "POST",
-    body: JSON.stringify({ name, activate: true }),
-  });
-  state.suggestions = []; await loadAll({ scroll: "instant" });
+  try {
+    await request("/api/player/saves/create", {
+      method: "POST",
+      body: JSON.stringify({ name, activate: true }),
+    });
+    state.suggestions = []; await loadAll({ scroll: "instant", completePlayerWrite: true });
+  } finally {
+    playerWriteBusy = false;
+    renderControls();
+  }
 }
 
 async function openLeftDrawer() {
@@ -4914,8 +5025,8 @@ els.addModelServiceBtn.onclick = addModelService;
 els.saveModelOnlyBtn.onclick = () => saveModelSettings(false);
 
 async function refreshGameView() {
-  if (["generating", "confirming"].includes(state.mode) || activeGenerationRun) {
-    showToast("正在生成中，请稍候");
+  if (playerActionContext().busy || ["generating", "confirming", "switching"].includes(state.mode)) {
+    showToast("当前操作尚未完成，请稍候");
     return;
   }
   try {

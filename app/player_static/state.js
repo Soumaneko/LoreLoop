@@ -7,6 +7,8 @@ export const state = {
   selectedPendingIndex: 0,
   suggestions: [],
   lastError: null,
+  uncertainConfirmation: null,
+  confirmationInFlight: false,
   runtimeNotices: [],
   historyLoading: false,
   historyPagingEnabled: false,
@@ -70,4 +72,20 @@ export function shouldAutoConfirmTurn({ enabled, pendingKind }) {
   if (enabled !== true) return false;
   if (pendingKind === "opening") return false;
   return pendingKind === "turn" || pendingKind === undefined;
+}
+
+export function canChangePlayerState({ mode, busy, confirmationUncertain }) {
+  return !busy && !confirmationUncertain && ["idle", "pending", "needs_init", "error"].includes(mode);
+}
+
+export function canUsePending(context) {
+  return canChangePlayerState(context) && context.mode !== "needs_init"
+    && Boolean(context.pending && context.variant) && !context.editing;
+}
+
+export function canSubmitPlayerInput(context, text) {
+  if (!text.trim()) return false;
+  return context.pending
+    ? canUsePending(context) && context.pending.kind !== "opening"
+    : canChangePlayerState(context) && context.mode === "idle" && !context.editing;
 }

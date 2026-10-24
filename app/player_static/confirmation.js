@@ -1,12 +1,10 @@
 export function createConfirmationActions({
   state, activePending, selectedVariant, sessionStorage, CONFIRMATION_IN_FLIGHT_KEY,
-  setMode, renderAll, readDraft, newRequestId,
+  setMode, canConfirm, refreshControls, renderAll, readDraft, newRequestId,
   handleConfirmationEvent, acknowledgeHandledOperation, acknowledgeFailedOperation,
   refreshRecords, refreshRecordsAfterTurn, showToast, showError, stream, subscribe,
   request, loadAll, tokenUsage
 }) {
-  let uncertainConfirmation = null;
-
   async function showConfirmationFailure(error, confirmation, completed = false) {
     let outcome = completed ? "confirmed" : "unknown";
     if (!completed) {
@@ -15,7 +13,7 @@ export function createConfirmationActions({
         outcome = result.outcome;
       } catch (_lookupError) { /* A lost connection cannot prove a failed commit. */ }
     }
-    uncertainConfirmation = ["unknown", "in_progress"].includes(outcome) ? confirmation : null;
+    state.uncertainConfirmation = ["unknown", "in_progress"].includes(outcome) ? confirmation : null;
     setMode(outcome === "not_confirmed" ? "pending" : "idle");
     renderAll();
     showError(error, undefined, {
@@ -30,14 +28,15 @@ export function createConfirmationActions({
   async function confirmTurn() {
     const pending = activePending(); const variant = selectedVariant();
     if (!pending || !variant) return;
-    if (uncertainConfirmation && uncertainConfirmation.saveId === state.activeSave
-        && uncertainConfirmation.turnId === variant.turn_id) {
-      await showConfirmationFailure(new Error("需要先核实上一次确认的结果。"), uncertainConfirmation);
+    if (state.uncertainConfirmation?.saveId === state.activeSave) {
+      await showConfirmationFailure(new Error("需要先核实上一次确认的结果。"), state.uncertainConfirmation);
       return;
     }
+    if (!canConfirm()) return;
     const confirmation = { turnId: variant.turn_id, saveId: state.activeSave };
     let completed = false;
     sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
+    state.confirmationInFlight = true;
     setMode("confirming");
     try {
       const operationId = await stream("/api/player/confirm", {
@@ -46,6 +45,7 @@ export function createConfirmationActions({
         request_id: newRequestId(),
       }, handleConfirmationEvent);
       completed = true;
+      state.uncertainConfirmation = null;
       await acknowledgeHandledOperation(operationId);
       const storedUsage = tokenUsage.getVariantUsage(variant.turn_id);
       const genUsage = storedUsage?.generation || tokenUsage.getCurrentPendingUsage().generation;
@@ -69,6 +69,8 @@ export function createConfirmationActions({
     }
     finally {
       sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
+      state.confirmationInFlight = false;
+      refreshControls();
     }
   }
 
@@ -76,6 +78,7 @@ export function createConfirmationActions({
     const confirmation = { turnId: operation.metadata?.turn_id, saveId: state.activeSave };
     let completed = false;
     sessionStorage.setItem(CONFIRMATION_IN_FLIGHT_KEY, "1");
+    state.confirmationInFlight = true;
     setMode("confirming");
     try {
       await subscribe(
@@ -83,6 +86,7 @@ export function createConfirmationActions({
         handleConfirmationEvent,
       );
       completed = true;
+      state.uncertainConfirmation = null;
       await acknowledgeHandledOperation(operation.operation_id);
       sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
       await loadAll({ resumeOperation: false });
@@ -95,6 +99,9 @@ export function createConfirmationActions({
       refreshRecords();
       await acknowledgeFailedOperation(error, operation.operation_id);
       return false;
+    } finally {
+      state.confirmationInFlight = false;
+      refreshControls();
     }
   }
   return { confirmTurn, resumeConfirmationOperation };
