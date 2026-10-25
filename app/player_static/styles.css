@@ -277,7 +277,7 @@ body {
 }
 button, input, textarea, select { font-family: var(--serif); color: inherit; }
 button, select { -webkit-tap-highlight-color: transparent; }
-button { letter-spacing: 0.06em; }
+button { letter-spacing: 0.06em; cursor: pointer; }
 input, textarea, select { letter-spacing: 0.04em; }
 textarea {
   resize: none !important;
@@ -343,10 +343,10 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .status-pill[data-mode="generating"] b, .status-pill[data-mode="confirming"] b, .status-pill[data-mode="switching"] b { background: var(--gold); animation: pulse 1.4s infinite; }
 .status-pill[data-mode="error"] b { background: var(--danger); }
 .icon-button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: var(--gold-soft); color: var(--ink); display: grid; place-content: center; gap: 4px; cursor: pointer; transition: border-color .2s var(--ease-smooth), background-color .2s var(--ease-smooth); }
-.icon-button:hover { border-color: var(--gold); background: var(--gold-glow); }
+.icon-button:hover:not(:disabled) { border-color: var(--gold); background: var(--gold-glow); }
 .icon-button:not(.codex-button):not(.time-travel-button) span { width: 15px; height: 1px; background: var(--ink); display: block; }
 .codex-button { font-size: 15px; border-color: var(--line); }
-.codex-button:hover { border-color: var(--gold); background: var(--gold-glow); }
+.codex-button:hover:not(:disabled) { border-color: var(--gold); background: var(--gold-glow); }
 .codex-button span, .codex-icon { width: auto; height: auto; background: transparent; display: inline-block; transform: translateY(-0.5px); }
 
 .story-layout { flex: 1; width: 100%; box-sizing: border-box; padding-left: var(--rail-w, 86px); padding-right: var(--rail-w, 86px); }
@@ -617,12 +617,6 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   color: var(--negative-text-strong);
   box-shadow: var(--card-shadow), 0 0 10px var(--negative-glow);
 }
-.stop-generation-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  filter: grayscale(0.5);
-  box-shadow: none;
-}
 .streaming-text:empty::after { content: ""; }
 .writing-indicator { display: flex; gap: 6px; margin-top: 24px; }
 .writing-indicator span { width: 4px; height: 4px; border-radius: 50%; background: var(--gold); animation: blink 1.2s infinite; }
@@ -631,13 +625,12 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .time-travel-group { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-soft); }
 .time-travel-button { width: 28px; height: 28px; border: 0; font-size: 13px; color: var(--gold-bright); line-height: 1; }
 .time-travel-button span { display: inline-block; width: auto; height: auto; background: transparent; transform: translateY(-0.5px); }
-.time-travel-button:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .pending-card { border-color: var(--gold); }
 .pending-toolbar { margin-bottom: 26px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .version-control { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .version-control button { height: 32px; border: 1px solid var(--line); background: var(--surface-soft); color: var(--ink); border-radius: 8px; padding: 0 11px; cursor: pointer; transition: color .2s var(--ease-smooth), background-color .2s var(--ease-smooth), border-color .2s var(--ease-smooth); }
-.version-control button:hover { border-color: var(--gold); background: var(--gold-soft); }
+.version-control button:hover:not(:disabled) { border-color: var(--gold); background: var(--gold-soft); }
 [hidden] { display: none !important; }
 .pending-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; }
 .pending-actions button,
@@ -714,8 +707,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   opacity: 0; visibility: hidden; transform: translateY(6px);
   transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
 }
-.rewrite-dropdown:hover .rewrite-dropdown-menu,
-.rewrite-dropdown:focus-within .rewrite-dropdown-menu {
+.rewrite-dropdown:has(> .rewrite-dropdown-trigger:enabled):is(:hover, :focus-within) .rewrite-dropdown-menu {
   opacity: 1; visibility: visible; transform: translateY(0);
 }
 .rewrite-dropdown-menu .dropdown-item {
@@ -747,13 +739,13 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer;
   transition: color 0.18s var(--ease-smooth), background-color 0.18s var(--ease-smooth);
 }
-.composer-tab:hover { color: var(--ink); background: var(--gold-soft); }
+.composer-tab:hover:not(:disabled) { color: var(--ink); background: var(--gold-soft); }
 .composer-tab.active { color: var(--gold-bright); background: var(--gold-glow); font-weight: 600; }
 
 .confirmation-status { display: flex; align-items: center; min-height: 44px; margin-top: 22px; padding: 13px 15px; box-sizing: border-box; }
 .confirmation-status-kicker { margin: 0; }
 .scene-editor { width: 100%; min-height: 160px; max-height: 520px; resize: none; overflow-y: hidden; border: 1px solid var(--line-strong); border-radius: 8px; outline: none; background: var(--editor-bg); color: var(--ink); padding: 20px; font-family: var(--serif); line-height: 1.9; transition: border-color 0.2s ease, background-color 0.2s ease; }
-.scene-editor:focus { border-color: var(--gold-bright); }
+.scene-editor:focus:not(:disabled) { border-color: var(--gold-bright); }
 
 .primary-action {
   display: inline-flex;
@@ -786,7 +778,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   box-shadow: var(--card-shadow);
   transition: border-color .22s var(--ease-smooth), background-color .22s var(--ease-smooth), box-shadow .22s var(--ease-smooth);
 }
-.suggestion:hover {
+.suggestion:hover:not(:disabled) {
   border-color: var(--line-strong);
   background: var(--surface-raised-hover);
   box-shadow: var(--shadow);
@@ -802,7 +794,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .error-card { margin: 28px 0; padding: 20px 22px; border-left: 2px solid var(--danger); background: var(--negative-bg); }
 .error-card p { margin: 8px 0 14px; color: var(--muted); }.error-card button { border: 0; background: none; color: var(--negative-text); padding: 0; cursor: pointer; }
 .error-card .error-config-btn { display: inline-block; border: 1px solid var(--negative-border); border-radius: 6px; padding: 7px 14px; color: var(--negative-text); background: var(--negative-bg); margin-left: 10px; font-weight: 500; }
-.error-card .error-config-btn:hover { background: var(--negative-bg-hover, var(--negative-bg)); border-color: var(--negative-text); }
+.error-card .error-config-btn:hover:not(:disabled) { background: var(--negative-bg-hover, var(--negative-bg)); border-color: var(--negative-text); }
 
 /* Transparent turn rail */
 .turn-navigator {
@@ -1089,12 +1081,12 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   pointer-events: none;
   flex-shrink: 0;
 }
-.close-button:hover {
+.close-button:hover:not(:disabled) {
   border-color: var(--gold);
   color: var(--gold-bright);
   background: var(--gold-soft);
 }
-.close-button:active {
+.close-button:active:not(:disabled) {
   transform: scale(0.92);
 }
 .drawer-section { padding: 16px 0; border-bottom: 1px solid var(--line); }
@@ -1136,7 +1128,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   vertical-align: 1px;
   transition: opacity .15s ease;
 }
-.setting-info-btn:hover { opacity: .9; }
+.setting-info-btn:hover:not(:disabled) { opacity: .9; }
 .setting-inline-note {
   font-size: 11px;
   font-weight: 400;
@@ -1225,7 +1217,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   background: var(--gold-bright);
 }
 .toggle-switch input:disabled + .toggle-track {
-  opacity: 0.42;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 .setting-row .manage-saves-button {
@@ -1249,9 +1241,8 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   background: var(--gold-glow);
   color: var(--gold-bright);
 }
-.pipeline-toggle:disabled { cursor: not-allowed; opacity: 0.55; }
 .drawer input, .modal input, .modal textarea, .modal select { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--ink); padding: 11px 12px; outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
-.modal input:focus, .modal textarea:focus, .modal select:focus { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-glow); }
+.modal input:focus:not(:disabled), .modal textarea:focus:not(:disabled), .modal select:focus:not(:disabled) { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-glow); }
 .drawer select {
   width: 100%;
   height: 42px;
@@ -1270,7 +1261,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   box-shadow: var(--shadow-soft);
   transition: color 0.22s var(--ease-smooth), background-color 0.22s var(--ease-smooth), border-color 0.22s var(--ease-smooth), box-shadow 0.22s var(--ease-smooth);
 }
-.drawer select:hover, .drawer select:focus {
+.drawer select:hover:not(:disabled), .drawer select:focus:not(:disabled) {
   border-color: var(--gold);
   color: var(--gold-bright);
   background-color: var(--surface);
@@ -1337,7 +1328,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   transition: opacity 0.2s, color 0.2s;
   flex-shrink: 0;
 }
-.turn-token-detail-btn:hover,
+.turn-token-detail-btn:hover:not(:disabled),
 .turn-token-detail-btn:focus-visible {
   opacity: 1;
   color: var(--gold-bright);
@@ -1360,13 +1351,9 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   line-height: 1;
   cursor: pointer;
 }
-.turn-token-row .version-control button:hover {
+.turn-token-row .version-control button:hover:not(:disabled) {
   border-color: var(--gold);
   background: var(--gold-soft);
-}
-.turn-token-row .version-control button:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 .turn-token-row .version-control span {
   color: var(--muted);
@@ -1463,21 +1450,15 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   box-shadow: var(--shadow-soft);
   transition: color 0.22s var(--ease-smooth), background-color 0.22s var(--ease-smooth), border-color 0.22s var(--ease-smooth), box-shadow 0.22s var(--ease-smooth);
 }
-.codex-custom-select-trigger:hover, .codex-custom-select-trigger.is-open {
+.codex-custom-select-trigger:hover:not(:disabled), .codex-custom-select-trigger.is-open:not(:disabled) {
   border-color: var(--gold);
   color: var(--gold-bright);
   background-color: var(--surface);
   box-shadow: var(--card-shadow);
 }
-.codex-custom-select-trigger:focus-visible {
+.codex-custom-select-trigger:focus-visible:not(:disabled) {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
-}
-.codex-custom-select-trigger:disabled,
-.codex-custom-select-wrapper.is-disabled .codex-custom-select-trigger {
-  opacity: 0.42;
-  cursor: not-allowed;
-  box-shadow: none;
 }
 .codex-custom-select-label {
   white-space: nowrap;
@@ -1526,13 +1507,13 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   text-align: left;
   transition: color 0.15s ease, background-color 0.15s ease;
 }
-.codex-custom-select-option:focus-visible {
+.codex-custom-select-option:focus-visible:not(:disabled) {
   outline: 1px solid var(--gold);
   outline-offset: -1px;
   background: var(--gold-soft);
   color: var(--gold-bright);
 }
-.codex-custom-select-option:hover {
+.codex-custom-select-option:hover:not(:disabled) {
   background: var(--gold-soft);
   color: var(--gold-bright);
 }
@@ -1559,7 +1540,6 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   min-width: 0;
   width: 100%;
 }
-.inline-control #newSaveBtn,
 .inline-control > button:not(.codex-custom-select-trigger) {
   grid-column: 2;
   height: 42px;
@@ -1574,7 +1554,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   place-content: center;
   transition: color 0.22s var(--ease-smooth), background-color 0.22s var(--ease-smooth), border-color 0.22s var(--ease-smooth);
 }
-.inline-control > button:not(.codex-custom-select-trigger):hover {
+.inline-control > button:not(.codex-custom-select-trigger):hover:not(:disabled) {
   border-color: var(--gold);
   background: var(--gold-soft);
 }
@@ -1595,7 +1575,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   justify-content: center;
   transition: color 0.22s var(--ease-smooth), background-color 0.22s var(--ease-smooth), border-color 0.22s var(--ease-smooth);
 }
-.manage-saves-button:hover {
+.manage-saves-button:hover:not(:disabled) {
   border-color: var(--gold);
   color: var(--gold-bright);
   background: var(--gold-soft);
@@ -1790,7 +1770,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   transition: opacity 0.15s ease;
   padding: 2px 4px;
 }
-.codex-toggle-more:hover {
+.codex-toggle-more:hover:not(:disabled) {
   opacity: 1;
   text-decoration: underline;
 }
@@ -1828,7 +1808,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.codex-turn-jump-btn:hover {
+.codex-turn-jump-btn:hover:not(:disabled) {
   opacity: 1;
   color: var(--gold);
 }
@@ -1904,12 +1884,6 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   background: var(--gold-soft);
   color: var(--gold-bright);
 }
-.history-actions button:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-  border-color: var(--line);
-  box-shadow: none;
-}
 .history-actions span { margin-right: 6px; color: var(--gold-bright); }
 .modal { width: min(620px, calc(100% - 28px)); border: 1px solid var(--line); border-radius: 14px; padding: 0; color: var(--ink); background: var(--surface); box-shadow: var(--shadow); overscroll-behavior: contain; }
 .modal::backdrop { background: var(--backdrop); }
@@ -1919,7 +1893,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .modal input { margin-top: 10px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
 .modal-actions button:not(.primary-action) { border: 1px solid var(--line); background: var(--surface-soft); border-radius: 8px; padding: 10px 15px; cursor: pointer; transition: background-color 0.2s ease, border-color 0.2s ease; }
-.modal-actions button:not(.primary-action):hover { border-color: var(--gold); background: var(--gold-soft); }
+.modal-actions button:not(.primary-action):hover:not(:disabled) { border-color: var(--gold); background: var(--gold-soft); }
 .model-config-modal { width: min(610px, calc(100% - 28px)); }
 .feedback-rewrite-modal { width: min(620px, calc(100% - 28px)); }
 .feedback-rewrite-modal textarea { min-height: 100px; max-height: 360px; margin-top: 10px; resize: none; overflow-y: hidden; line-height: 1.65; }
@@ -1942,14 +1916,14 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .model-combobox input { width: 100%; }
 .model-combobox-menu { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; right: 0; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 24px rgba(0,0,0,0.24); }
 .model-combobox-option { display: block; width: 100%; text-align: left; padding: 7px 9px; font-size: 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; }
-.model-combobox-option:hover, .model-combobox-option:focus-visible { background: var(--surface-soft); }
+.model-combobox-option:hover:not(:disabled), .model-combobox-option:focus-visible:not(:disabled) { background: var(--surface-soft); }
 .model-combobox-option[aria-selected="true"] { background: var(--gold-soft); color: var(--gold); }
 .model-combobox-empty { padding: 8px 9px; color: var(--faint); font-size: 11px; }
 .model-catalog-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; }
 .model-catalog-status { flex: 1; color: var(--muted); font-size: 11px; }
 .model-catalog-status[data-status="error"], .model-catalog-status[data-status="empty"] { color: var(--negative-text); }
 .model-refresh-btn { padding: 8px 12px; font-size: 12px; border: 1px solid var(--gold); border-radius: 6px; background: var(--gold-soft); color: var(--gold-bright); cursor: pointer; margin-left: auto; }
-.model-refresh-btn:hover { border-color: var(--gold); color: var(--gold); }
+.model-refresh-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
 .codex-custom-select-search { width: calc(100% - 8px); margin: 4px; padding: 5px 7px; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
 .codex-custom-select-search:focus { outline: none; border-color: var(--gold); }
 #modelPresetNote { margin-top: 14px; }
@@ -1987,7 +1961,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .save-card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
 .save-card-actions button, .save-card-confirm-actions button { padding: 8px 11px; }
 .save-card-actions .danger-button, .danger-action { border: 1px solid var(--negative-border); border-radius: 8px; background: transparent; color: var(--negative-text); cursor: pointer; transition: background-color 0.2s ease, border-color 0.2s ease; }
-.save-card-actions .danger-button:hover, .danger-action:hover { border-color: var(--negative-border-strong); background: var(--negative-bg); }
+.save-card-actions .danger-button:hover:not(:disabled), .danger-action:hover:not(:disabled) { border-color: var(--negative-border-strong); background: var(--negative-bg); }
 .save-manager-modal .soft-button {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1998,7 +1972,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
-.save-manager-modal .soft-button:hover {
+.save-manager-modal .soft-button:hover:not(:disabled) {
   border-color: var(--gold);
   color: var(--gold-bright);
   background: var(--gold-soft);
@@ -2049,16 +2023,12 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   cursor: pointer;
 }
 
-.inspiration-tags button:hover {
+.inspiration-tags button:hover:not(:disabled) {
   color: var(--ink);
   border-color: var(--gold);
 }
 .init-modal-header h2 { margin-top: 0; }
 .welcome-card #continueInitBtn { margin-top: 18px; }
-.init-fieldset[disabled] {
-  opacity: 0.5;
-  pointer-events: none;
-}
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2157,7 +2127,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
-.text-button:hover {
+.text-button:hover:not(:disabled) {
   border-color: var(--gold);
   color: var(--gold-bright);
   background: var(--gold-soft);
@@ -2191,7 +2161,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   display: flex; align-items: center; justify-content: center;
   transition: color 0.15s ease, background 0.15s ease;
 }
-.ability-remove-btn:hover { color: var(--negative); background: var(--negative-soft); }
+.ability-remove-btn:hover:not(:disabled) { color: var(--negative); background: var(--negative-soft); }
 
 .extra-memory-list {
   display: flex;
@@ -2220,7 +2190,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   place-content: center;
   transition: all 0.2s ease;
 }
-.extra-memory-item button:hover {
+.extra-memory-item button:hover:not(:disabled) {
   border-color: var(--negative-border);
   background: var(--negative-bg);
   color: var(--negative-text);
@@ -2600,7 +2570,7 @@ body.is-resizing-drawer .drawer {
   font-size: 12px;
   transition: all 0.2s var(--ease-smooth);
 }
-.codex-participant-chip:hover {
+.codex-participant-chip:hover:not(:disabled) {
   border-color: var(--gold);
   background: var(--gold-soft);
   color: var(--gold-bright);
@@ -2657,7 +2627,7 @@ body.is-resizing-drawer .drawer {
   padding: 8px 10px;
   box-shadow: var(--shadow-soft);
 }
-.records-rail-hero-btn:hover {
+.records-rail-hero-btn:hover:not(:disabled) {
   background: var(--gold-glow);
   border-color: var(--gold);
   color: var(--gold-bright);
@@ -2675,7 +2645,7 @@ body.is-resizing-drawer .drawer {
   transition: transform 0.2s ease, opacity 0.2s ease;
   margin-left: auto;
 }
-.records-rail-hero-btn:hover .hero-arrow {
+.records-rail-hero-btn:hover:not(:disabled) .hero-arrow {
   transform: translateX(2px);
   opacity: 1;
 }
@@ -2693,12 +2663,12 @@ body.is-resizing-drawer .drawer {
   color: var(--muted);
   transition: color 0.15s ease;
 }
-.records-rail-tab:hover {
+.records-rail-tab:hover:not(:disabled) {
   border-color: var(--line);
   color: var(--ink);
   background: var(--surface-soft);
 }
-.records-rail-tab:hover .rail-icon {
+.records-rail-tab:hover:not(:disabled) .rail-icon {
   color: var(--gold);
 }
 .records-rail-tab.is-active {
@@ -2853,7 +2823,7 @@ body.is-resizing-drawer .drawer {
   background: transparent;
   cursor: pointer;
 }
-.records-view-toggle button:hover:not(.is-active) {
+.records-view-toggle button:hover:not(:disabled):not(.is-active) {
   color: var(--ink);
 }
 .records-view-toggle button.is-active {
@@ -2946,7 +2916,7 @@ body.is-resizing-drawer .drawer {
   cursor: pointer;
   transition: border-color .2s var(--ease-smooth), background-color .2s var(--ease-smooth);
 }
-.record-edit-button:hover { border-color: var(--gold); background: var(--gold-glow); }
+.record-edit-button:hover:not(:disabled) { border-color: var(--gold); background: var(--gold-glow); }
 .record-edit-button[hidden] { display: none; }
 .record-view,
 .record-collapsible-body { display: grid; gap: 10px; }
@@ -2983,7 +2953,7 @@ body.is-resizing-drawer .drawer {
   opacity: 0.9;
   transition: opacity 0.15s ease, color 0.15s ease;
 }
-.codex-quote-sublabel .codex-turn-jump-btn:hover {
+.codex-quote-sublabel .codex-turn-jump-btn:hover:not(:disabled) {
   opacity: 1;
   color: var(--gold);
 }
@@ -3103,8 +3073,8 @@ body.is-resizing-drawer .drawer {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   font-family: inherit;
 }
-.record-card input:focus,
-.record-card textarea:focus {
+.record-card input:focus:not(:disabled),
+.record-card textarea:focus:not(:disabled) {
   border-color: var(--gold);
   box-shadow: 0 0 0 2px var(--gold-soft);
 }
@@ -3151,7 +3121,7 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .core-memory-item-head { display: flex; align-items: center; gap: 8px; }
 .core-memory-item-head select { flex: 1; }
 .core-memory-item-head .remove-core-memory-btn { border: 1px solid var(--line); background: var(--surface-soft); color: var(--muted); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
-.core-memory-item-head .remove-core-memory-btn:hover { color: var(--danger); border-color: var(--danger); }
+.core-memory-item-head .remove-core-memory-btn:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
 .core-memory-item-source { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); opacity: .75; white-space: nowrap; }
 .core-memory-empty { color: var(--muted); padding: 14px 0; }
 .provider-picker { border: 0; border-bottom: 1px solid var(--line); padding: 0 0 18px; min-width: 0; }
@@ -3162,8 +3132,8 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .provider-selected > div { display: grid; gap: 4px; min-width: 0; }
 .provider-selected span { color: var(--muted); font-size: 11px; }
 .provider-selected strong { color: var(--gold-bright); font-size: 15px; overflow-wrap: anywhere; }
-#modelProviderChange { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 6px 12px; font-size: 12px; cursor: pointer; }
-#modelProviderChange:hover { border-color: var(--gold); }
+#modelProviderChange { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); padding: 6px 12px; font-size: 12px; }
+#modelProviderChange:hover:not(:disabled) { border-color: var(--gold); }
 #modelProviderPanel { display: grid; gap: 8px; }
 #modelProviderPanel[hidden] { display: none; }
 #modelProviderPanel > label { font-size: 12px; color: var(--muted); }
@@ -3174,14 +3144,13 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .provider-result { appearance: none; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--ink); font-size: 13px; line-height: 1.4; letter-spacing: 0; overflow-wrap: anywhere; cursor: pointer; }
 .provider-result:hover:not(:disabled) { background: var(--gold-soft); border-color: var(--gold); }
 .provider-result[aria-pressed="true"] { background: var(--gold-soft); border-color: var(--gold); color: var(--gold-bright); }
-#modelProviderExpand { appearance: none; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; line-height: 1.4; cursor: pointer; }
+#modelProviderExpand { appearance: none; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; line-height: 1.4; }
 #modelProviderExpand::after { content: ""; width: 6px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-2px) rotate(45deg); }
 #modelProviderExpand[aria-expanded="true"]::after { transform: translateY(2px) rotate(225deg); }
 #modelProviderExpand:hover:not(:disabled) { background: var(--gold-soft); border-color: var(--gold); color: var(--gold-bright); }
-.provider-result:focus-visible, #modelCustomBtn:focus-visible, #modelProviderExpand:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
-#modelCustomBtn { appearance: none; justify-self: start; border: 0; border-radius: 6px; padding: 6px 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.provider-result:focus-visible:not(:disabled), #modelCustomBtn:focus-visible:not(:disabled), #modelProviderExpand:focus-visible:not(:disabled) { outline: 2px solid var(--gold); outline-offset: -2px; }
+#modelCustomBtn { appearance: none; justify-self: start; border: 0; border-radius: 6px; padding: 6px 0; background: transparent; color: var(--muted); font-size: 12px; }
 #modelCustomBtn:hover:not(:disabled) { color: var(--gold-bright); }
-.provider-result:disabled, #modelCustomBtn:disabled, #modelProviderExpand:disabled { opacity: 0.5; cursor: default; }
 .model-config-modal { max-height: calc(100dvh - 32px); }
 .model-config-modal .modal-actions { flex-wrap: wrap; }
 .model-config-fields > *, .model-endpoint-fields > * { min-width: 0; }
@@ -3196,3 +3165,19 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .runtime-notices summary { cursor: pointer; }
 .runtime-notices li { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: .6rem; }
 .error-card p { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Keep disabled feedback above component emphasis, including fieldset descendants. */
+:root :is(button, input, textarea, select):disabled {
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: none;
+}
+:root button:disabled {
+  opacity: 0.55;
+}
+:root :is(input:not([type="checkbox"]):not([type="radio"]), textarea, select):disabled {
+  opacity: 0.7;
+}
+.model-thinking-toggle:has(input:disabled) {
+  cursor: not-allowed;
+}

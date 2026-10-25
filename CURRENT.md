@@ -1754,6 +1754,16 @@ DOM bindings, form stages, drafts, submission, and operation subscriptions; it
 reuses the existing draft and campaign-setup helpers. Application coordination
 uses explicit callbacks rather than importing the entry module.
 
+Disabled controls share visual feedback in `styles.css`: buttons use 0.55
+opacity, text inputs/selects use 0.7, and disabled controls drop action shadows
+and use a not-allowed cursor. Hidden checkbox switches dim their visible track
+instead of revealing the input. These rules also match descendants disabled by
+a fieldset; initialization no longer dims the entire fieldset a second time.
+Button hover/press and form focus emphasis apply only to enabled controls.
+The rewrite menu stays closed while its trigger is disabled. Existing native
+disabled states, custom-select synchronization, and action admission still own
+whether an operation can execute.
+
 Initialization serializes setup generation, regeneration, opening submission,
 recovery subscriptions, and closing draft saves with one local operation marker.
 Conflicting actions and fields stay locked through result-draft saving and stream
