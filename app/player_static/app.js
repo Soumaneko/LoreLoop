@@ -469,11 +469,9 @@ function renderTurn(turn, { showClosing = false } = {}) {
   const wrap = node("section", "turn");
   wrap.dataset.turnIndex = String(turn.turn_index);
   const defaultActionText = Number(turn.turn_index) === 0 ? "故事从这里开始" : "继续故事";
-  wrap.appendChild(node("div", "player-action", turn.user_input || defaultActionText));
+  wrap.appendChild(buildPlayerAction(turn.user_input || defaultActionText, turn.turn_index));
   const card = node("article", "narrative-card");
-  const kicker = node("div", "narrative-kicker");
-  kicker.append(node("span", "quill", "✦"), node("span", "", `第 ${turn.turn_index} 回合`));
-  card.append(kicker, appendHighlightedText(node("div", "scene-text"), turn.scene_text));
+  card.appendChild(appendHighlightedText(node("div", "scene-text"), turn.scene_text));
   const resolution = renderPlayerResolution(turn.player_resolution);
   if (resolution) card.appendChild(resolution);
   if (showClosing && turn.closing_prompt) {
@@ -742,9 +740,9 @@ function visibleNavigationAnchors() {
     }),
   );
   if (!els.streamingCard.hidden) {
-    anchors.push({ key: "streaming", element: els.streamingCard });
+    anchors.push({ key: "streaming", element: els.activePlayerAction.hidden ? els.streamingCard : els.activePlayerAction });
   } else if (!els.pendingCard.hidden) {
-    anchors.push({ key: "pending", element: els.pendingCard });
+    anchors.push({ key: "pending", element: els.activePlayerAction.hidden ? els.pendingCard : els.activePlayerAction });
   }
   return anchors;
 }
@@ -906,7 +904,7 @@ async function jumpToHistoryTurn(turnIndex) {
 function jumpToCurrentTurn(key) {
   ++navigationJumpSequence;
   const target = key === "streaming" ? els.streamingCard : els.pendingCard;
-  if (!target.hidden) scrollToNavigationTarget(target, key);
+  if (!target.hidden) scrollToNavigationTarget(els.activePlayerAction.hidden ? target : els.activePlayerAction, key);
 }
 
 function jumpToLatestTurn() {
@@ -925,8 +923,17 @@ function jumpToLatestTurn() {
   if (latest) scrollToNavigationTarget(latest, `turn:${latest.dataset.turnIndex}`);
 }
 
-function showActivePlayerAction(text) {
-  els.activePlayerAction.textContent = text || "";
+function buildPlayerAction(text, turnIndex) {
+  const group = node("div", "turn-action");
+  const label = turnIndex === 0 ? "开场"
+    : Number.isInteger(turnIndex) && turnIndex > 0 ? `第 ${turnIndex} 回合` : "正在生成";
+  group.append(node("div", "turn-label", label), node("div", "player-action", text));
+  return group;
+}
+
+function showActivePlayerAction(text, turnIndex = activeGenerationRun?.turnIndex ?? selectedVariant()?.turn_index) {
+  els.activePlayerAction.replaceChildren();
+  if (text) els.activePlayerAction.appendChild(buildPlayerAction(text, turnIndex));
   els.activePlayerAction.hidden = !text;
 }
 
@@ -1101,7 +1108,7 @@ function renderPending() {
   els.pendingCard.hidden = false;
 
   const defaultPendingText = pending.kind === "opening" ? "故事从这里开始" : "";
-  showActivePlayerAction(pending.user_input || defaultPendingText);
+  showActivePlayerAction(pending.user_input || defaultPendingText, variant.turn_index);
   const toolbar = node("div", "pending-toolbar");
   const kicker = node("div", "narrative-kicker");
   kicker.append(node("span", "quill", "✦"), node("span", "", pending.kind === "opening" ? "开场 · 待确认" : "新场景 · 待确认"));
@@ -2262,8 +2269,8 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     ? activePending()?.variants?.findIndex((variant) => variant.turn_id === pendingEditor.turnId) : -1;
   state.selectedPendingIndex = editingIndex >= 0 ? editingIndex
     : Math.max(0, (activePending()?.variants?.length || 1) - 1);
-  if (activeGenerationRun && activeGenerationRun.turnIndex === null) {
-    activeGenerationRun.turnIndex = nextGeneratedTurnIndex();
+  if (activeGenerationRun && (previousSaveId !== state.activeSave || activeGenerationRun.turnIndex === null)) {
+    activeGenerationRun.turnIndex = selectedVariant()?.turn_index ?? nextGeneratedTurnIndex();
     persistGenerationRun();
   }
   // The write result is installed; target-save recovery may now start its own operation.
@@ -2327,6 +2334,9 @@ async function bootstrap() {
   initAutoExpandingTextareas();
   modelSettings.bind();
   coreMemoryEditor.bind();
+  new ResizeObserver(([entry]) => {
+    document.documentElement.style.setProperty("--composer-height", `${entry.target.getBoundingClientRect().height}px`);
+  }).observe(els.playerInput.closest(".composer-shell"));
   applyUiMode();
   restoreRecordsTabPreference();
   await readerPreferences.load();
@@ -2352,7 +2362,7 @@ function prepareGenerationRun(operationType, userInput, operationId = null, opti
     operationId,
     operationType,
     userInput: userInput || "",
-    turnIndex: options.turnIndex ?? nextGeneratedTurnIndex(),
+    turnIndex: options.turnIndex ?? selectedVariant()?.turn_index ?? nextGeneratedTurnIndex(),
     cancellationRequested: Boolean(options.cancellationRequested),
     cancelled: false,
     inFlight: true,
@@ -2432,6 +2442,11 @@ function startStreaming(label = "正在书写剧情正文") {
   els.streamingText.replaceChildren();
   els.streamingLabel.textContent = label;
   els.streamingCard.hidden = false;
+  if (activeGenerationRun) {
+    const action = activeGenerationRun.userInput || activePending()?.user_input
+      || (selectedVariant()?.turn_index === 0 ? "故事从这里开始" : "");
+    showActivePlayerAction(action);
+  }
   els.stopGenerationBtn.hidden = false;
   els.stopGenerationBtn.disabled = !activeGenerationRun?.operationId
     || activeGenerationRun.cancellationRequested;

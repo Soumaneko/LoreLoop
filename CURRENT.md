@@ -1754,6 +1754,22 @@ DOM bindings, form stages, drafts, submission, and operation subscriptions; it
 reuses the existing draft and campaign-setup helpers. Application coordination
 uses explicit callbacks rather than importing the entry module.
 
+The reading column is capped at 790px, leaving roughly 720px for scene prose
+on a wide desktop. Confirmed turns use open prose with a fine separator;
+pending and streaming scenes retain a light container and visible status.
+Each turn starts with a right-aligned action bubble and its adjacent turn
+number (or opening label). History and the active action share the same
+rendering helper. Active navigation lands at the action group, and generation
+and recovery reuse the selected turn/run identity rather than numbering each
+candidate as a new turn. Unknown identities show a generation label.
+
+The default narrative size is 18px across the initial UI and reader-preferences
+store. Existing valid preferences, including 16.5px, remain unchanged.
+Prose highlights use inline underlines while preserving profile access,
+keyboard focus, and text selection. The fixed composer's gradient follows the
+theme background; its measured height supplies reading bottom padding and
+navigation clearance as the input expands.
+
 Disabled controls share visual feedback in `styles.css`: buttons use 0.55
 opacity, text inputs/selects use 0.7, and disabled controls drop action shadows
 and use a not-allowed cursor. Hidden checkbox switches dim their visible track

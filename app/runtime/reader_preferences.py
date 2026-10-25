@@ -19,7 +19,7 @@ _PREFERENCES_WRITE_LOCK = threading.RLock()
 
 @dataclass(frozen=True)
 class ReaderPreferences:
-    font_size: str = "16.5"
+    font_size: str = "18"
     font_family: str = "serif"
     theme: str = "dark"
     show_token_usage: bool = False
@@ -71,7 +71,7 @@ class ReaderPreferencesStore:
 
 def normalize_font_size(value: Any) -> str:
     candidate = str(value or "").strip()
-    return candidate if candidate in FONT_SIZES else "16.5"
+    return candidate if candidate in FONT_SIZES else "18"
 
 
 def normalize_font_family(value: Any) -> str:

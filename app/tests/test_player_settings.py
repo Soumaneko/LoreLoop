@@ -96,21 +96,22 @@ def test_public_setting_updates_do_not_lose_each_other(campaign_runtime, monkeyp
 
 def test_reader_preferences_are_application_global_and_normalized(tmp_path):
     store = ReaderPreferencesStore(tmp_path / ".app" / "reader_preferences.json")
+    assert load_reader_preferences(store=store)["font_size"] == "18"
     assert save_reader_preferences({
-        "font_size": "18",
+        "font_size": "16.5",
         "font_family": "kaiti",
         "theme": "sepia",
         "show_token_usage": True,
         "one_click_confirm": True,
     }, store=store) == {
-        "font_size": "18",
+        "font_size": "16.5",
         "font_family": "kaiti",
         "theme": "sepia",
         "show_token_usage": True,
         "one_click_confirm": True,
     }
     assert load_reader_preferences(store=store) == {
-        "font_size": "18",
+        "font_size": "16.5",
         "font_family": "kaiti",
         "theme": "sepia",
         "show_token_usage": True,
@@ -125,7 +126,7 @@ def test_reader_preferences_are_application_global_and_normalized(tmp_path):
         "font_family": "bad",
         "theme": "none",
     }, store=store) == {
-        "font_size": "16.5",
+        "font_size": "18",
         "font_family": "serif",
         "theme": "dark",
         "show_token_usage": False,

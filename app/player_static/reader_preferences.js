@@ -8,7 +8,7 @@ const THEME_COLORS = {
 };
 
 const DEFAULTS = {
-  font_size: "16.5",
+  font_size: "18",
   font_family: "serif",
   theme: "dark",
   show_token_usage: false,

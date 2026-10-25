@@ -1,6 +1,8 @@
 :root {
   color-scheme: dark;
   --rail-w: 130px;
+  --reading-width: 790px;
+  --composer-scrim: linear-gradient(to top, var(--bg), transparent);
   --drawer-left-w: 500px;
   --drawer-right-w: 440px;
   --bg: #11110e;
@@ -26,8 +28,6 @@
   --accent-border: #c9a967;
   --accent-shadow: 0 8px 22px rgba(129, 96, 37, 0.26);
   --accent-shadow-hover: 0 10px 28px rgba(129, 96, 37, 0.35);
-  --composer-scrim: linear-gradient(180deg, rgba(17, 17, 14, 0) 0%, rgba(17, 17, 14, 0.72) 32%, var(--bg) 68%, var(--bg) 100%);
-  --composer-scrim-focus: linear-gradient(180deg, rgba(17, 17, 14, 0) 0%, rgba(17, 17, 14, 0.8) 25%, var(--bg) 55%, var(--bg) 100%);
   --player-action-bg: linear-gradient(145deg, rgba(48, 40, 27, 0.82), rgba(34, 28, 19, 0.92));
   --player-action-color: #f3ebd9;
   --positive-text: #b5dfaf;
@@ -177,8 +177,6 @@ html[data-theme="light"] {
   --accent-border: #1a365d;
   --accent-shadow: 0 4px 14px rgba(43, 108, 176, 0.28);
   --accent-shadow-hover: 0 8px 22px rgba(43, 108, 176, 0.34);
-  --composer-scrim: linear-gradient(180deg, rgba(220, 224, 230, 0) 0%, rgba(220, 224, 230, 0.72) 32%, var(--bg) 68%, var(--bg) 100%);
-  --composer-scrim-focus: linear-gradient(180deg, rgba(220, 224, 230, 0) 0%, rgba(220, 224, 230, 0.8) 25%, var(--bg) 55%, var(--bg) 100%);
   --player-action-bg: linear-gradient(145deg, rgba(218, 223, 231, 0.96), rgba(206, 212, 222, 0.98));
   --player-action-color: #1a202c;
   --positive-text: #2f6b3a;
@@ -350,7 +348,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .codex-button span, .codex-icon { width: auto; height: auto; background: transparent; display: inline-block; transform: translateY(-0.5px); }
 
 .story-layout { flex: 1; width: 100%; box-sizing: border-box; padding-left: var(--rail-w, 86px); padding-right: var(--rail-w, 86px); }
-.story { width: min(1040px, calc(100% - 48px)); margin: 0 auto; padding: 42px 0 178px; }
+.story { width: min(var(--reading-width), calc(100% - 48px)); margin: 0 auto; padding: 40px 0 calc(var(--composer-height, 160px) + 32px); }
 .welcome-card { padding: 70px 40px 92px; text-align: center; animation: rise .7s var(--ease-out-expo) both; }
 .welcome-card[hidden] { display: none; }
 .sigil { width: 58px; height: 58px; margin: 0 auto 28px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--gold-bright); transform: rotate(45deg); font-size: 18px; box-shadow: 0 0 24px var(--gold-soft); }
@@ -359,43 +357,35 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .welcome-card h1 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: clamp(31px, 5vw, 47px); letter-spacing: .08em; }
 .welcome-card > p:last-child { max-width: 510px; margin: 24px auto 0; color: var(--muted); font-family: var(--serif); line-height: 2; }
 
-/* Epic Turn Cards & Timeline Section */
-.turn { position: relative; margin: 0 0 68px; scroll-margin-top: 78px; }
-.turn::before {
-  content: "";
-  display: block;
-  width: 100%;
-  height: 1px;
-  margin-bottom: 34px;
-  background: linear-gradient(90deg, transparent, var(--line) 25%, var(--line) 75%, transparent);
-}
+/* A right-aligned action is the repeated anchor for each reading turn. */
+.turn { position: relative; margin: 0 0 64px; scroll-margin-top: 78px; }
+.turn-action { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin: 0 0 28px; }
+.turn-label { color: var(--muted); font-family: var(--sans); font-size: 12px; line-height: 1.5; }
 .player-action {
-  position: relative;
-  margin: 0 0 34px auto;
   width: fit-content;
-  max-width: min(76%, 740px);
-  padding: 18px 24px;
+  max-width: 86%;
+  padding: 12px 16px;
   color: var(--player-action-color);
   background: var(--player-action-bg);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 12px 12px 4px 12px;
-  line-height: 1.78;
-}
-.player-action::before {
-  content: "✦ ";
-  color: var(--gold);
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .narrative-card {
   position: relative;
-  padding: 38px 44px 44px;
+  padding: 28px 34px 30px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--surface-gradient);
+  background: var(--surface-soft);
   transition: transform .25s var(--ease-smooth), border-color .25s var(--ease-smooth);
 }
-.narrative-kicker { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; color: var(--gold); font-size: 10px; font-weight: 700; letter-spacing: .24em; text-transform: uppercase; }
+.turn > .narrative-card { padding: 0 34px 36px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; }
+.narrative-kicker { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; color: var(--gold); font-size: 12px; font-weight: 500; letter-spacing: .04em; }
 .quill { color: var(--gold-bright); font-size: 12px; }
-.scene-text { color: var(--ink); font-family: var(--serif); font-size: var(--narrative-font-size, 16.5px); line-height: calc(var(--narrative-font-size, 16.5px) * 1.95); white-space: pre-wrap; }
+.scene-text { color: var(--ink); font-family: var(--serif); font-size: var(--narrative-font-size, 18px); line-height: calc(var(--narrative-font-size, 18px) * 1.95); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* NPC highlight badges */
 .story-highlight {
@@ -429,6 +419,27 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .story-highlight-clickable:focus-visible {
   outline: 2px solid var(--gold-bright);
   outline-offset: 2px;
+}
+
+.scene-text .story-highlight {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: none;
+  font-weight: inherit;
+  line-height: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 4px;
+}
+.scene-text .story-highlight-clickable:hover,
+.scene-text .story-highlight-clickable:focus-visible {
+  color: var(--gold-bright);
+  text-decoration-color: var(--gold);
+  filter: none;
 }
 
 .resolution-panel {
@@ -626,7 +637,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .time-travel-button { width: 28px; height: 28px; border: 0; font-size: 13px; color: var(--gold-bright); line-height: 1; }
 .time-travel-button span { display: inline-block; width: auto; height: auto; background: transparent; transform: translateY(-0.5px); }
 
-.pending-card { border-color: var(--gold); }
+.pending-card { border-color: var(--line-strong); }
 .pending-toolbar { margin-bottom: 26px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .version-control { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .version-control button { height: 32px; border: 1px solid var(--line); background: var(--surface-soft); color: var(--ink); border-radius: 8px; padding: 0 11px; cursor: pointer; transition: color .2s var(--ease-smooth), background-color .2s var(--ease-smooth), border-color .2s var(--ease-smooth); }
@@ -800,8 +811,8 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .turn-navigator {
   position: fixed;
   top: 78px;
-  right: max(16px, calc((100vw - 1040px) / 2 - 150px));
-  bottom: 150px;
+  right: max(16px, calc((100vw - var(--reading-width)) / 2 - 150px));
+  bottom: calc(var(--composer-height, 160px) + 16px);
   z-index: 12;
   width: 136px;
   display: grid;
@@ -952,21 +963,22 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .turn-navigator-latest:hover,
 .turn-navigator-latest:focus-visible { color: var(--gold-bright); }
 #pendingCard,
-#streamingCard { scroll-margin-top: 78px; }
+#streamingCard,
+#activePlayerAction { scroll-margin-top: 78px; }
 
 /* Composer Command Deck */
 .composer-shell {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
-  padding: 48px 20px 16px;
+  padding: 24px 20px 16px;
   background: var(--composer-scrim);
   border-top: 0;
   pointer-events: none;
   transition: padding .18s var(--ease-smooth);
 }
 .composer-shell:focus-within {
-  padding-top: 58px;
+  padding-top: 32px;
   padding-bottom: 20px;
-  background: var(--composer-scrim-focus);
+  background: var(--composer-scrim);
 }
 .composer {
   width: min(1040px, 100%);
@@ -1271,7 +1283,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .turn-token-footer {
   margin-top: 20px;
   font-family: var(--serif);
-  font-size: calc(var(--narrative-font-size, 16.5px) * 0.7);
+  font-size: calc(var(--narrative-font-size, 18px) * 0.7);
   color: var(--muted);
   line-height: 1.4;
   opacity: 0.75;
@@ -2307,10 +2319,12 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   }
   .world-meta { display: none; }
   .top-actions { gap: 10px; }
-  .story { width: auto; margin-right: 48px; margin-left: 16px; padding-top: 24px; }
+  .story-layout { padding-right: 38px; }
+  .story { width: auto; margin: 0; padding-top: 24px; }
   .welcome-card { padding: 42px 20px 60px; }
-  .narrative-card { padding: 26px 22px 30px; }
-  .player-action { width: fit-content; max-width: min(88%, 740px); padding: 15px 18px; }
+  .narrative-card { padding: 24px 16px; }
+  .turn > .narrative-card { padding: 0 16px 30px; }
+  .player-action { max-width: 92%; }
   .suggestion-list { grid-template-columns: 1fr; }
   .resolution-panel { grid-template-columns: 1fr; }
   .composer-shell { padding-left: 12px; padding-right: 12px; }
@@ -2330,10 +2344,6 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 
 @media (max-width: 480px) {
   .brand small { display: none; }
-}
-
-@media (max-width: 720px) {
-  .story-layout { padding-left: var(--rail-w); padding-right: var(--rail-w); }
 }
 
 @media (max-width: 1360px) {
