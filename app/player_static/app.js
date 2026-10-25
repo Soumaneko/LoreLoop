@@ -17,7 +17,7 @@ import {
   installClientDiagnostics,
   reportClientError,
 } from "./client_diagnostics.js";
-import { createTokenUsageController, pendingFooterMode, renderCardTokenFooter } from "./token_usage.js";
+import { createTokenUsageController, renderCardTokenFooter } from "./token_usage.js";
 import {
   activePending,
   applySavedDraft,
@@ -55,7 +55,7 @@ const els = {
   turnNavigatorLatest: $("turnNavigatorLatest"),
   errorCard: $("errorCard"), errorTitle: $("errorTitle"), errorMessage: $("errorMessage"), dismissErrorBtn: $("dismissErrorBtn"),
   playerInput: $("playerInput"), generateBtn: $("generateBtn"), inputHint: $("inputHint"),
-  composerModeBadge: $("composerModeBadge"),
+  composerModeBadge: $("composerModeBadge"), composerHelp: $("composerHelp"),
   drawer: $("drawer"), leftDrawer: $("leftDrawer"), drawerBackdrop: $("drawerBackdrop"), openDrawerBtn: $("openDrawerBtn"), closeDrawerBtn: $("closeDrawerBtn"),
   closeLeftDrawerBtn: $("closeLeftDrawerBtn"), codexMetaBar: $("codexMetaBar"),
   recordsDrawer: $("recordsDrawer"),
@@ -150,19 +150,6 @@ const readerPreferences = createReaderPreferencesController({
   onTokenUsageVisibilityChange: (visible) => {
     if (tokenUsage.isVisible() === visible) return;
     tokenUsage.setVisible(visible);
-
-    const pending = activePending();
-    if (!pending || pending.variants.length <= 1) return;
-
-    const oldFooter = els.pendingCard.querySelector(".turn-token-footer");
-    if (oldFooter) oldFooter.remove();
-
-    const variant = selectedVariant();
-    const footer = _buildPendingFooter(pending, variant);
-    if (footer) {
-      const actions = els.pendingCard.querySelector(".pending-actions");
-      els.pendingCard.insertBefore(footer, actions);
-    }
   },
 });
 installClientDiagnostics();
@@ -290,28 +277,16 @@ function renderControls({ updateNavigation = true } = {}) {
   els.statusPill.dataset.mode = state.mode;
   els.statusPill.querySelector("span").textContent = modeLabels[state.mode] || "等待行动";
 
-  if (pending?.kind === "opening" && !busy) {
-    if (els.composerModeBadge) els.composerModeBadge.hidden = true;
-    els.playerInput.disabled = true;
-    els.playerInput.placeholder = "请先确认或重新生成开场";
-    setInputHintText("等待确认开场");
-    const btnSpan = els.generateBtn.querySelector("span");
-    if (btnSpan) btnSpan.textContent = "执行行动";
-  } else if (pending && !busy) {
-    if (els.composerModeBadge) els.composerModeBadge.hidden = true;
-    els.playerInput.disabled = false;
-    els.playerInput.placeholder = "对这段正文有意见？在此输入修改要求（如“写到门前即可停下”）...";
-    setInputHintText("提交修改意见");
-    const btnSpan = els.generateBtn.querySelector("span");
-    if (btnSpan) btnSpan.textContent = "意见重写";
-  } else {
-    if (els.composerModeBadge) els.composerModeBadge.hidden = true;
-    els.playerInput.disabled = busy || state.playerState?.needs_init;
-    els.playerInput.placeholder = "你打算怎么做？";
-    setInputHintText("执行行动");
-    const btnSpan = els.generateBtn.querySelector("span");
-    if (btnSpan) btnSpan.textContent = "执行行动";
-  }
+  const opening = pending?.kind === "opening";
+  const feedback = pending && !opening;
+  els.composerModeBadge.textContent = opening ? "等待确认开场" : feedback ? "正文修改意见" : "下一步行动";
+  els.playerInput.disabled = busy || opening || state.playerState?.needs_init;
+  els.playerInput.placeholder = opening ? "请先确认或重新生成开场"
+    : feedback ? "输入你希望怎样修改这段正文……" : "你打算怎么做？";
+  els.composerHelp.textContent = opening ? "确认开场后即可开始行动"
+    : feedback ? "当前输入用于修改这段正文" : "描述你想采取的行动";
+  setInputHintText(opening ? "等待确认开场" : feedback ? "提交修改意见" : "执行行动");
+  els.generateBtn.querySelector("span").textContent = feedback ? "意见重写" : "执行行动";
 
   els.generateBtn.disabled = !canSubmitPlayerInput(context, els.playerInput.value);
   els.saveSelect.disabled = !canChange;
@@ -335,6 +310,7 @@ function renderControls({ updateNavigation = true } = {}) {
     els.themeSelect,
   ]);
   refreshPendingControls();
+  refreshSuggestionControls(context);
   initialization.refreshControls();
   if (updateNavigation) renderTurnNavigator();
 }
@@ -465,6 +441,8 @@ function handleHighlightKeydown(event) {
   openCodexProfile(profile, target);
 }
 
+const sceneResolutions = new WeakMap();
+
 function renderTurn(turn, { showClosing = false } = {}) {
   const wrap = node("section", "turn");
   wrap.dataset.turnIndex = String(turn.turn_index);
@@ -472,14 +450,11 @@ function renderTurn(turn, { showClosing = false } = {}) {
   wrap.appendChild(buildPlayerAction(turn.user_input || defaultActionText, turn.turn_index));
   const card = node("article", "narrative-card");
   card.appendChild(appendHighlightedText(node("div", "scene-text"), turn.scene_text));
-  const resolution = renderPlayerResolution(turn.player_resolution);
-  if (resolution) card.appendChild(resolution);
   if (showClosing && turn.closing_prompt) {
     card.appendChild(node("div", "closing-prompt", turn.closing_prompt));
   }
   const usageData = turn.token_usage || tokenUsage.turnUsageStore.get(String(turn.turn_index)) || tokenUsage.turnUsageStore.get(String(turn.turn_id));
-  const tokenFooter = renderCardTokenFooter(usageData, { visible: tokenUsage.isVisible(), detailButtons: tokenUsage.isVisible() });
-  if (tokenFooter) card.appendChild(tokenFooter);
+  card.appendChild(buildSceneInformation(turn.player_resolution, usageData));
   wrap.appendChild(card);
   return wrap;
 }
@@ -492,30 +467,51 @@ const outcomeLabels = {
   critical_success: "大成功",
 };
 
+function buildSceneInformation(resolution, usageData) {
+  const information = node("section", "scene-information");
+  information.setAttribute("aria-label", "回合信息");
+  sceneResolutions.set(information, resolution);
+  const panel = renderPlayerResolution(resolution);
+  if (panel) information.appendChild(panel);
+  const usage = renderCardTokenFooter(usageData, { visible: tokenUsage.isVisible(), detailButtons: true });
+  if (usage) information.appendChild(usage);
+  return information;
+}
+
+function refreshPlayerResolutions() {
+  const anchor = [...els.story.querySelectorAll(".scene-text, .scene-editor")].find((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.bottom > 64 && rect.top < window.innerHeight;
+  });
+  const top = anchor?.getBoundingClientRect().top;
+  for (const information of els.story.querySelectorAll(".scene-information")) {
+    const previous = information.querySelector(".resolution-panel");
+    const next = renderPlayerResolution(sceneResolutions.get(information));
+    if (previous) {
+      if (next) previous.replaceWith(next);
+      else previous.remove();
+    } else if (next) information.prepend(next);
+  }
+  if (anchor) window.scrollBy({ top: anchor.getBoundingClientRect().top - top, behavior: "instant" });
+}
+
 function renderPlayerResolution(resolution) {
   const mode = state.playerState?.dice_display || "outcome";
   const actions = (resolution?.actions || []).filter(hasVisibleRoll);
   if (mode === "hidden" || !actions.length) return null;
-  const panel = node("section", "resolution-panel");
+  const panel = node("div", "information-row resolution-panel");
+  const list = node("div", "resolution-list");
+  panel.append(node("div", "information-label", "行动判定"), list);
   actions.forEach((action) => {
     const row = node("div", `resolution-row resolution-${action.outcome_band || "success"}`);
     const heading = node("div", "resolution-heading");
-    heading.appendChild(node("span", "resolution-action", action.action_text || "本次行动"));
+    heading.append(
+      node("strong", "resolution-outcome resolution-seal-badge", outcomeLabels[action.outcome_band] || "已判定"),
+      node("span", "resolution-action", action.action_text || "本次行动"),
+    );
     row.appendChild(heading);
-
-    if (mode === "outcome") {
-      const outcomeSeal = node(
-        "strong",
-        "resolution-outcome resolution-outcome-line",
-        outcomeLabels[action.outcome_band] || "已判定",
-      );
-      outcomeSeal.classList.add("resolution-seal-badge");
-      row.appendChild(outcomeSeal);
-    }
-    if (mode === "full") {
-      row.appendChild(renderRollDetail(action));
-    }
-    panel.appendChild(row);
+    if (mode === "full") row.appendChild(renderRollDetail(action));
+    list.appendChild(row);
   });
   return panel;
 }
@@ -530,85 +526,40 @@ function renderRollDetail(action) {
   const values = action.raw_values || [];
   const keptValue = values.length ? Math.max(...values.map(Number)) : null;
   const modifier = Number(action.modifier_total || 0);
-  const finalValue = action.final_value == null ? "?" : action.final_value;
-  const sides = action.dice_sides == null ? "?" : action.dice_sides;
-  const outcome = outcomeLabels[action.outcome_band] || "已判定";
-  const resultTone = ["success", "critical_success"].includes(action.outcome_band)
-    ? "positive"
-    : ["failure", "critical_failure"].includes(action.outcome_band)
-      ? "negative"
-      : "partial";
-
+  const finalValue = action.final_value == null ? "未记录" : action.final_value;
+  const sides = action.dice_sides == null ? "未记录" : action.dice_sides;
   const detail = node("div", "resolution-detail");
-  const diceLine = node("div", "resolution-detail-line resolution-dice-line");
+  const diceRow = node("div", "resolution-detail-row");
+  const diceLabel = values.length === 1 ? "单骰判定" : values.length === 2 ? "双骰取高"
+    : values.length === 3 ? "三骰取高" : values.length ? `${values.length}骰取高` : "骰点";
+  const diceValues = node("div", "resolution-detail-values");
+  values.forEach((value) => {
+    const kept = Number(value) === keptValue;
+    const chip = node("span", `dice-chip${kept ? " dice-kept" : ""}`, String(value));
+    chip.setAttribute("aria-label", `${kept ? "采用骰点" : "原始骰点"} ${value}`);
+    diceValues.appendChild(chip);
+  });
+  diceValues.appendChild(node("span", "dice-adopted", keptValue == null ? "未记录" : `采用 ${keptValue}`));
+  diceRow.append(node("span", "resolution-detail-label", diceLabel), diceValues);
 
-  if (values.length) {
-    const _rawRollSummary = `[${values.join(", ")}] → ${keptValue}`;
-    const chips = node("span", "dice-chips");
-    values.forEach((v) => {
-      const num = Number(v);
-      const isKept = num === keptValue;
-      chips.appendChild(node("kbd", `dice-chip ${isKept ? "dice-kept" : ""}`, String(num)));
-    });
-    diceLine.append(
-      chips,
-      node("span", "dice-arrow", "➔"),
-      node("span", "dice-kept-label", "保留"),
-      node("strong", "dice-kept-value", String(keptValue)),
-    );
-  } else {
-    diceLine.textContent = "骰点未记录";
-  }
-  detail.appendChild(diceLine);
-
+  const modifierRow = node("div", "resolution-detail-row");
+  const modifierValues = node("div", "resolution-detail-values resolution-modifiers");
   const modifiers = action.modifiers || [];
-  const modifiersContainer = node("div", "resolution-modifiers-container");
-  
-  if (modifiers.length) {
-    modifiers.forEach((item) => {
-      const value = Number(item.value || 0);
-      const isPos = value > 0;
-      const valueText = isPos ? `+${value}` : String(value);
-      modifiersContainer.appendChild(node(
-        "div",
-        `resolution-modifier-reason resolution-modifier-pill resolution-modifier-${isPos ? "positive" : "negative"}`,
-        `${item.label} ${valueText}`,
-      ));
-    });
-  } else if (modifier === 0) {
-    modifiersContainer.appendChild(node(
-      "div",
-      "resolution-modifier-reason resolution-modifier-pill",
-      "无额外修正",
-    ));
-  } else {
-    modifiersContainer.appendChild(node(
-      "div",
-      "resolution-modifier-reason resolution-modifier-pill",
-      "修正明细未记录，请使用“重新判定”生成完整明细",
-    ));
-  }
-  detail.appendChild(modifiersContainer);
+  modifiers.forEach((item) => {
+    const value = Number(item.value || 0);
+    const tone = value > 0 ? "positive" : value < 0 ? "negative" : "neutral";
+    modifierValues.appendChild(node("span", `resolution-modifier resolution-modifier-${tone}`, `${item.label} ${value > 0 ? "+" : ""}${value}`));
+  });
+  if (!modifiers.length) modifierValues.textContent = modifier === 0 ? "无额外修正" : "本次记录未包含修正明细";
+  modifierRow.append(node("span", "resolution-detail-label", "修正"), modifierValues);
 
-  const _testFallbackSummary = `最终值 ${finalValue}/${sides}　${outcome}`;
-  const modText = modifier >= 0 ? `+${modifier}` : String(modifier);
-  const mathText = keptValue != null
-    ? `${keptValue} (${modText}) = 最终值 ${finalValue} / ${sides}`
-    : `最终值 ${finalValue} / ${sides}`;
-
-  const finalRow = node("div", `resolution-detail-line resolution-final-line resolution-final-${resultTone}`);
-  finalRow.appendChild(node("span", "resolution-math-text", mathText));
-
-  // 大成功/成功印章徽章，右下角同行展示
-  const seal = node(
-    "strong",
-    "resolution-outcome resolution-outcome-line",
-    outcome,
-  );
-  seal.classList.add("resolution-seal-badge");
-  finalRow.appendChild(seal);
-
-  detail.appendChild(finalRow);
+  const finalRow = node("div", "resolution-detail-row");
+  const calculation = node("div", "resolution-calculation");
+  const modText = modifier >= 0 ? `+ ${modifier}` : `− ${Math.abs(modifier)}`;
+  if (keptValue != null) calculation.appendChild(document.createTextNode(`${keptValue} ${modText} = `));
+  calculation.appendChild(node("strong", "resolution-final-value", `${finalValue} / ${sides}`));
+  finalRow.append(node("span", "resolution-detail-label", "最终值"), calculation);
+  detail.append(diceRow, modifierRow, finalRow);
   return detail;
 }
 
@@ -1015,8 +966,11 @@ async function loadEarlierHistory({
 function _buildVersionControl(pending) {
   const versions = node("div", "version-control");
   const previous = node("button", "", "‹");
-  const position = node("span", "", `${state.selectedPendingIndex + 1} / ${pending.variants.length}`);
+  const position = node("span", "", `版本 ${state.selectedPendingIndex + 1} / ${pending.variants.length}`);
   const next = node("button", "", "›");
+  previous.type = next.type = "button";
+  previous.setAttribute("aria-label", "上一个版本");
+  next.setAttribute("aria-label", "下一个版本");
   previous.dataset.pendingAction = "previous";
   next.dataset.pendingAction = "next";
   previous.onclick = () => selectVariant(state.selectedPendingIndex - 1);
@@ -1025,28 +979,6 @@ function _buildVersionControl(pending) {
   return versions;
 }
 
-function _buildPendingFooter(pending, variant) {
-  const usageData = variant.token_usage || tokenUsage.getVariantUsage(variant.turn_id) || tokenUsage.getCurrentPendingUsage();
-  const showVersions = pending.variants.length > 1;
-  const mode = pendingFooterMode({
-    showToken: tokenUsage.isVisible(),
-    showVersions,
-    usageData,
-  });
-  if (mode === "none") return null;
-  if (mode === "token") {
-    return renderCardTokenFooter(usageData, {
-      visible: true,
-      detailButtons: true,
-      appendToRow: showVersions ? _buildVersionControl(pending) : null,
-    });
-  }
-  const footer = node("div", "turn-token-footer turn-version-footer");
-  const row = node("div", "turn-token-row");
-  row.appendChild(_buildVersionControl(pending));
-  footer.appendChild(row);
-  return footer;
-}
 
 function refreshPendingControls() {
   const pending = activePending();
@@ -1072,6 +1004,10 @@ function refreshPendingControls() {
     } else {
       button.disabled = !allowed;
     }
+    if (action === "dropdownTrigger" && button.disabled) {
+      button.setAttribute("aria-expanded", "false");
+      button.nextElementSibling.hidden = true;
+    }
     if (action === "confirm") button.textContent = confirming ? "正在确认……" : "确认采用";
   }
   const existingProgress = els.pendingCard.querySelector("#confirmationProgress");
@@ -1082,8 +1018,8 @@ function refreshPendingControls() {
     const kicker = node("div", "narrative-kicker confirmation-status-kicker");
     kicker.append(node("span", "quill", "✦"), node("span", "confirmation-progress-label", "正在读取最终正文"));
     progress.appendChild(kicker);
-    const actions = els.pendingCard.querySelector(".pending-actions");
-    els.pendingCard.insertBefore(progress, actions);
+    const toolbar = els.pendingCard.querySelector(".scene-toolbar");
+    els.pendingCard.insertBefore(progress, toolbar);
   }
 }
 
@@ -1146,7 +1082,7 @@ function renderPending() {
   feedbackRewrite.title = "根据具体意见决定局部修订、重新构思或不重写";
   feedbackRewrite.onclick = openFeedbackRewrite;
 
-  reroll.title = "重新运行完整生成管线并重新投骰";
+  reroll.title = "重新生成本回合全部行动的判定与正文";
   reroll.onclick = () => retryTurn("reroll");
 
   rewriteOpening.title = "使用相同初始化设定生成一个新版本，原版本会保留";
@@ -1154,30 +1090,53 @@ function renderPending() {
 
   discard.onclick = discardPending;
 
-  actions.appendChild(confirm);
-  actions.appendChild(edit);
-  if (hasDraft(variant)) actions.appendChild(restoreOriginal);
+  const mainActions = node("div", "pending-main-actions");
+  mainActions.append(confirm, edit);
+  actions.appendChild(mainActions);
+  if (hasDraft(variant)) mainActions.appendChild(restoreOriginal);
 
   if (pending.kind === "opening") {
-    actions.appendChild(rewriteOpening);
+    mainActions.appendChild(rewriteOpening);
   } else {
     const dropdown = node("div", "rewrite-dropdown");
-    const dropdownTrigger = node("button", "soft-button rewrite-dropdown-trigger", "重写选项 ▾");
+    const dropdownTrigger = node("button", "soft-button rewrite-dropdown-trigger", "重写选项");
     dropdownTrigger.dataset.pendingAction = "dropdownTrigger";
     const dropdownMenu = node("div", "rewrite-dropdown-menu");
+    dropdownMenu.id = "pendingRewriteOptions";
+    dropdownMenu.hidden = true;
+    dropdownTrigger.setAttribute("aria-controls", dropdownMenu.id);
+    dropdownTrigger.setAttribute("aria-expanded", "false");
+    dropdownTrigger.onclick = () => {
+      if (dropdownTrigger.disabled) return;
+      dropdownMenu.hidden = !dropdownMenu.hidden;
+      dropdownTrigger.setAttribute("aria-expanded", String(!dropdownMenu.hidden));
+      if (!dropdownMenu.hidden) rephrase.focus();
+    };
+    dropdown.onkeydown = (event) => {
+      if (event.key !== "Escape" || dropdownMenu.hidden) return;
+      event.preventDefault();
+      dropdownMenu.hidden = true;
+      dropdownTrigger.setAttribute("aria-expanded", "false");
+      dropdownTrigger.focus();
+    };
+    dropdown.addEventListener("focusout", (event) => {
+      if (dropdown.contains(event.relatedTarget)) return;
+      dropdownMenu.hidden = true;
+      dropdownTrigger.setAttribute("aria-expanded", "false");
+    });
     dropdownMenu.append(rephrase, reroll);
     dropdown.append(dropdownTrigger, dropdownMenu);
-    actions.appendChild(dropdown);
+    mainActions.appendChild(dropdown);
     actions.appendChild(discard);
   }
   els.pendingCard.append(toolbar, display);
   if (closing) els.pendingCard.appendChild(closing);
-  const resolution = renderPlayerResolution(variant.player_resolution);
-  if (resolution) els.pendingCard.appendChild(resolution);
-  const pendingFooter = _buildPendingFooter(pending, variant);
-  if (pendingFooter) els.pendingCard.appendChild(pendingFooter);
-
-  els.pendingCard.appendChild(actions);
+  const usageData = variant.token_usage || tokenUsage.getVariantUsage(variant.turn_id) || tokenUsage.getCurrentPendingUsage();
+  els.pendingCard.appendChild(buildSceneInformation(variant.player_resolution, usageData));
+  const sceneToolbar = node("div", "scene-toolbar");
+  if (pending.variants.length > 1) sceneToolbar.appendChild(_buildVersionControl(pending));
+  sceneToolbar.appendChild(actions);
+  els.pendingCard.appendChild(sceneToolbar);
   refreshPendingControls();
 }
 
@@ -2033,28 +1992,43 @@ function setTextareaValueWithUndo(textarea, text) {
   autoExpandTextarea(textarea);
 }
 
+function canUseSuggestion(context, text) {
+  return !context.pending && canSubmitPlayerInput(context, text);
+}
+
+function refreshSuggestionControls(context = playerActionContext()) {
+  const replacing = els.playerInput.value.length > 0;
+  for (const button of els.suggestionList.querySelectorAll(".suggestion-pick")) {
+    button.disabled = !canUseSuggestion(context, button.dataset.suggestionInput);
+    button.textContent = replacing ? "替换输入" : "填入行动";
+    button.setAttribute("aria-label", `${button.textContent}：${button.dataset.suggestionInput}`);
+  }
+}
+
 function renderSuggestions() {
   els.suggestionList.replaceChildren();
   els.suggestions.hidden = state.suggestions.length === 0 || Boolean(activePending());
   state.suggestions.forEach((preview) => {
-    const button = node("button", "suggestion");
+    const item = node("article", "suggestion-item");
     const header = node("div", "suggestion-header");
-    header.append(node("span", "suggestion-level", preview.level || "建议"));
-    const results = node("div", "suggestion-results");
-    if (preview.good_result) {
-      results.appendChild(node("small", "suggestion-result suggestion-good", `✦ ${preview.good_result}`));
-    }
-    if (preview.risk) {
-      results.appendChild(node("small", "suggestion-result suggestion-risk", `⚠ ${preview.risk}`));
-    }
-    button.append(
-      header,
-      node("strong", "", preview.label),
-      results,
-    );
-    button.onclick = () => { setTextareaValueWithUndo(els.playerInput, preview.label); autoSizeInput(); renderControls(); };
-    els.suggestionList.appendChild(button);
+    const directionType = preview.level || "建议";
+    const pick = node("button", "suggestion-pick", "填入行动");
+    pick.type = "button";
+    pick.dataset.suggestionInput = preview.label;
+    pick.onclick = () => {
+      if (!canUseSuggestion(playerActionContext(), preview.label)) return;
+      setTextareaValueWithUndo(els.playerInput, preview.label);
+      autoSizeInput();
+      renderControls();
+    };
+    header.append(node("span", "suggestion-type", directionType), pick);
+    const results = node("dl", "suggestion-results");
+    if (preview.good_result) results.append(node("dt", "", "收益"), node("dd", "", preview.good_result));
+    if (preview.risk) results.append(node("dt", "suggestion-risk", "风险"), node("dd", "", preview.risk));
+    item.append(header, node("h3", "suggestion-title", preview.label), results);
+    els.suggestionList.appendChild(item);
   });
+  refreshSuggestionControls();
 }
 
 function renderAll() {
@@ -2521,32 +2495,21 @@ function handleGenerationEvent(event, { retryMode = null } = {}) {
     els.streamingLabel.textContent = "前情已检索 · 正在推演因果";
   }
   if (event.step === "rolls_done") {
-    const rolls = event.data?.roll_results;
-    if (Array.isArray(rolls) && rolls.length > 0) {
-      const firstRoll = rolls[0];
-      const dice = firstRoll.dice || "检定";
-      const val = firstRoll.value ?? firstRoll.raw_value;
-      const sides = firstRoll.dice_sides ? `/${firstRoll.dice_sides}` : "";
-      const valStr = val != null ? ` ➜ ${val}${sides}` : "";
-      els.streamingLabel.textContent = `检定已掷出：${dice}${valStr} · 正在结算`;
-    }
+    const rolls = event.data?.roll_results || [];
+    const mode = state.playerState?.dice_display || "outcome";
+    const values = mode === "full" ? rolls.map((roll) => {
+      const value = roll.value ?? roll.raw_value;
+      return value == null ? "未记录" : `${value}${roll.dice_sides ? `/${roll.dice_sides}` : ""}`;
+    }).join("、") : "";
+    els.streamingLabel.textContent = values ? `骰点 ${values} · 正在结算行动判定` : "正在结算行动判定";
   }
   if (event.step === "action_judgments_done") {
-    const firstJudgment = event.data?.action_judgments?.[0];
-    const band = firstJudgment?.outcome_band;
-    const bandMap = {
-      critical_success: "大成功",
-      success: "成功",
-      partial_success: "部分成功",
-      failure: "失败",
-      critical_failure: "大失败",
-    };
-    const bandText = bandMap[band] || band;
-    if (bandText) {
-      els.streamingLabel.textContent = `机制判定达成：${bandText} · 正在构思正文`;
-    } else {
-      els.streamingLabel.textContent = "机制判定达成 · 正在构思正文";
-    }
+    const judgments = event.data?.action_judgments || [];
+    const mode = state.playerState?.dice_display || "outcome";
+    const outcomes = mode !== "hidden" ? judgments.map((judgment) => outcomeLabels[judgment.outcome_band] || "已判定").join("、") : "";
+    els.streamingLabel.textContent = outcomes
+      ? `行动判定：${outcomes} · 正在构思正文`
+      : "行动判定完成 · 正在构思正文";
   }
   if (event.step === "feedback_rewrite_strategy_selected") {
     const strategy = event.data?.strategy;
@@ -4315,7 +4278,6 @@ els.story.addEventListener("mousemove", handleHighlightPointerMove);
 els.story.addEventListener("click", handleHighlightClick);
 els.story.addEventListener("keydown", handleHighlightKeydown);
 els.playerInput.addEventListener("focus", autoSizeInput);
-els.playerInput.addEventListener("blur", () => { els.playerInput.style.height = ""; });
 els.playerInput.addEventListener("keydown", (event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); generateTurn(); } });
 els.generateBtn.onclick = generateTurn;
 els.stopGenerationBtn.onclick = stopActiveGeneration;
@@ -4474,11 +4436,13 @@ els.diceDisplaySelect.onchange = async () => {
       body: JSON.stringify({ dice_display: els.diceDisplaySelect.value }),
     });
     state.playerState.dice_display = result.dice_display;
-    renderHistory();
-    renderPending();
+    els.diceDisplaySelect.value = result.dice_display;
+    syncCustomSelect(els.diceDisplaySelect);
+    refreshPlayerResolutions();
     showToast("判定显示方式已更新");
   } catch (error) {
     els.diceDisplaySelect.value = previous;
+    syncCustomSelect(els.diceDisplaySelect);
     showError(error);
   }
 };

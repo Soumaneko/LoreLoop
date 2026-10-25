@@ -32,21 +32,12 @@ const PIPELINE_LABELS = {
   confirmation: "确认管线",
 };
 
-export function pendingFooterMode({ showToken, showVersions, usageData }) {
-  if (!showToken && !showVersions) return "none";
-  if (showToken) {
-    if (usageData?.generation || usageData?.confirmation) return "token";
-    if (!showVersions) return "none";
-  }
-  return "versions";
-}
-
 function tokenCount(value) {
   return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 function formatted(value) {
-  return value === null ? "未提供" : value.toLocaleString("zh-CN");
+  return value == null ? "未提供" : value.toLocaleString("zh-CN");
 }
 
 function _formatInputWithCache(inputTokens, cachedTokens, cacheHitRate) {
@@ -60,19 +51,24 @@ function _formatInputWithCache(inputTokens, cachedTokens, cacheHitRate) {
     } else {
       rateStr = ` · 0%`;
     }
-    return `入 ${inpStr} (缓 ${formatted(cachedTokens)}${rateStr})`;
+    return `输入 ${inpStr} · 缓存命中 ${formatted(cachedTokens)}${rateStr}`;
   }
-  return `入 ${inpStr}`;
+  return `输入 ${inpStr}`;
 }
 
-export function renderCardTokenFooter(usageData, { visible = true, detailButtons = false, appendToRow = null } = {}) {
+export function renderCardTokenFooter(usageData, { visible = true, detailButtons = false } = {}) {
   const gen = usageData?.generation;
   const conf = usageData?.confirmation;
 
   if (!gen && !conf) return null;
 
   const footer = document.createElement("div");
-  footer.className = "turn-token-footer";
+  footer.className = "information-row turn-token-footer";
+  const label = document.createElement("div");
+  label.className = "information-label";
+  label.textContent = "用量";
+  const details = document.createElement("details");
+  footer.append(label, details);
   if (!visible) footer.hidden = true;
 
   const row = document.createElement("div");
@@ -80,108 +76,77 @@ export function renderCardTokenFooter(usageData, { visible = true, detailButtons
 
   let totalInput = 0;
   let totalOutput = 0;
-  let hasInput = false;
-  let hasOutput = false;
 
   if (gen) {
     const item = document.createElement("div");
     item.className = "turn-token-item";
     const tag = document.createElement("span");
     tag.className = "token-tag";
-    tag.textContent = "生成管线";
+    tag.textContent = "生成";
     const val = document.createElement("span");
     val.className = "token-val";
-    val.textContent = `${_formatInputWithCache(gen.input_tokens, gen.cached_tokens, gen.cache_hit_rate)} · 出 ${formatted(gen.output_tokens)}`;
+    val.textContent = `${_formatInputWithCache(gen.input_tokens, gen.cached_tokens, gen.cache_hit_rate)} · 输出 ${formatted(gen.output_tokens)}`;
     item.append(tag, val);
     row.appendChild(item);
 
-    if (gen.input_tokens != null) { totalInput += gen.input_tokens; hasInput = true; }
-    if (gen.output_tokens != null) { totalOutput += gen.output_tokens; hasOutput = true; }
+    if (gen.input_tokens != null) totalInput += gen.input_tokens;
+    if (gen.output_tokens != null) totalOutput += gen.output_tokens;
 
     if (detailButtons && (gen.calls?.length > 0)) {
       const genBtn = document.createElement("button");
       genBtn.className = "turn-token-detail-btn";
       genBtn.type = "button";
-      genBtn.textContent = "ⓘ";
+      genBtn.textContent = "生成明细";
       genBtn.title = "生成管线模块明细";
       genBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        genBtn.blur();
         _openPipelineDialog(usageData, "generation", genBtn);
       });
-      row.appendChild(genBtn);
+      item.appendChild(genBtn);
     }
   }
 
   if (conf) {
-    if (gen) {
-      const divider = document.createElement("span");
-      divider.className = "turn-token-divider";
-      divider.textContent = "│";
-      row.appendChild(divider);
-    }
     const item = document.createElement("div");
     item.className = "turn-token-item";
     const tag = document.createElement("span");
     tag.className = "token-tag";
-    tag.textContent = "确认管线";
+    tag.textContent = "确认";
     const val = document.createElement("span");
     val.className = "token-val";
-    val.textContent = `${_formatInputWithCache(conf.input_tokens, conf.cached_tokens, conf.cache_hit_rate)} · 出 ${formatted(conf.output_tokens)}`;
+    val.textContent = `${_formatInputWithCache(conf.input_tokens, conf.cached_tokens, conf.cache_hit_rate)} · 输出 ${formatted(conf.output_tokens)}`;
     item.append(tag, val);
     row.appendChild(item);
 
-    if (conf.input_tokens != null) { totalInput += conf.input_tokens; hasInput = true; }
-    if (conf.output_tokens != null) { totalOutput += conf.output_tokens; hasOutput = true; }
+    if (conf.input_tokens != null) totalInput += conf.input_tokens;
+    if (conf.output_tokens != null) totalOutput += conf.output_tokens;
 
     if (detailButtons && (conf.calls?.length > 0)) {
       const confBtn = document.createElement("button");
       confBtn.className = "turn-token-detail-btn";
       confBtn.type = "button";
-      confBtn.textContent = "ⓘ";
+      confBtn.textContent = "确认明细";
       confBtn.title = "确认管线模块明细";
       confBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        confBtn.blur();
         _openPipelineDialog(usageData, "confirmation", confBtn);
       });
-      row.appendChild(confBtn);
+      item.appendChild(confBtn);
     }
   }
 
-  if ((hasInput || hasOutput) && (gen && conf)) {
-    const divider = document.createElement("span");
-    divider.className = "turn-token-divider";
-    divider.textContent = "│";
-    row.appendChild(divider);
+  const summary = document.createElement("summary");
+  const complete = [gen, conf].filter(Boolean).every((stage) => stage.input_tokens != null && stage.output_tokens != null);
+  const count = document.createElement("span");
+  count.textContent = complete ? `${(totalInput + totalOutput).toLocaleString("zh-CN")} tokens` : "记录不完整";
+  const toggle = document.createElement("span");
+  toggle.className = "token-usage-toggle";
+  toggle.textContent = "展开详情";
+  details.ontoggle = () => { toggle.textContent = details.open ? "收起详情" : "展开详情"; };
+  summary.append(count, toggle);
+  details.appendChild(summary);
 
-    let totalCached = 0;
-    let hasCached = false;
-    if (gen?.cached_tokens != null) { totalCached += gen.cached_tokens; hasCached = true; }
-    if (conf?.cached_tokens != null) { totalCached += conf.cached_tokens; hasCached = true; }
-    let cachedTotalPart = "";
-    if (hasCached) {
-      const totalHitRate = totalInput > 0 ? ` · ${Math.round((totalCached / totalInput) * 100)}%` : " · 0%";
-      cachedTotalPart = ` (缓 ${totalCached.toLocaleString("zh-CN")}${totalHitRate})`;
-    }
-
-    const totalItem = document.createElement("div");
-    totalItem.className = "turn-token-item turn-token-total";
-    const tag = document.createElement("span");
-    tag.className = "token-tag";
-    tag.textContent = "合计";
-    const val = document.createElement("span");
-    val.className = "token-val";
-    val.textContent = `${(totalInput + totalOutput).toLocaleString("zh-CN")} tok${cachedTotalPart}`;
-    totalItem.append(tag, val);
-    row.appendChild(totalItem);
-  }
-
-  if (appendToRow) {
-    row.appendChild(appendToRow);
-  }
-
-  footer.appendChild(row);
+  details.appendChild(row);
   return footer;
 }
 
@@ -226,7 +191,7 @@ export function createTokenUsageController({ node }) {
   const turnUsageStore = _restoreUsageStore();
 
   const render = () => {
-    document.querySelectorAll(".turn-token-footer:not(.turn-version-footer)").forEach((el) => {
+    document.querySelectorAll(".turn-token-footer").forEach((el) => {
       el.hidden = !visible;
     });
   };
@@ -425,7 +390,7 @@ export function openTokenUsagePipelineDialog({ dialog, contentEl, usageData, pip
             : null;
 
       const inputPart = (cached != null)
-        ? `输入 ${formatted(inp)} (缓 ${formatted(cached)}${hitRate ? ` · ${hitRate}` : ""})`
+        ? `输入 ${formatted(inp)} · 缓存命中 ${formatted(cached)}${hitRate ? ` · ${hitRate}` : ""}`
         : `输入 ${formatted(inp)}`;
 
       const row = _el("div", "token-usage-dialog-row");
@@ -446,6 +411,20 @@ export function openTokenUsagePipelineDialog({ dialog, contentEl, usageData, pip
     }
   }
 
+  dialog.setAttribute("aria-label", `${PIPELINE_LABELS[pipeline] || pipeline}用量明细`);
+  const close = dialog.querySelector("#closeTokenUsageBtn");
+  const dismiss = () => {
+    if (dialog.hidePopover) dialog.hidePopover();
+    else dialog.removeAttribute("open");
+    if (anchorEl?.isConnected) anchorEl.focus({ preventScroll: true });
+  };
+  if (close) close.onclick = dismiss;
+  dialog.onkeydown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      dismiss();
+    }
+  };
   if (dialog.showPopover) dialog.showPopover();
   else dialog.setAttribute("open", "");
 
@@ -467,6 +446,7 @@ export function openTokenUsagePipelineDialog({ dialog, contentEl, usageData, pip
     dialog.style.top = `${top}px`;
     dialog.style.left = `${left}px`;
   }
+  close?.focus({ preventScroll: true });
 }
 
 function _el(tag, className, text) {

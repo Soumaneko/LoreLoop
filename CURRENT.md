@@ -1770,6 +1770,75 @@ keyboard focus, and text selection. The fixed composer's gradient follows the
 theme background; its measured height supplies reading bottom padding and
 navigation clearance as the input expands.
 
+The composer shares the 790px reading-width limit and keeps its padding and
+line height stable through focus changes. Its visible label and help text
+identify next-action input, feedback on a pending scene, or an opening that
+must be confirmed first. The mode label follows the selected reader font. Focus and blur do not collapse a multi-line draft;
+input sizing retains the existing 210px cap and scrolls longer content.
+
+Scene endings place the original closing question immediately after the prose,
+then a shared information strip for action resolutions and optional usage.
+Both rows use aligned label/content columns with theme-based top, bottom, and
+row separators; their labels, action text, usage, and details follow the selected
+reader font while counts retain tabular numerals; narrow windows stack labels
+above content. With no visible
+rows, the strip has no visible frame or reserved height. Outcomes precede their
+action descriptions in a shared 72px column. Outcome badges center their text
+without wrapping, including the four-character partial-success label. Full mode
+keeps that same result row and places three compact detail rows under the action:
+single/two/three-die selection with numbered chips and the adopted value,
+semantic positive/negative modifier tags, and arithmetic with the final value
+emphasized. Long modifier reasons wrap within their tag. Existing roll selection
+and final values are retained, without a duplicate outcome or nested cards. Missing modifier
+records are described without suggesting a reroll just to inspect them.
+
+Pending versions and the confirmation/edit/rewrite/discard groups share a
+bottom toolbar on desktop and wrap by group on narrow windows. Existing action
+admission, editor save/cancel, and confirmation progress remain in force. The
+rewrite list opens explicitly by button, closes on Escape or focus leaving the
+group, and stays closed while disabled; Escape returns focus to its trigger.
+
+The usage row contains a native details control, collapsed to a total and an
+expand link by default. Missing input/output counts produce an incomplete-record
+label rather than a misleading total. Expanded generation/confirmation counts,
+cache figures, and named call-detail links stay in the content column. The
+application-level visibility preference hides or shows usage in place. Dice
+display changes replace only resolution rows, preserving narrative and editor
+DOM, the selected version, expanded usage, and the visible narrative anchor;
+request failures restore the native and custom-select display. Call-detail
+popovers identify the stage through an accessible name, omit a visible heading,
+and use compact rows with the existing text-button style for close; close or
+Escape returns focus to the invoking link. Usage collection and persistence remain owned by the existing
+controller/runtime.
+
+Generation progress also follows the dice-display preference: hidden mode uses
+neutral phase labels, outcome mode shows the emitted outcomes without dice,
+and full mode may show the public dice values. Multiple emitted judgments are
+listed together rather than presenting the first outcome as the whole turn.
+These are generation progress reports, not confirmed history.
+
+Suggested directions appear after confirmed reading content as an open two-column
+list, switching to one column below 640px. Items use spacing and fine row
+separators instead of individually framed or clickable cards. Two-column lists
+with multiple items have a fine center divider split by row, leaving the same
+14px clearance around horizontal separators as around the center gap. The
+center divider is hidden in the single-column layout. The list shares
+the information strip's soft theme background and top/bottom separators, with
+12px/14px internal padding; items have no separate fill, radius, or shadow.
+The direction type remains above the action text; frontend `directionType` and
+`suggestion-type` names clarify its purpose while the existing `level` data field
+is retained. Explicit benefit/risk labels and all suggestion text follow the
+reader font, with original projected wording kept intact.
+
+Only each item's named text button fills the main input. It reads “填入行动”
+for an empty input and “替换输入” when text is present, focuses the input, and
+reuses the existing undo-preserving text replacement. It never submits an action
+by itself. Button state and handler share the existing main-input admission
+rules plus the requirement that no scene is pending; writes and other busy
+operations therefore cannot replace a draft through this entry. Pending scenes
+hide the module, and valid zero/fewer-than-four projections remain zero/fewer
+items rather than adding filler suggestions.
+
 Disabled controls share visual feedback in `styles.css`: buttons use 0.55
 opacity, text inputs/selects use 0.7, and disabled controls drop action shadows
 and use a not-allowed cursor. Hidden checkbox switches dim their visible track

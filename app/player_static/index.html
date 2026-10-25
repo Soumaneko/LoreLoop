@@ -62,7 +62,7 @@
         </article>
         <article id="pendingCard" class="narrative-card pending-card" hidden></article>
         <section id="suggestions" class="suggestions" hidden>
-          <div class="section-heading"><span>一些可能的方向</span><i></i></div>
+          <div class="suggestions-heading"><h2>一些可能的方向</h2><p>填入后可修改，也可以自由描述其他行动</p></div>
           <div id="suggestionList" class="suggestion-list"></div>
         </section>
         <details id="runtimeNotices" class="runtime-notices" hidden>
@@ -85,13 +85,13 @@
 
     <footer class="composer-shell">
       <div class="composer">
-        <div id="composerModeBadge" class="composer-mode-badge" hidden>
-          <span class="badge-dot">✦</span>
-          <span>正文修改意见模式</span>
-        </div>
-        <textarea id="playerInput" rows="1" maxlength="4000" placeholder="你打算怎么做？" autocomplete="off"></textarea>
+        <label id="composerModeBadge" class="composer-mode-badge" for="playerInput">下一步行动</label>
+        <textarea id="playerInput" rows="1" maxlength="4000" placeholder="你打算怎么做？" autocomplete="off" aria-describedby="composerHelp inputHint"></textarea>
         <div class="composer-footer">
-          <span id="inputHint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> 执行行动</span>
+          <div class="composer-guidance">
+            <span id="composerHelp">描述你想采取的行动</span>
+            <span id="inputHint"><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> 执行行动</span>
+          </div>
           <button id="generateBtn" class="primary-action" type="button">
             <span>执行行动</span>
           </button>
@@ -536,10 +536,12 @@
     </section>
   </dialog>
 
-  <div id="tokenUsageDialog" class="token-usage-popover" popover="auto">
+  <div id="tokenUsageDialog" class="token-usage-popover" popover="auto" role="dialog" aria-label="用量明细">
     <section class="token-usage-dialog-shell">
-
-      <div id="tokenUsageDialogContent"></div>
+      <div id="tokenUsageDialogContent" class="token-usage-dialog-content"></div>
+      <div class="token-usage-dialog-actions">
+        <button id="closeTokenUsageBtn" type="button" class="text-button">关闭</button>
+      </div>
     </section>
   </div>
 
