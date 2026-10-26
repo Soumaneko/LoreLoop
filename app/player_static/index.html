@@ -105,8 +105,8 @@
   <!-- Records Rail: always-on collapsed tabs -->
   <nav id="recordsRail" class="records-rail" aria-label="世界档案分类">
     <!-- Hero Button for In-Game Codex -->
-    <button id="openLeftDrawerRailBtn" class="records-rail-hero-btn" type="button" title="角色与局内资产">
-      <span class="codex-icon">
+    <button id="openLeftDrawerRailBtn" class="records-rail-hero-btn" type="button" title="角色与局内资产" aria-label="局内典籍：角色与局内资产" aria-controls="leftDrawer" aria-expanded="false">
+      <span class="codex-icon" aria-hidden="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
@@ -115,37 +115,43 @@
       <span class="hero-label">局内典籍</span>
       <span class="hero-arrow" aria-hidden="true">›</span>
     </button>
-    <button id="recordsTabContinuity" class="records-rail-tab is-active" type="button" title="连续性">
+    <button id="recordsTabContinuity" class="records-rail-tab" type="button" title="连续性" aria-label="连续性" aria-controls="recordsDrawer" aria-expanded="false">
       <span class="rail-icon" aria-hidden="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
       </span>
       <span class="rail-label">连续性</span>
-      <span class="rail-count"></span>
+      <span class="rail-count" aria-hidden="true"></span>
     </button>
-    <button id="recordsTabNpc" class="records-rail-tab" type="button" title="人物档案">
+    <button id="recordsTabNpc" class="records-rail-tab" type="button" title="人物档案" aria-label="人物档案" aria-controls="recordsDrawer" aria-expanded="false">
       <span class="rail-icon" aria-hidden="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </span>
       <span class="rail-label">人物档案</span>
-      <span class="rail-count"></span>
+      <span class="rail-count" aria-hidden="true"></span>
     </button>
-    <button id="recordsTabSetting" class="records-rail-tab" type="button" title="世界设定">
+    <button id="recordsTabSetting" class="records-rail-tab" type="button" title="世界设定" aria-label="世界设定" aria-controls="recordsDrawer" aria-expanded="false">
       <span class="rail-icon" aria-hidden="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></svg>
       </span>
       <span class="rail-label">世界设定</span>
-      <span class="rail-count"></span>
+      <span class="rail-count" aria-hidden="true"></span>
     </button>
-    <button id="recordsTabEvent" class="records-rail-tab" type="button" title="导演事件" data-creator-only>
+    <button id="recordsTabEvent" class="records-rail-tab" type="button" title="导演事件" aria-label="导演事件" aria-controls="recordsDrawer" aria-expanded="false" data-creator-only>
       <span class="rail-icon" aria-hidden="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
       </span>
       <span class="rail-label">事件</span>
-      <span class="rail-count"></span>
+      <span class="rail-count" aria-hidden="true"></span>
     </button>
   </nav>
 
   <aside id="recordsDrawer" class="drawer drawer-left" aria-hidden="true">
+    <header id="recordsBrowseHeader" class="drawer-header" hidden>
+      <div><h2 id="recordsBrowseTitle">人物档案</h2><p id="recordsBrowseCount" class="records-browse-count"></p></div>
+      <button id="closeRecordsBrowseBtn" class="close-button" type="button" aria-label="关闭资料列表">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
     <span id="recordsRefreshState" class="records-refresh-state" hidden></span>
     <div id="recordsContinuityList" class="records-list records-pane"></div>
     <div id="recordsNpcList" class="records-list records-pane"></div>
@@ -154,25 +160,25 @@
   </aside>
 
   <!-- Left Drawer: Character & In-Game Codex -->
-  <aside id="leftDrawer" class="drawer drawer-left" aria-hidden="true">
+  <aside id="leftDrawer" class="drawer drawer-left" aria-hidden="true" aria-labelledby="leftDrawerTitle">
     <div class="drawer-header">
-      <h2>局内典籍</h2>
-      <button id="closeLeftDrawerBtn" class="close-button" type="button" aria-label="关闭">
+      <h2 id="leftDrawerTitle">局内典籍</h2>
+      <button id="closeLeftDrawerBtn" class="close-button" type="button" aria-label="关闭局内典籍">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
     <div id="codexMetaBar" class="codex-meta-bar" hidden></div>
     <div class="codex-drawer-body">
       <section class="codex-drawer-section">
-        <div class="section-title">主角档案</div>
+        <h3 class="section-title">主角档案</h3>
         <div id="playerSummary" class="codex-player-card"></div>
       </section>
       <section class="codex-drawer-section">
-        <div class="section-title">在场角色</div>
+        <h3 class="section-title">在场角色</h3>
         <div id="sceneSummary" class="scene-summary"></div>
       </section>
       <section class="codex-drawer-section">
-        <div class="section-title">资产与物品</div>
+        <h3 class="section-title">资产与物品</h3>
         <div id="resourceSummary" class="resource-list"></div>
       </section>
     </div>
@@ -436,14 +442,14 @@
     </div>
   </dialog>
 
-  <dialog id="codexDialog" class="modal codex-modal">
+  <dialog id="codexDialog" class="modal codex-modal" aria-labelledby="codexTitle">
     <section class="codex-modal-shell">
       <header id="codexHeader" class="codex-modal-header" title="按住可拖拽移动卡片">
         <div class="codex-header-drag-area">
           <span class="codex-drag-handle" aria-hidden="true">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="9" cy="19" r="2"/><circle cx="15" cy="5" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="15" cy="19" r="2"/></svg>
           </span>
-          <h2 id="codexTitle">典籍条目</h2>
+          <div class="codex-title-group"><h2 id="codexTitle">典籍条目</h2></div>
         </div>
         <button id="closeCodexBtn" class="close-button" type="button" aria-label="关闭">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>

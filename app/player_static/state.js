@@ -16,6 +16,7 @@ export const state = {
   recordsDrawerOpen: false,
   experienceMode: "player",
   events: null,
+  eventsError: null,
   readerPreferences: {
     font_size: "18",
     font_family: "serif",

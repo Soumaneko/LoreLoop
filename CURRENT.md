@@ -1765,10 +1765,96 @@ candidate as a new turn. Unknown identities show a generation label.
 
 The default narrative size is 18px across the initial UI and reader-preferences
 store. Existing valid preferences, including 16.5px, remain unchanged.
-Prose highlights use inline underlines while preserving profile access,
+Prose highlights use inline underlines, theme-colored text for each highlight kind,
+and a faint background that strengthens on hover or keyboard focus, without
+changing prose spacing or typography. Highlights preserve profile access,
 keyboard focus, and text selection. The fixed composer's gradient follows the
 theme background; its measured height supplies reading bottom padding and
 navigation clearance as the input expands.
+
+NPC and Setting quick lookup share the archive's reading hierarchy: name,
+labeled identity and faction fields (category beside a Setting name), attitude
+when available, a plain-text summary, then details. Long identity text wraps
+in its own field rather than being joined to the faction as a subtitle.
+Summaries have a light surface without internal rules or invented quotation
+marks. NPC location, traits, aliases, abilities, and appearance appear once;
+appearance serves as the summary only when no recent-scene record exists.
+Recent-scene links refer to the current profile's record, including from older
+prose, and retain the existing paginated history jump. Quick lookup stays public
+in both experience modes and is also used by in-scene participant buttons.
+
+Desktop lookup floats near its trigger and remains draggable; narrow windows
+use a modal. Long details scroll inside the lookup, leaving its header reachable.
+Only the content region scrolls; the outer dialog does not reserve a second
+scrollbar gutter. Text padding belongs to the scrolling content so the scrollbar
+remains at the dialog edge rather than being inset with the text.
+Close/Escape returns focus without scrolling to a connected trigger; a turn jump
+closes obstructing archive drawers through their existing draft-discard guard
+and then navigates, without returning focus to the old trigger.
+
+All four archive categories share a fine outer card boundary, a compact neutral-tinted name row,
+and space between cards. The name row's native button spans the available width
+and explicitly says expand/collapse with an 18px arrow; editing is independent.
+Identity, faction and the complete summary retain their layout, typography and
+surface in both states. Expansion adds the remaining details, without restyling
+or unclipping existing text. Interior fields use alignment and spacing; abilities
+and appearance use section headings, and creator details have a weaker separator.
+Existing editing controls, save/dirty handling,
+and view permissions remain authoritative; creator-only material appears in a
+separate details section and never in the public overview. All four panes have
+a title/count and a close button that is disabled during record saving. The
+shared record-card builder renders category-specific content within that shell.
+Continuity exposes its kind/status and deadline before the full progress summary;
+location, starting turn, related entities and a distinct premise remain in details.
+Only active Continuity items keep their existing edit entry. Director Events expose
+stage/deadline and macro intent, with actors, hooks, method, impacts and resolution
+reason in read-only details. Neither summary adds quotation marks. Concluded and
+cancelled Continuity items and resolved Events remain in named archive groups,
+whose native buttons explicitly expand/collapse and preserve expansion state.
+Category subtitles use
+only fields present in the projection; the current records API does not provide
+Setting kind, so the archive does not invent one to match the quick lookup.
+
+An empty category retains its navigation entry, title, zero count and close button,
+with a plain text empty-state title and a short explanation instead of an empty
+card or a creation control. If only archived items exist, the active area says
+there are no ongoing items, followed by the archive group; the count still includes
+those archived records. This is distinct from a completely empty category.
+Empty descriptions explain each category's contents. Event loading is separate
+from a successful empty result: an unread/failed event list has no numeric count.
+Loading and failure are shown in the pane and header; failures preserve the API's
+diagnostic message and offer a retry. Only a successful empty response displays
+zero and the normal empty-state description. Save/mode changes reset this event
+read state, and obsolete request failures cannot replace a newer projection.
+
+The records rail keeps the in-game Codex as the higher-priority entry with its
+accent surface, border and stronger label. Its open state adds emphasis and
+reverses the arrow, independently of that permanent priority. Category buttons
+are highlighted only while their corresponding archive pane is open; inactive
+hover is neutral. Both entry types expose their actual expanded state and
+controlled drawer, with a shared themed keyboard focus ring. Full accessible
+names include category counts even when narrow layouts hide the visible labels.
+Desktop counts are quiet aligned numerals rather than notification badges;
+zero counts are hidden on the rail while the archive header still shows zero.
+The desktop rail keeps a stable width; narrow layouts retain the existing icon
+buttons and use quieter positive-count badges without introducing short labels.
+
+The in-game Codex uses labelled scene metadata rows, a compact protagonist
+summary and a single grouped resource list. Only present characters with a
+matching public profile are semantic buttons styled like inline story NPC
+references (tinted text, subtle fill and underline); unmatched names and the
+protagonist remain plain text. Populated inventory/asset groups use native disclosures, initially
+open and preserving their current choice during in-page refreshes. Empty groups
+show their count and a static explanation. Resource names wrap in full, zero
+amounts and quantities stay visible, and unknown money is labelled unrecorded.
+The drawer provides the sole scrolling region instead of a nested inventory
+scroll area. Typography, controls and surfaces follow the reader theme.
+
+The sepia and light themes use a uniform reading background. Shared surface,
+raised and editor tokens keep the top bar, composer and Codex at or below the
+reading background's brightness; separation comes from borders and restrained
+tone differences. Their previous brighter surfaces and downward-darkening page
+gradients competed with the prose. The dark theme's palette remains independent.
 
 The composer shares the 790px reading-width limit and keeps its padding and
 line height stable through focus changes. Its visible label and help text
