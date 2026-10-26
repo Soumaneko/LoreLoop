@@ -2157,10 +2157,14 @@ Notices do not replace an Operation's current workflow step.
 Only approved warning codes are translated to public messages; raw model warning
 text, evidence, and Director material are not projected. Each save's existing
 `control.db` keeps a bounded `runtime_notices` table (40 retained, latest 20
-shown), separate from canonical history and Undo/Redo. Notices survive reload
-and are refreshed through the existing state/records requests, with no extra
-polling service. The player sees recent notices inline, with timestamps;
-maintenance failures explicitly preserve the completed confirmation outcome.
+returned by the API), separate from canonical history and Undo/Redo. The reading
+surface shows notices received during the current page session, with timestamps,
+without replaying persisted notices from state/records responses. Manual refresh,
+page reload and save changes clear the displayed list; ordinary background refresh
+and operation completion preserve current notices. This keeps historical warnings
+from appearing to be ongoing faults after refresh. Clearing the display does not
+resolve a fault or delete diagnostic history. Maintenance failures explicitly
+preserve the completed confirmation outcome.
 
 ## 20. Existing Verification Tools
 

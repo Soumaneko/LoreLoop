@@ -12,6 +12,11 @@ export function createRuntimeNotices({ state, $, document }) {
     }));
   }
 
+  function clearRuntimeNotices() {
+    state.runtimeNotices = [];
+    renderRuntimeNotices();
+  }
+
   function handleRuntimeNotice(event) {
     if (event.step !== "runtime_notice") return false;
     const notice = event.data;
@@ -19,5 +24,5 @@ export function createRuntimeNotices({ state, $, document }) {
     renderRuntimeNotices();
     return true;
   }
-  return { renderRuntimeNotices, handleRuntimeNotice };
+  return { clearRuntimeNotices, handleRuntimeNotice };
 }

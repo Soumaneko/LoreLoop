@@ -168,7 +168,7 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => { els.toast.hidden = true; }, 2600);
 }
 
-const { renderRuntimeNotices, handleRuntimeNotice } = createRuntimeNotices({ state, $, document });
+const { clearRuntimeNotices, handleRuntimeNotice } = createRuntimeNotices({ state, $, document });
 
 function showError(
   error,
@@ -2140,6 +2140,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   const previousSaveId = state.activeSave;
   state.activeSave = saves.active;
   if (previousSaveId !== state.activeSave) {
+    clearRuntimeNotices();
     recordsDirty = false;
     state.events = null;
     state.eventsError = null;
@@ -2185,8 +2186,6 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     sessionStorage.removeItem(CONFIRMATION_IN_FLIGHT_KEY);
   }
   state.playerState = playerState;
-  state.runtimeNotices = playerState.runtime_notices || [];
-  renderRuntimeNotices();
   state.experienceMode = playerState.experience_mode || "player";
   if (playerState.needs_init) await initialization.loadDraft();
   state.suggestions = playerState.action_preview?.previews || [];
@@ -3263,10 +3262,6 @@ async function refreshRecords() {
       return;
     }
     state.records = records;
-    if (records.runtime_notices) {
-      state.runtimeNotices = records.runtime_notices;
-      renderRuntimeNotices();
-    }
     if (!recordsSaveBusy && !recordsDirty) {
       renderRecords(records);
       recordsDirty = false;
@@ -4278,6 +4273,7 @@ async function refreshGameView() {
     return;
   }
   try {
+    clearRuntimeNotices();
     await loadAll({ scroll: "instant" });
     showToast("已同步最新故事状态");
   } catch (error) {
