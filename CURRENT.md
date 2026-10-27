@@ -1829,11 +1829,13 @@ diagnostic message and offer a retry. Only a successful empty response displays
 zero and the normal empty-state description. Save/mode changes reset this event
 read state, and obsolete request failures cannot replace a newer projection.
 
-The records rail keeps the in-game Codex as the higher-priority entry with its
-accent surface, border and stronger label. Its open state adds emphasis and
-reverses the arrow, independently of that permanent priority. Category buttons
+The records rail keeps the in-game Codex as the higher-priority entry with an
+accent fill, stronger label and straight top/bottom rules, without a rounded
+frame or shadow. Its open state accents the rules and fill and reverses the arrow,
+independently of that permanent priority. Category buttons
 are highlighted only while their corresponding archive pane is open; inactive
-hover is neutral. Both entry types expose their actual expanded state and
+hover uses a neutral, straight-edged fill with top/bottom rules. Selected entries
+keep that same geometry with accent colors. Both entry types expose their actual expanded state and
 controlled drawer, with a shared themed keyboard focus ring. Full accessible
 names include category counts even when narrow layouts hide the visible labels.
 Desktop counts are quiet aligned numerals rather than notification badges;
@@ -1879,6 +1881,16 @@ trigger typography share normal weight and size, except for the explicit font
 previews. Character triangles and selected stars are retained and use the fixed
 Songti stack regardless of reader font. Public lookup dialogs bind dismissal
 handlers synchronously when opened, so an immediate Escape restores focus.
+
+Auxiliary surfaces follow the reading area's straight-edged, filled-region
+language. Codex overviews, archive entries, saves, services and Core Memory use
+filled bands with top/bottom rules instead of rounded four-sided cards. Archive
+summaries sit directly in their parent region; internal hierarchy comes from
+labels, spacing and lighter separators. Form fields and selection menus use
+straight geometry, while action buttons retain their shared reading-area style.
+Floating lookups retain the boundary and elevation needed to separate them from
+the story. Reading typography, theme brightness and interaction contracts remain
+unchanged.
 
 `management_workspace.js` keeps system controls, saves, model services and Core
 Memory in one right-hand surface. New-save creation is an inline form shared by
