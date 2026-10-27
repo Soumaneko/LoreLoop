@@ -70,6 +70,7 @@
   --drawer-shadow-left: 30px 0 90px rgba(0, 0, 0, 0.3);
   --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  --inspection-shadow: 0 3px 12px rgba(0, 0, 0, 0.6), 0 12px 32px rgba(0, 0, 0, 0.65);
   --scrollbar-track: rgba(17, 17, 14, 0.6);
   --scrollbar-thumb: rgba(201, 169, 103, 0.28);
   --scrollbar-thumb-hover: rgba(232, 208, 149, 0.55);
@@ -151,6 +152,7 @@ html[data-theme="sepia"] {
   --drawer-shadow-left: 24px 0 60px rgba(67, 51, 28, 0.16);
   --card-shadow: 0 8px 24px rgba(100, 75, 30, 0.12);
   --shadow: 0 16px 45px rgba(40, 32, 20, 0.14);
+  --inspection-shadow: 0 3px 12px rgba(40, 32, 20, 0.22), 0 12px 32px rgba(40, 32, 20, 0.28);
   --scrollbar-track: rgba(230, 221, 204, 0.6);
   --scrollbar-thumb: rgba(138, 106, 41, 0.28);
   --scrollbar-thumb-hover: rgba(105, 77, 18, 0.55);
@@ -223,6 +225,7 @@ html[data-theme="light"] {
   --drawer-shadow-left: 24px 0 60px rgba(26, 32, 44, 0.14);
   --card-shadow: 0 8px 24px rgba(26, 32, 44, 0.08);
   --shadow: 0 16px 45px rgba(26, 32, 44, 0.12);
+  --inspection-shadow: 0 3px 12px rgba(26, 32, 44, 0.2), 0 12px 32px rgba(26, 32, 44, 0.26);
   --scrollbar-track: rgba(220, 224, 230, 0.6);
   --scrollbar-thumb: rgba(43, 108, 176, 0.28);
   --scrollbar-thumb-hover: rgba(26, 79, 134, 0.55);
@@ -949,6 +952,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 
 /* Chronicle & Codex Drawer Panel */
 .drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: var(--backdrop); }
+body:has(#drawer.open) .drawer-backdrop { z-index: 65; }
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 50;
   width: min(var(--drawer-right-w, 440px), 92vw); padding: 28px;
@@ -978,7 +982,7 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
   border-radius: 0;
   background: var(--surface);
   opacity: 1;
-  box-shadow: var(--shadow);
+  box-shadow: var(--inspection-shadow);
   padding: 0;
   animation: popoverFadeIn 0.18s var(--ease-out-expo) both;
 }
@@ -2302,7 +2306,7 @@ summary.resource-group-header { cursor: pointer; }
   transform: translateX(-30px);
   opacity: 0;
   pointer-events: none;
-  box-shadow: var(--drawer-shadow-left, 24px 0 60px rgba(26, 32, 44, 0.14));
+  box-shadow: var(--inspection-shadow);
   transition: transform .32s var(--ease-out-expo), opacity .25s ease;
   scrollbar-gutter: stable;
   overflow-y: auto;
@@ -3043,10 +3047,10 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .codex-empty { margin: 0; color: var(--muted); font: 14px/1.75 var(--serif); }
 .record-card { padding: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--surface-soft); gap: 0; font: 14px/1.75 var(--serif); overflow: hidden; border-block: 1px solid var(--line-strong); }
 .record-card:has(.record-card-head:hover) { border-color: var(--line-strong); box-shadow: none; }
-.record-card .record-card-head { align-items: center; cursor: default; user-select: auto; padding: 6px 12px; background: transparent; gap: 14px; }
+.record-card .record-card-head { align-items: center; cursor: default; user-select: auto; padding: 8px 14px; background: transparent; gap: 14px; }
 .record-card .record-card-title-wrap { display: block; }
 .record-card .record-card-chevron { display: none; }
-.record-card .record-card-title { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: none; border: 0; border-radius: 4px; padding: 4px 0; color: var(--ink); font: 17px/1.6 var(--serif); white-space: normal; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.record-card .record-card-title { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: none; border: 0; border-radius: 4px; padding: 4px 0; color: var(--gold-bright); font: 600 20px/1.5 var(--serif); white-space: normal; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .record-card .record-edit-button { width: auto; height: auto; display: block; border: 0; border-radius: 0; background: none; color: var(--muted); font: 12px/1.65 var(--serif); padding: 3px 0; }
 .record-card .record-edit-button:hover:not(:disabled) { background: none; color: var(--gold-bright); }
 .record-card .record-edit-button[hidden], .record-overview[hidden] { display: none; }

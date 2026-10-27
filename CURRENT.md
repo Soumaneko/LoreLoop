@@ -1904,7 +1904,13 @@ summaries sit directly in their parent region; internal hierarchy comes from
 labels, spacing and lighter separators. Form fields and selection menus use
 straight geometry, while action buttons retain their shared reading-area style.
 Floating lookups retain the boundary and elevation needed to separate them from
-the story. Reading typography, theme brightness and interaction contracts remain
+the story. NPC, Continuity, Setting and Event entry titles share a 20px semibold
+theme-accent style with slightly inset heading spacing, distinct from internal
+fields. Left archive panels and inline lookup windows share a theme-specific
+short edge shadow and a compact outer shadow. While the right workspace is open,
+its backdrop covers the left navigation rail as well as the story; the existing
+inert background prevents interaction with those covered entries.
+Reading typography, theme brightness and interaction contracts remain
 unchanged.
 
 `management_workspace.js` keeps system controls, saves, model services and Core
