@@ -1,4 +1,5 @@
 import { createManagementWorkspace } from "./management_workspace.js";
+import { readRefreshSnapshot } from "./state_refresh.js";
 import { createRuntimeNotices } from "./runtime_notices.js";
 import { createCoreMemoryEditor } from "./core_memory_editor.js";
 import { createModelSettings } from "./model_settings.js";
@@ -78,7 +79,7 @@ const els = {
   importSaveBtn: $("importSaveBtn"), importSaveInput: $("importSaveInput"), importSaveForm: $("importSaveForm"),
   importSaveName: $("importSaveName"), importSaveFileName: $("importSaveFileName"), cancelImportSaveBtn: $("cancelImportSaveBtn"),
   saveManagerError: $("saveManagerError"),
-  toast: $("toast"),
+  toast: $("toast"), refreshStateBtn: $("refreshStateBtn"),
 };
 
 let streamBuffer = "";
@@ -89,6 +90,7 @@ let activeGenerationRun = null;
 let pendingEditor = null;
 let playerWriteBusy = false;
 let recordsSaveBusy = false;
+let stateRefreshBusy = false;
 let confirmationTailSeen = new Set();
 let historyLoadPromise = null;
 let historyLoadSaveName = null;
@@ -213,7 +215,7 @@ function showError(
     button.onclick = options.recheckConfirmation;
     els.errorCard.appendChild(button);
   }
-  scrollToBottom();
+  if (!options.preserveScroll) scrollToBottom();
 }
 
 function clearError() {
@@ -249,7 +251,7 @@ function playerActionContext() {
   return {
     mode: state.mode, pending: activePending(), variant: selectedVariant(),
     editing: Boolean(pendingEditor),
-    busy: saveManagerBusy || modelSettings.isBusy() || coreMemoryEditor.isBusy() || recordsSaveBusy || playerWriteBusy
+    busy: stateRefreshBusy || saveManagerBusy || modelSettings.isBusy() || coreMemoryEditor.isBusy() || recordsSaveBusy || playerWriteBusy
       || state.confirmationInFlight || Boolean(activeGenerationRun?.inFlight),
     confirmationUncertain: state.uncertainConfirmation?.saveId === state.activeSave,
   };
@@ -281,6 +283,11 @@ function renderDifficulty() {
 }
 
 function renderControls({ updateNavigation = true } = {}) {
+  if (stateRefreshBusy) {
+    els.refreshStateBtn.setAttribute("aria-busy", "true");
+    els.refreshStateBtn.title = "正在刷新状态，请稍候";
+    return;
+  }
   coreMemoryEditor.refreshControls();
   const context = playerActionContext();
   const canChange = canChangePlayerState(context);
@@ -310,6 +317,10 @@ function renderControls({ updateNavigation = true } = {}) {
   const canRedoPending = pendingIds.some((turnId) => (controls.redo_pending_turn_ids || []).includes(turnId));
   els.undoBtn.disabled = busy || pending || !controls.can_undo;
   els.redoBtn.disabled = busy || (pending && !canRedoPending) || !controls.can_redo;
+  const refreshReason = stateRefreshBlockReason();
+  els.refreshStateBtn.disabled = Boolean(refreshReason);
+  els.refreshStateBtn.title = refreshReason || "重新读取当前存档，保留未发送的行动";
+  els.refreshStateBtn.setAttribute("aria-busy", String(stateRefreshBusy));
   els.difficultySelect.disabled = busy || difficultySaveBusy;
   renderDifficulty();
   els.diceDisplaySelect.disabled = busy;
@@ -907,6 +918,7 @@ async function loadEarlierHistory({
   force = false,
   limit = HISTORY_PAGE_SIZE,
 } = {}) {
+  if (stateRefreshBusy) return 0;
   if (historyLoadPromise && historyLoadSaveName === state.activeSave) {
     return historyLoadPromise;
   }
@@ -974,6 +986,7 @@ async function loadEarlierHistory({
       historyLoadPromise = null;
       historyLoadSaveName = null;
       state.historyLoading = false;
+      renderControls({ updateNavigation: false });
     }
   }
 }
@@ -2803,7 +2816,7 @@ async function maybeAutoConfirm() {
 }
 
 function canManageModelSettings() {
-  return !saveManagerBusy && !playerWriteBusy && !recordsSaveBusy && !coreMemoryEditor.isBusy() && !state.confirmationInFlight
+  return !stateRefreshBusy && !saveManagerBusy && !playerWriteBusy && !recordsSaveBusy && !coreMemoryEditor.isBusy() && !state.confirmationInFlight
     && !activeGenerationRun?.inFlight
     && state.uncertainConfirmation?.saveId !== state.activeSave
     && !["booting", "generating", "confirming", "switching"].includes(state.mode);
@@ -2820,7 +2833,7 @@ const systemWorkspace = createManagementWorkspace({
   beforeLeave: page => page === "coreMemoryDialog" ? coreMemoryEditor.canLeave()
     : page === "modelConfigDialog" ? modelSettings.canLeaveEditor() : true,
   onLeave: page => { if (page === "modelConfigDialog") modelSettings.leaveEditor(); },
-  canNavigate: () => !saveManagerBusy && !playerWriteBusy && !modelSettings.isBusy() && !coreMemoryEditor.isBusy()
+  canNavigate: () => !stateRefreshBusy && !saveManagerBusy && !playerWriteBusy && !modelSettings.isBusy() && !coreMemoryEditor.isBusy()
     && !(systemWorkspace.isOpen("modelConfigDialog") && $("modelConfigDialog").dataset.required === "true"),
 });
 
@@ -3292,6 +3305,7 @@ function recomputeRecordsDirty() {
   return false;
 }
 async function refreshRecords() {
+  if (stateRefreshBusy) return;
   if (!els.recordsSettingList) return;
   const generation = ++recordsRefreshGeneration;
   const startedMode = state.mode;
@@ -4340,19 +4354,86 @@ els.manageSavesBtn.onclick = () => {
 };
 els.modelSettingsBtn.onclick = () => modelSettings.open();
 $("workspaceBackBtn").onclick = () => systemWorkspace.back();
+function stateRefreshBlockReason() {
+  if (stateRefreshBusy) return "正在刷新状态，请稍候";
+  if (playerActionContext().busy || difficultySaveBusy || state.historyLoading
+    || !["idle", "pending", "needs_init", "error"].includes(state.mode)) return "当前操作尚未完成，请稍候";
+  if (!state.activeSave) return "请先选择存档";
+  if (state.uncertainConfirmation?.saveId === state.activeSave) return "请先核实上一次确认的结果";
+  if (pendingEditor) return "请先保存或取消正文编辑";
+  if ((systemWorkspace.isOpen("modelConfigDialog") && modelSettings.hasUnsavedChanges())
+    || (systemWorkspace.isOpen("coreMemoryDialog") && coreMemoryEditor.hasUnsavedChanges())
+    || recordsDirty || els.recordsDrawer.querySelector(".record-edit:not([hidden])")) return "请先保存或取消未保存的修改";
+  return "";
+}
+
 async function refreshGameView() {
-  if (playerActionContext().busy || ["generating", "confirming", "switching"].includes(state.mode)) {
-    showToast("当前操作尚未完成，请稍候");
-    return;
-  }
+  const reason = stateRefreshBlockReason();
+  if (reason) { showToast(reason); return; }
+  stateRefreshBusy = true;
+  const pagingEnabled = state.historyPagingEnabled;
+  state.historyPagingEnabled = false;
+  const focus = document.activeElement;
+  const surfaces = [...document.body.children].filter(element => element.id !== "toast" && element.tagName !== "SCRIPT");
+  const inertStates = surfaces.map(element => element.inert);
+  surfaces.forEach(element => { element.inert = true; });
+  renderControls({ updateNavigation: false });
   try {
+    const snapshot = await readRefreshSnapshot({ request, loadRecords, loadEvents,
+      saveId: state.activeSave, earliestTurn: state.playerState?.history?.[0]?.turn_index });
+    const scrollY = window.scrollY;
+    const anchor = [...els.story.querySelectorAll(".turn[data-turn-index], #activePlayerAction")]
+      .find(element => element.getBoundingClientRect().bottom > 90 && element.getClientRects().length);
+    const anchorTop = anchor?.getBoundingClientRect().top;
+    const anchorSelector = anchor?.id ? `#${anchor.id}`
+      : anchor ? `.turn[data-turn-index="${anchor.dataset.turnIndex}"]` : null;
+    const details = [...els.story.querySelectorAll("details")].map(element => ({
+      turn: element.closest(".turn")?.dataset.turnIndex,
+      pending: Boolean(element.closest("#pendingCard")),
+      className: element.className, open: element.open,
+    }));
+    const selectedId = selectedVariant()?.turn_id;
+    stateRefreshBusy = false;
+    ++recordsRefreshGeneration;
+    state.saves = snapshot.saves.saves || [];
+    state.modelConfig = snapshot.modelConfig;
+    state.playerState = snapshot.playerState;
+    state.experienceMode = snapshot.playerState.experience_mode || "player";
+    state.records = snapshot.records;
+    state.events = snapshot.events;
+    state.eventsError = null;
+    state.suggestions = snapshot.playerState.action_preview?.previews || [];
+    const selectedIndex = activePending()?.variants?.findIndex(variant => variant.turn_id === selectedId) ?? -1;
+    state.selectedPendingIndex = selectedIndex >= 0 ? selectedIndex : Math.max(0, (activePending()?.variants?.length || 1) - 1);
+    state.lastError = null;
+    els.errorCard.hidden = true;
     clearRuntimeNotices();
-    await loadAll({ scroll: "instant" });
+    setStateMode(snapshot.playerState.needs_init ? "needs_init" : activePending() ? "pending" : "idle");
+    renderAll();
+    renderRecords(snapshot.records);
+    setRecordsRefreshState(snapshot.records.maintenance_running ? "后台维护进行中 · 自动刷新" : "");
+    if (snapshot.records.maintenance_running) startRecordsPoll(); else stopRecordsPoll();
+    for (const element of els.story.querySelectorAll("details")) {
+      const previous = details.find(item => item.turn === element.closest(".turn")?.dataset.turnIndex
+        && item.pending === Boolean(element.closest("#pendingCard")) && item.className === element.className);
+      if (previous) element.open = previous.open;
+    }
+    const nextAnchor = anchorSelector && els.story.querySelector(anchorSelector);
+    window.scrollTo({ top: nextAnchor ? scrollY + nextAnchor.getBoundingClientRect().top - anchorTop : scrollY, behavior: "instant" });
     showToast("已同步最新故事状态");
   } catch (error) {
     reportClientError(error, "refresh_game_view_failed");
+    showError(error, "刷新未完成，原有内容已保留，请重试。", { preserveMode: true, preserveScroll: true });
+    showToast(error.message || "刷新未完成，原有内容已保留");
+  } finally {
+    stateRefreshBusy = false;
+    surfaces.forEach((element, index) => { element.inert = inertStates[index]; });
+    state.historyPagingEnabled = pagingEnabled;
+    renderControls();
+    if (focus?.isConnected && !focus.disabled) focus.focus({ preventScroll: true });
   }
 }
+els.refreshStateBtn.onclick = refreshGameView;
 
 // Global hotkeys (Escape, F5, Ctrl+R)
 document.addEventListener("keydown", (event) => {

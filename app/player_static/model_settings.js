@@ -707,5 +707,6 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     refreshControls();
   }
 
-  return { bind, open: openModelConfigs, isBusy: () => modelConfigBusy, canLeaveEditor, leaveEditor };
+  return { bind, open: openModelConfigs, isBusy: () => modelConfigBusy,
+    hasUnsavedChanges: () => modelDraftDirty, canLeaveEditor, leaveEditor };
 }

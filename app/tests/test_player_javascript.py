@@ -527,3 +527,45 @@ assert.deepEqual(JSON.parse(calls[2].options.body), {
 });
 '''
     _run_js(script, (STATIC_DIR / "api.js").resolve().as_uri())
+
+
+def test_manual_refresh_reads_complete_snapshot_without_recovering_operations():
+    script = r'''
+import assert from "node:assert/strict";
+const {readRefreshSnapshot} = await import(process.argv[1]);
+let operations = [], active = "save", failRecords = false;
+const calls = [];
+const request = async (path, options) => {
+  assert.equal(options?.method || "GET", "GET", "refresh must only read");
+  calls.push(path);
+  if (path.endsWith("/saves")) return {active, saves: []};
+  if (path.endsWith("/model-config")) return {configured: true};
+  if (path.endsWith("/recoverable")) return {operations};
+  if (path.endsWith("/state")) return {experience_mode:"creator", history:[{turn_index:4}], history_pagination:{has_more:true}};
+  if (path.includes("/history?")) return {history:[{turn_index:2},{turn_index:3}], pagination:{has_more:true}};
+  throw new Error("unexpected request: " + path);
+};
+const read = () => readRefreshSnapshot({request, saveId:"save", earliestTurn:2,
+  loadRecords: async view => {
+    assert.equal(view, "advanced");
+    if (failRecords) throw new Error("records unavailable");
+    return {npc_profiles:[{id:"npc"}]};
+  },
+  loadEvents: async () => ({events:[]}),
+});
+const snapshot = await read();
+assert.deepEqual(snapshot.playerState.history.map(turn => turn.turn_index), [2,3,4]);
+assert.equal(snapshot.records.npc_profiles[0].id, "npc");
+assert.deepEqual(snapshot.events, []);
+failRecords = true;
+await assert.rejects(read, /records unavailable/, "a partial refresh must not be installed");
+failRecords = false;
+operations = [{status:"succeeded", recovery_kind:"generation"}];
+calls.length = 0;
+await assert.rejects(read, /尚未处理的操作/);
+assert.ok(!calls.includes("/api/player/state"), "recovery is left to its existing flow");
+operations = [];
+active = "other";
+await assert.rejects(read, /当前存档已改变/);
+'''
+    _run_js(script, (STATIC_DIR / "state_refresh.js").resolve().as_uri())

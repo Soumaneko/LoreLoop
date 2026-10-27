@@ -571,6 +571,10 @@ select option, select optgroup { background: var(--option-bg); color: var(--ink)
 .time-travel-group { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid transparent; border-radius: 999px; background: transparent; }
 .time-travel-button { width: 28px; height: 28px; border: 0; font-size: 13px; color: var(--gold-bright); line-height: 1; }
 .time-travel-button span { display: inline-block; width: auto; height: auto; background: transparent; transform: translateY(-0.5px); }
+@media (prefers-reduced-motion: no-preference) {
+  #refreshStateBtn[aria-busy="true"] span { animation: refresh-spin 1s linear infinite; }
+}
+@keyframes refresh-spin { from { transform: translateY(-0.5px) rotate(0deg); } to { transform: translateY(-0.5px) rotate(360deg); } }
 
 .pending-card { border-color: transparent; }
 .pending-toolbar { margin-bottom: 26px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }

@@ -159,5 +159,6 @@ export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast
     els.saveCoreMemoryBtn.onclick = save;
   }
 
-  return { bind, open, refreshControls, isBusy: () => busy, canLeave };
+  return { bind, open, refreshControls, isBusy: () => busy,
+    hasUnsavedChanges: () => JSON.stringify(coreMemoryItems) !== original, canLeave };
 }

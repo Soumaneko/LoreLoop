@@ -1882,6 +1882,21 @@ previews. Character triangles and selected stars are retained and use the fixed
 Songti stack regardless of reader font. Public lookup dialogs bind dismissal
 handlers synchronously when opened, so an immediate Escape restores focus.
 
+The header's refresh-state button shares the Undo/Redo group's size and character
+icon style. It and F5/Ctrl+R share a read-only refresh path. During reading, page
+surfaces temporarily become inert without changing controls' disabled appearance;
+their previous inert state and focus are restored afterward, avoiding page-wide
+dimming flashes.
+It reloads the active save's story, pending variants, history controls and public
+or creator records without invoking models, resuming operations or writing saves.
+Requests complete before the displayed snapshot is replaced; failed reads retain
+the existing content and show a retryable error. Refresh preserves unsent action
+text, the selected pending variant, loaded history, reading position and expanded
+sections where their targets still exist. Busy operations, unsaved edits and
+uncertain confirmation outcomes block refresh; unresolved recoverable operations
+must be handled through their existing recovery flow. Successful refresh clears
+obsolete transient errors and current-session notices, not diagnostic history.
+
 Auxiliary surfaces follow the reading area's straight-edged, filled-region
 language. Codex overviews, archive entries, saves, services and Core Memory use
 filled bands with top/bottom rules instead of rounded four-sided cards. Archive
