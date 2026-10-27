@@ -36,7 +36,7 @@
           </button>
         </div>
 
-        <button id="openDrawerBtn" class="icon-button" type="button" aria-label="打开旅程控制" title="系统旅程控制">
+        <button id="openDrawerBtn" aria-controls="drawer" aria-expanded="false" class="icon-button" type="button" aria-label="打开旅程控制" title="系统旅程控制">
           <span></span><span></span><span></span>
         </button>
       </div>
@@ -185,152 +185,168 @@
   </aside>
 
   <!-- Right Drawer: System Control & Saves -->
-  <aside id="drawer" class="drawer" aria-hidden="true">
+  <aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="systemControlTitle">
     <div class="drawer-header">
-      <h2>系统控制</h2>
-      <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      <div class="workspace-heading"><button id="workspaceBackBtn" type="button" hidden></button><h2 id="systemControlTitle">系统控制</h2></div>
+      <button id="closeDrawerBtn" class="close-button" type="button" aria-label="关闭系统控制">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </div>
-    <section class="drawer-section">
-      <div class="setting-row">
-        <span class="setting-label">界面模式</span>
-        <div class="records-view-toggle" role="group" aria-label="体验模式">
-          <button id="experienceModePlayerBtn" class="is-active" type="button" title="只展示故事与公开信息">玩家</button>
-          <button id="experienceModeCreatorBtn" type="button" title="完整世界管理、导演信息与调用细节">创作者</button>
+    <div id="systemControlHome" class="control-body workspace-page">
+      <section class="control-group" aria-label="旅程与存档">
+        <h3>旅程与存档</h3>
+        <div class="setting-row">
+          <span class="setting-label">界面模式</span>
+          <div class="records-view-toggle" role="group" aria-label="体验模式">
+            <button id="experienceModePlayerBtn" class="is-active" type="button" title="只展示故事与公开信息">玩家</button>
+            <button id="experienceModeCreatorBtn" type="button" title="完整世界管理、导演信息与调用细节">创作者</button>
+          </div>
         </div>
-      </div>
-    </section>
-    <section class="drawer-section">
-      <label for="saveSelect">存档选择</label>
-      <div class="inline-control">
-        <select id="saveSelect"></select>
-        <button id="newSaveBtn" type="button" title="新建存档">＋</button>
-      </div>
-      <button id="manageSavesBtn" class="manage-saves-button" type="button">管理本地存档</button>
-    </section>
-    <section class="drawer-section">
-      <div class="setting-row">
-        <span class="setting-label">检定难度</span>
-        <select id="difficultySelect">
-          <option value="简单">简单 · 三骰取高</option>
-          <option value="普通">普通 · 双骰取高</option>
-          <option value="困难">困难 · 单骰判定</option>
-        </select>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">骰点显示</span>
-        <select id="diceDisplaySelect">
-          <option value="hidden">完全不显示</option>
-          <option value="outcome">只显示结果状态</option>
-          <option value="full">显示骰点、修正与结果</option>
-        </select>
-      </div>
-    </section>
-    <section class="drawer-section" aria-label="成本与质量">
-      <div class="setting-row">
-        <span class="setting-label">后校验<span class="setting-inline-note">校验正文与已确定事实的一致性</span><button type="button" id="canonInfoBtn" class="setting-info-btn" aria-label="后校验说明">ⓘ</button></span>
-        <label class="toggle-switch">
-          <input id="canonValidationBtn" type="checkbox" />
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">用量显示<span class="setting-inline-note">显示 Token 消耗</span><button type="button" id="tokenUsageInfoBtn" class="setting-info-btn" aria-label="用量显示说明">ⓘ</button></span>
-        <label class="toggle-switch">
-          <input id="tokenUsageSelect" type="checkbox" />
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">一键确认<span class="setting-inline-note">正文生成后自动确认</span><button type="button" id="oneClickInfoBtn" class="setting-info-btn" aria-label="一键确认说明">ⓘ</button></span>
-        <label class="toggle-switch">
-          <input id="oneClickConfirm" type="checkbox" />
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-    </section>
-    <section class="drawer-section" data-creator-only>
-      <div class="setting-row">
-        <span class="setting-label">核心记忆</span>
-        <button id="openCoreMemoryBtn" class="manage-saves-button" type="button">编辑世界基础</button>
-      </div>
-    </section>
-    <section class="drawer-section">
-      <div class="setting-row">
-        <span class="setting-label">正文字号</span>
-        <select id="fontSizeSelect">
-          <option value="14">精小 (14px)</option>
-          <option value="15">标准 (15px)</option>
-          <option value="16.5">适中 (16.5px)</option>
-          <option value="18" selected>大字 (18px)</option>
-          <option value="20">特大 (20px)</option>
-        </select>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">正文字体</span>
-        <select id="fontFamilySelect">
-          <option value="serif">沉香宋体 (典雅)</option>
-          <option value="kaiti">苍劲楷体 (侠风)</option>
-          <option value="ming">雕版明朝 (厚重)</option>
-          <option value="sans">现代无衬线 (清晰)</option>
-        </select>
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">界面主题</span>
-        <select id="themeSelect">
-          <option value="dark">玄金暗影 (深色)</option>
-          <option value="sepia">宣纸护眼 (暖阳)</option>
-          <option value="light">月白明彩 (浅色)</option>
-        </select>
-      </div>
-    </section>
-    <section class="drawer-section">
-      <div class="setting-row">
-        <span class="setting-label">模型服务</span>
-        <button id="modelSettingsBtn" class="manage-saves-button" type="button">设置与检查</button>
-      </div>
-    </section>
-  </aside>
-
-  <dialog id="saveDialog" class="modal">
-    <form method="dialog" id="saveForm">
-      <h2>新建存档</h2>
-      <p>名称仅用于识别这段旅程，之后可以随时修改。</p>
-      <input id="saveNameInput" maxlength="64" autocomplete="off" placeholder="例如：莱尔的旅程" />
-      <div class="modal-actions"><button id="saveCancelBtn" type="button">取消</button><button id="createSaveConfirmBtn" class="primary-action" value="default">创建</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="saveManagerDialog" class="modal save-manager-modal">
-    <section class="save-manager-shell">
-      <header class="save-manager-header">
-        <h2>管理存档</h2>
-        <button id="closeSaveManagerBtn" class="close-button" type="button" aria-label="关闭">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <div class="save-block">
+          <div class="save-selection">
+          <label for="saveSelect">存档选择</label>
+          <div class="inline-control"><select id="saveSelect"></select></div>
+          <div class="save-actions">
+            <button id="newSaveBtn" type="button">新建存档</button>
+            <button id="manageSavesBtn" type="button">管理本地存档</button>
+          </div>
+          </div>
+          <div id="homeNewSaveSlot">
+            <form id="saveForm" class="inline-save-form" hidden>
+              <label for="saveNameInput">存档名称</label>
+              <input id="saveNameInput" aria-describedby="newSaveNote" maxlength="64" autocomplete="off" placeholder="例如：临安旧事" required />
+              <p id="newSaveNote" class="new-save-note">创建后将切换到新存档。</p>
+              <details id="newSaveError" class="form-error" role="alert" hidden>
+                <summary>创建未完成，查看原因</summary>
+                <p id="newSaveErrorMessage" tabindex="0"></p>
+              </details>
+              <div class="inline-save-actions"><button id="saveCancelBtn" type="button">取消</button><button id="createSaveConfirmBtn" class="primary-action" type="submit">创建存档</button></div>
+            </form>
+          </div>
+        </div>
+      </section>
+      <section class="control-group" aria-label="判定与生成">
+        <h3>判定与生成</h3>
+        <div class="setting-row difficulty-row">
+          <div class="setting-text">
+            <span class="setting-label" id="difficultyLabel">检定难度</span>
+            <span id="difficultyDescription" class="setting-inline-note">单骰判定</span>
+          </div>
+          <div class="difficulty-control">
+            <select id="difficultySelect" hidden aria-labelledby="difficultyLabel">
+              <option value="简单">简单 · 三骰取高</option>
+              <option value="普通">普通 · 双骰取高</option>
+              <option value="困难">困难 · 单骰判定</option>
+            </select>
+            <div id="difficultyOptions" class="records-view-toggle" role="group" aria-labelledby="difficultyLabel" aria-describedby="difficultyDescription">
+              <button type="button" data-difficulty="简单" aria-pressed="false">简单</button>
+              <button type="button" data-difficulty="普通" aria-pressed="false">普通</button>
+              <button type="button" data-difficulty="困难" aria-pressed="true" class="is-active">困难</button>
+            </div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="diceDisplaySelect">骰点显示</label>
+          <select id="diceDisplaySelect">
+            <option value="hidden">完全不显示</option>
+            <option value="outcome">只显示结果状态</option>
+            <option value="full">显示骰点、修正与结果</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div class="setting-text">
+            <div class="setting-label"><label for="canonValidationBtn">后校验</label><button type="button" id="canonInfoBtn" class="setting-info-btn" aria-label="后校验说明"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button></div>
+            <span id="canonValidationBtnDescription" class="setting-inline-note">校验正文与已确定事实的一致性</span>
+          </div>
+          <label class="toggle-switch">
+            <input id="canonValidationBtn" type="checkbox" aria-describedby="canonValidationBtnDescription" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-text">
+            <div class="setting-label"><label for="oneClickConfirm">一键确认</label><button type="button" id="oneClickInfoBtn" class="setting-info-btn" aria-label="一键确认说明"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button></div>
+            <span id="oneClickConfirmDescription" class="setting-inline-note">正文生成后自动确认回合，开场仍需手动确认</span>
+          </div>
+          <label class="toggle-switch">
+            <input id="oneClickConfirm" type="checkbox" aria-describedby="oneClickConfirmDescription" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </section>
+      <section class="control-group" aria-label="阅读与显示">
+        <h3>阅读与显示</h3>
+        <div class="setting-row">
+          <label class="setting-label" for="fontSizeSelect">正文字号</label>
+          <select id="fontSizeSelect">
+            <option value="14">精小 (14px)</option>
+            <option value="15">标准 (15px)</option>
+            <option value="16.5">适中 (16.5px)</option>
+            <option value="18" selected>大字 (18px)</option>
+            <option value="20">特大 (20px)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="fontFamilySelect">正文字体</label>
+          <select id="fontFamilySelect">
+            <option value="serif">沉香宋体 (典雅)</option>
+            <option value="kaiti">苍劲楷体 (侠风)</option>
+            <option value="ming">雕版明朝 (厚重)</option>
+            <option value="sans">现代无衬线 (清晰)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="themeSelect">界面主题</label>
+          <select id="themeSelect">
+            <option value="dark">玄金暗影 (深色)</option>
+            <option value="sepia">宣纸护眼 (暖阳)</option>
+            <option value="light">月白明彩 (浅色)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div class="setting-text">
+            <div class="setting-label"><label for="tokenUsageSelect">用量显示</label><button type="button" id="tokenUsageInfoBtn" class="setting-info-btn" aria-label="用量显示说明"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button></div>
+            <span id="tokenUsageSelectDescription" class="setting-inline-note">显示 Token 消耗</span>
+          </div>
+          <label class="toggle-switch">
+            <input id="tokenUsageSelect" type="checkbox" aria-describedby="tokenUsageSelectDescription" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </section>
+      <section class="control-group" aria-label="管理入口">
+        <h3>管理入口</h3>
+        <button id="modelSettingsBtn" class="control-entry" type="button">
+          <span>模型服务</span><span class="control-entry-description">设置与检查</span><span class="control-entry-arrow" aria-hidden="true">›</span>
         </button>
-      </header>
+        <button id="openCoreMemoryBtn" class="control-entry" type="button" data-creator-only>
+          <span>核心记忆</span><span class="control-entry-description">编辑世界基础</span><span class="control-entry-arrow" aria-hidden="true">›</span>
+        </button>
+      </section>
+    </div>
+  <section id="saveManagerDialog" hidden class="workspace-page save-manager-modal">
+    <section class="save-manager-shell">
+
       <div class="save-manager-toolbar">
-        <button id="importSaveBtn" class="primary-action" type="button">从 ZIP 导入</button>
+        <button id="managerNewSaveBtn" type="button">新建存档</button>
+        <button id="importSaveBtn" type="button">从 ZIP 导入</button>
         <input id="importSaveInput" type="file" accept=".zip,application/zip" hidden />
       </div>
+      <div id="managerNewSaveSlot"></div>
       <form id="importSaveForm" class="save-import-panel" hidden>
         <label><span id="importSaveFileName">已选择 ZIP</span><input id="importSaveName" maxlength="80" autocomplete="off" placeholder="导入后的存档名称" required /></label>
         <div class="save-card-confirm-actions"><button id="cancelImportSaveBtn" class="soft-button" type="button">取消</button><button class="primary-action" type="submit">开始导入</button></div>
       </form>
+      <div class="workspace-content">
       <div id="saveManagerError" class="form-error" role="alert" hidden></div>
       <div id="saveCardList" class="save-card-list"></div>
+      </div>
     </section>
-  </dialog>
-
-  <dialog id="modelConfigDialog" class="modal model-config-modal">
+  </section>
+  <section id="modelConfigDialog" hidden class="workspace-page model-config-modal">
     <form id="modelConfigForm">
-      <header class="model-config-header">
-        <h2>配置模型服务</h2>
-        <button id="closeModelConfigBtn" class="close-button" type="button" aria-label="关闭">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </header>
+
+      <div class="workspace-content">
       <p id="modelConfigIntro">模型配置只保存在本机，不会写入或导出到任何故事存档。</p>
       <p id="modelPresetNote" class="form-error" role="status" hidden></p>
       <div class="model-config-fields">
@@ -366,9 +382,11 @@
           <input id="modelApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="填写 API Key" />
           <small id="modelKeyHint">保存后不会再次显示或传回浏览器。</small>
         </label>
+        <details id="modelEndpointDetails">
+          <summary>接口设置 <span id="modelEndpointSummary" class="endpoint-summary"></span></summary>
         <div class="model-endpoint-fields">
           <label>
-            <span>Protocol</span>
+            <span>接口协议（Protocol）</span>
             <select id="modelProtocol" autocomplete="off" required>
               <option value="" disabled>请选择协议</option>
               <option value="openai_responses">openai_responses</option>
@@ -378,10 +396,11 @@
             </select>
           </label>
           <label>
-            <span>Base URL</span>
+            <span>服务地址（Base URL）</span>
             <input id="modelBaseUrl" type="url" autocomplete="off" spellcheck="false" placeholder="留空使用官方默认地址" />
           </label>
         </div>
+        </details>
         <details id="modelAdvanced">
           <summary>可选扩展参数</summary>
           <label class="model-thinking-toggle">
@@ -392,29 +411,43 @@
         </fieldset>
       </div>
       <div id="modelTestResult" class="model-test-result" role="status" hidden></div>
-      <div id="modelConfigActions" class="modal-actions" hidden>
+      </div>
+      <div id="modelConfigActions" class="modal-actions workspace-actions" hidden>
         <button id="testModelBtn" type="button">测试连接</button>
         <button id="saveModelOnlyBtn" type="button">保存</button>
         <button id="saveModelBtn" class="primary-action" type="submit">保存并启用</button>
       </div>
     </form>
-  </dialog>
-
-  <dialog id="modelConfigsDialog" class="modal model-configs-modal">
+  </section>
+  <section id="modelConfigsDialog" hidden class="workspace-page model-configs-modal">
     <form id="modelConfigsForm">
-      <header class="model-config-header">
-        <h2>已配置的服务</h2>
-        <button id="closeModelConfigsBtn" class="close-button" type="button" aria-label="关闭">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </header>
-      <p id="modelConfigsIntro">每个 Provider 对应一份服务；修改模型或参数即编辑该服务。Custom 可添加多份。</p>
+
+      <div class="workspace-content">
+      <p id="modelConfigsIntro">选择当前使用的服务，或添加、编辑本机模型连接。</p>
       <div id="modelConfigsList" class="model-configs-list"></div>
-      <div class="modal-actions">
+      </div>
+      <div class="modal-actions workspace-actions">
         <button id="addModelServiceBtn" type="button">添加服务</button>
       </div>
     </form>
-  </dialog>
+  </section>
+  <section id="coreMemoryDialog" hidden class="workspace-page core-memory-modal">
+    <section class="core-memory-shell">
+
+      <div class="workspace-content">
+      <p>正在编辑：<strong id="coreMemorySaveName">当前存档</strong><br>核心记忆是长期稳定的世界基础设定，不会被后续剧情覆盖。</p>
+
+      <div id="coreMemoryList" class="core-memory-list"></div>
+      </div>
+      <div class="modal-actions workspace-actions">
+      <div id="coreMemoryError" class="form-error" role="alert" hidden></div>
+      <p id="coreMemoryStatus" class="workspace-status" role="status"></p>
+        <button id="addCoreMemoryBtn" type="button">＋ 添加条目</button>
+        <button id="saveCoreMemoryBtn" class="primary-action" type="button">保存修改</button>
+      </div>
+    </section>
+  </section>
+  </aside>
 
   <dialog id="feedbackRewriteDialog" class="modal feedback-rewrite-modal">
     <form id="feedbackRewriteForm">
@@ -522,24 +555,6 @@
       <div id="initConfigActions" class="modal-actions"><button id="campaignSetupBtn" class="primary-action" type="button">生成公开世界惯例</button></div>
       <div id="campaignSetupActions" class="modal-actions" hidden><button id="editInitConfigBtn" type="button">返回修改设定</button><button id="regenerateCampaignSetupBtn" type="button">重新生成惯例</button><button id="initSubmitBtn" class="primary-action" value="default">确认惯例并生成开场</button></div>
     </form>
-  </dialog>
-
-  <dialog id="coreMemoryDialog" class="modal core-memory-modal">
-    <section class="core-memory-shell">
-      <header class="core-memory-header">
-        <h2>核心记忆</h2>
-        <button id="closeCoreMemoryBtn" class="close-button" type="button" aria-label="关闭">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </header>
-      <p>核心记忆是长期稳定的世界基础设定，不会被后续剧情覆盖。新增条目来源为「玩家」。</p>
-      <div id="coreMemoryError" class="form-error" role="alert" hidden></div>
-      <div id="coreMemoryList" class="core-memory-list"></div>
-      <div class="modal-actions">
-        <button id="addCoreMemoryBtn" type="button">＋ 添加条目</button>
-        <button id="saveCoreMemoryBtn" class="primary-action" type="button">保存修改</button>
-      </div>
-    </section>
   </dialog>
 
   <div id="tokenUsageDialog" class="token-usage-popover" popover="auto" role="dialog" aria-label="用量明细">

@@ -1,3 +1,4 @@
+import { createManagementWorkspace } from "./management_workspace.js";
 import { createRuntimeNotices } from "./runtime_notices.js";
 import { createCoreMemoryEditor } from "./core_memory_editor.js";
 import { createModelSettings } from "./model_settings.js";
@@ -72,8 +73,8 @@ const els = {
   difficultySelect: $("difficultySelect"), diceDisplaySelect: $("diceDisplaySelect"), canonValidationBtn: $("canonValidationBtn"), canonInfoBtn: $("canonInfoBtn"), tokenUsageInfoBtn: $("tokenUsageInfoBtn"), oneClickInfoBtn: $("oneClickInfoBtn"), settingInfoDialog: $("settingInfoDialog"), settingInfoTitle: $("settingInfoTitle"), settingInfoContent: $("settingInfoContent"), fontSizeSelect: $("fontSizeSelect"), fontFamilySelect: $("fontFamilySelect"), themeSelect: $("themeSelect"), tokenUsageSelect: $("tokenUsageSelect"), oneClickConfirm: $("oneClickConfirm"), tokenUsageDialog: $("tokenUsageDialog"), tokenUsageDialogContent: $("tokenUsageDialogContent"), undoBtn: $("undoBtn"), redoBtn: $("redoBtn"),
   codexDialog: $("codexDialog"), codexTitle: $("codexTitle"), codexContent: $("codexContent"), codexFooter: $("codexFooter"), closeCodexBtn: $("closeCodexBtn"),
   codexConfirmDialog: $("codexConfirmDialog"), codexConfirmEyebrow: $("codexConfirmEyebrow"), codexConfirmTitle: $("codexConfirmTitle"), codexConfirmMessage: $("codexConfirmMessage"), codexConfirmCancelBtn: $("codexConfirmCancelBtn"), codexConfirmOkBtn: $("codexConfirmOkBtn"),
-  saveDialog: $("saveDialog"), saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
-  saveManagerDialog: $("saveManagerDialog"), closeSaveManagerBtn: $("closeSaveManagerBtn"), saveCardList: $("saveCardList"),
+  saveForm: $("saveForm"), saveNameInput: $("saveNameInput"), saveCancelBtn: $("saveCancelBtn"),
+  saveManagerDialog: $("saveManagerDialog"), saveCardList: $("saveCardList"),
   importSaveBtn: $("importSaveBtn"), importSaveInput: $("importSaveInput"), importSaveForm: $("importSaveForm"),
   importSaveName: $("importSaveName"), importSaveFileName: $("importSaveFileName"), cancelImportSaveBtn: $("cancelImportSaveBtn"),
   saveManagerError: $("saveManagerError"),
@@ -268,6 +269,17 @@ function isCurrentPendingTarget(target) {
   return target.saveId === state.activeSave && target.turnId === selectedVariant()?.turn_id;
 }
 
+let difficultySaveBusy = false;
+function renderDifficulty() {
+  for (const button of $("difficultyOptions").querySelectorAll("button")) {
+    const selected = button.dataset.difficulty === els.difficultySelect.value;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = els.difficultySelect.disabled;
+  }
+  $("difficultyDescription").textContent = els.difficultySelect.selectedOptions[0]?.textContent.split(" · ")[1] || "";
+}
+
 function renderControls({ updateNavigation = true } = {}) {
   coreMemoryEditor.refreshControls();
   const context = playerActionContext();
@@ -298,17 +310,20 @@ function renderControls({ updateNavigation = true } = {}) {
   const canRedoPending = pendingIds.some((turnId) => (controls.redo_pending_turn_ids || []).includes(turnId));
   els.undoBtn.disabled = busy || pending || !controls.can_undo;
   els.redoBtn.disabled = busy || (pending && !canRedoPending) || !controls.can_redo;
-  els.difficultySelect.disabled = busy;
+  els.difficultySelect.disabled = busy || difficultySaveBusy;
+  renderDifficulty();
   els.diceDisplaySelect.disabled = busy;
   els.canonValidationBtn.disabled = busy;
   syncCustomSelects([
     els.saveSelect,
-    els.difficultySelect,
     els.diceDisplaySelect,
     els.fontSizeSelect,
     els.fontFamilySelect,
     els.themeSelect,
   ]);
+  systemWorkspace.refresh();
+  for (const control of els.saveForm.querySelectorAll("input, button")) control.disabled = !canChange;
+  $("managerNewSaveBtn").disabled = !canChange;
   refreshPendingControls();
   refreshSuggestionControls(context);
   initialization.refreshControls();
@@ -1429,10 +1444,8 @@ function presentCodexDialog(triggerElement) {
     if (!els.codexDialog.open) els.codexDialog.showModal();
   }
 
-  window.setTimeout(() => {
-    document.addEventListener("pointerdown", handleCodexOutsideClick);
-    document.addEventListener("keydown", handleCodexKeydown);
-  }, 0);
+  document.addEventListener("pointerdown", handleCodexOutsideClick);
+  document.addEventListener("keydown", handleCodexKeydown);
 }
 
 const SETTING_KIND_LABELS = {
@@ -1730,7 +1743,7 @@ function renderDrawer() {
   els.difficultySelect.value = state.playerState?.difficulty || "困难";
   els.diceDisplaySelect.value = state.playerState?.dice_display || "outcome";
   renderCanonValidation();
-  enhanceCustomSelect(els.difficultySelect);
+  renderDifficulty();
   enhanceCustomSelect(els.diceDisplaySelect);
   enhanceCustomSelect(els.fontSizeSelect);
   enhanceCustomSelect(els.fontFamilySelect);
@@ -1752,7 +1765,7 @@ function renderSaves() {
     els.saveSelect.appendChild(option);
   }
   enhanceCustomSelect(els.saveSelect);
-  if (els.saveManagerDialog.open) renderSaveManager();
+  if (systemWorkspace.isOpen("saveManagerDialog")) renderSaveManager();
 }
 
 function formatLastPlayed(value) {
@@ -1788,17 +1801,21 @@ async function runSaveManagerAction(action, successMessage) {
   if (!canChangePlayerState(playerActionContext())) return;
   saveManagerBusy = true;
   saveManagerMessage();
-  renderSaveManager();
+  const controls = [...els.saveManagerDialog.querySelectorAll("input, button")].map(control => [control, control.disabled]);
+  for (const [control] of controls) control.disabled = true;
+  let committed = false;
   renderControls();
   try {
     await action();
+    committed = true;
     await loadAll({ resumeOperation: false });
     showToast(successMessage);
   } catch (error) {
-    saveManagerMessage(error?.message || "存档操作没有完成");
+    saveManagerMessage(`${committed ? "操作已完成，但状态刷新失败：" : ""}${error?.message || "存档操作没有完成"}`);
   } finally {
     saveManagerBusy = false;
-    renderSaveManager();
+    if (committed) renderSaveManager();
+    else for (const [control, disabled] of controls) control.disabled = disabled;
     renderControls();
   }
 }
@@ -1876,6 +1893,9 @@ function renderSaveManager() {
     if (state.saves.length <= 1) {
       deleteButton.disabled = true;
       deleteButton.title = "至少需要保留一个存档";
+    }
+    if (!save.active && save.save_id !== state.activeSave) {
+      actions.appendChild(saveActionButton("切换到此存档", "soft-button", () => switchSave(save.save_id)));
     }
     actions.append(
       saveActionButton("重命名", "soft-button", () => showRenamePanel(card, save)),
@@ -2789,14 +2809,30 @@ function canManageModelSettings() {
     && !["booting", "generating", "confirming", "switching"].includes(state.mode);
 }
 
+const systemWorkspace = createManagementWorkspace({
+  pages: {
+    systemControlHome: { title: "系统控制" },
+    saveManagerDialog: { title: "存档管理", parent: "systemControlHome", width: 760 },
+    modelConfigsDialog: { title: "模型服务", parent: "systemControlHome", width: 680 },
+    modelConfigDialog: { title: "配置模型服务", parent: "modelConfigsDialog", width: 680 },
+    coreMemoryDialog: { title: "核心记忆", parent: "systemControlHome", width: 820 },
+  },
+  beforeLeave: page => page === "coreMemoryDialog" ? coreMemoryEditor.canLeave()
+    : page === "modelConfigDialog" ? modelSettings.canLeaveEditor() : true,
+  onLeave: page => { if (page === "modelConfigDialog") modelSettings.leaveEditor(); },
+  canNavigate: () => !saveManagerBusy && !playerWriteBusy && !modelSettings.isBusy() && !coreMemoryEditor.isBusy()
+    && !(systemWorkspace.isOpen("modelConfigDialog") && $("modelConfigDialog").dataset.required === "true"),
+});
+
 const coreMemoryEditor = createCoreMemoryEditor({
   node, canWrite: () => canChangePlayerState(playerActionContext()),
-  onBusyChange: renderControls, showToast, showError,
+  onBusyChange: renderControls, showToast, workspace: systemWorkspace, resizeTextarea: autoExpandTextarea,
+  reportError: error => reportClientError(error, "core_memory_load_failed"),
 });
 
 const modelSettings = createModelSettings({
   canManage: canManageModelSettings, onBusyChange: renderControls,
-  reload: loadAll, showToast,
+  reload: loadAll, showToast, workspace: systemWorkspace,
 });
 
 const initialization = createInitialization({
@@ -2905,7 +2941,14 @@ async function createSave(name) {
       method: "POST",
       body: JSON.stringify({ name, activate: true }),
     });
-    state.suggestions = []; await loadAll({ scroll: "instant", completePlayerWrite: true });
+    state.suggestions = [];
+    try { await loadAll({ scroll: "instant", completePlayerWrite: true }); }
+    catch (error) {
+      reportClientError(error, "created_save_refresh_failed");
+      setOperationMode("error");
+      showToast(`存档已创建，但状态刷新未完成，请刷新页面：${error.message || "读取失败"}`);
+    }
+    return true;
   } finally {
     playerWriteBusy = false;
     renderControls();
@@ -3088,6 +3131,8 @@ function renderExperienceModeToggle() {
   const creator = state.experienceMode === "creator";
   if (els.experienceModePlayerBtn) els.experienceModePlayerBtn.classList.toggle("is-active", !creator);
   if (els.experienceModeCreatorBtn) els.experienceModeCreatorBtn.classList.toggle("is-active", creator);
+  els.experienceModePlayerBtn?.setAttribute("aria-pressed", String(!creator));
+  els.experienceModeCreatorBtn?.setAttribute("aria-pressed", String(creator));
 }
 
 function applyUiMode() {
@@ -4200,14 +4245,9 @@ function renderEventRecords(events, error = null) {
 }
 
 
-function openDrawer() { els.drawer.classList.add("open"); els.drawer.setAttribute("aria-hidden", "false"); els.drawerBackdrop.hidden = false; }
-function closeDrawer() {
-  els.drawer.classList.remove("open");
-  els.drawer.setAttribute("aria-hidden", "true");
-  if (!els.leftDrawer?.classList.contains("open")) {
-    els.drawerBackdrop.hidden = true;
-  }
-}
+function openDrawer() { systemWorkspace.show(); }
+function closeDrawer() { return systemWorkspace.close(); }
+
 function scrollToBottom(mode = "smooth", onSettled = null) {
   const behavior = mode === "smooth" ? "smooth" : "auto";
   const move = () => window.scrollTo({
@@ -4250,23 +4290,56 @@ if (els.recordsTabSetting) els.recordsTabSetting.onclick = () => openRecordsTab(
 if (els.recordsTabEvent) els.recordsTabEvent.onclick = () => openRecordsTab("event");
 if (els.openCoreMemoryBtn) els.openCoreMemoryBtn.onclick = () => {
   if (state.mode === "switching" || saveManagerBusy) return;
-  closeDrawer();
+  $("coreMemorySaveName").textContent = state.saves.find(save => save.save_id === state.activeSave)?.name || "当前存档";
   coreMemoryEditor.open();
 };
-els.drawerBackdrop.onclick = () => { closeDrawer(); closeLeftDrawer(); closeRecordsDrawer(); };
+els.drawerBackdrop.onclick = async () => {
+  if (els.drawer.classList.contains("open") && !await closeDrawer()) return;
+  closeLeftDrawer();
+  closeRecordsDrawer();
+};
 els.saveSelect.onchange = () => switchSave(els.saveSelect.value);
-els.newSaveBtn.onclick = () => { els.saveNameInput.value = ""; els.saveDialog.showModal(); window.setTimeout(() => els.saveNameInput.focus(), 0); };
-els.saveCancelBtn.onclick = () => els.saveDialog.close();
-els.saveForm.addEventListener("submit", async (event) => { event.preventDefault(); const name = els.saveNameInput.value.trim(); if (!name) return; els.saveDialog.close(); try { await createSave(name); } catch (error) { showError(error); } });
+let newSaveTrigger = null;
+function openNewSaveForm(trigger, slot) {
+  if (!canChangePlayerState(playerActionContext())) return;
+  newSaveTrigger = trigger;
+  $(slot).appendChild(els.saveForm);
+  els.saveForm.hidden = false;
+  $("newSaveError").hidden = true;
+  $("newSaveError").open = false;
+  els.saveNameInput.focus();
+}
+els.newSaveBtn.onclick = () => openNewSaveForm(els.newSaveBtn, "homeNewSaveSlot");
+$("managerNewSaveBtn").onclick = () => openNewSaveForm($("managerNewSaveBtn"), "managerNewSaveSlot");
+els.saveCancelBtn.onclick = () => {
+  els.saveForm.hidden = true;
+  newSaveTrigger?.focus({ preventScroll: true });
+};
+els.saveForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const name = els.saveNameInput.value.trim();
+  if (!name || !canChangePlayerState(playerActionContext())) return;
+  $("newSaveError").hidden = true;
+  $("newSaveError").open = false;
+  try {
+    if (!await createSave(name)) return;
+    els.saveForm.hidden = true;
+    els.saveNameInput.value = "";
+    await closeDrawer();
+  } catch (error) {
+    reportClientError(error, "save_create_failed");
+    setOperationMode("error");
+    $("newSaveErrorMessage").textContent = error.message || "存档创建未完成，请重试。";
+    $("newSaveError").hidden = false;
+  }
+});
 els.manageSavesBtn.onclick = () => {
   saveManagerMessage();
   renderSaveManager();
-  els.saveManagerDialog.showModal();
+  systemWorkspace.show("saveManagerDialog");
 };
-els.modelSettingsBtn.onclick = () => {
-  closeDrawer();
-  modelSettings.open();
-};
+els.modelSettingsBtn.onclick = () => modelSettings.open();
+$("workspaceBackBtn").onclick = () => systemWorkspace.back();
 async function refreshGameView() {
   if (playerActionContext().busy || ["generating", "confirming", "switching"].includes(state.mode)) {
     showToast("当前操作尚未完成，请稍候");
@@ -4295,7 +4368,13 @@ document.addEventListener("keydown", (event) => {
   }
 
   if (event.key === "Escape") {
-    if (document.querySelector("dialog[open]")) return;
+    if (event.defaultPrevented) return;
+    if (document.querySelector("dialog[open]") || document.querySelector("[popover]:popover-open")) return;
+    if (els.drawer.classList.contains("open")) {
+      event.preventDefault();
+      systemWorkspace.back();
+      return;
+    }
     let closed = false;
     if (els.leftDrawer?.classList.contains("open")) { closeLeftDrawer(); closed = true; }
     if (els.recordsDrawer?.classList.contains("open")) { closeRecordsDrawer(); closed = true; }
@@ -4362,7 +4441,6 @@ $("closeRecordsBrowseBtn").onclick = async () => {
     tab.focus({ preventScroll: true });
   }
 };
-els.closeSaveManagerBtn.onclick = () => els.saveManagerDialog.close();
 els.importSaveBtn.onclick = () => els.importSaveInput.click();
 els.importSaveInput.onchange = () => {
   const file = els.importSaveInput.files?.[0];
@@ -4390,7 +4468,29 @@ els.importSaveForm.onsubmit = (event) => {
     els.importSaveForm.hidden = true;
   }, "存档已导入");
 };
-els.difficultySelect.onchange = async () => { try { await request("/api/player/difficulty", { method: "POST", body: JSON.stringify({ difficulty: els.difficultySelect.value }) }); state.playerState.difficulty = els.difficultySelect.value; showToast("难度已更新"); } catch (error) { showError(error); } };
+$("difficultyOptions").onclick = (event) => {
+  const button = event.target.closest("button[data-difficulty]");
+  if (!button || button.disabled) return;
+  els.difficultySelect.value = button.dataset.difficulty;
+  els.difficultySelect.dispatchEvent(new Event("change"));
+};
+els.difficultySelect.onchange = async () => {
+  const previous = state.playerState.difficulty || "困难";
+  const difficulty = els.difficultySelect.value;
+  difficultySaveBusy = true;
+  renderControls();
+  try {
+    await request("/api/player/difficulty", { method: "POST", body: JSON.stringify({ difficulty }) });
+    state.playerState.difficulty = difficulty;
+    showToast("难度已更新");
+  } catch (error) {
+    els.difficultySelect.value = previous;
+    showError(error);
+  } finally {
+    difficultySaveBusy = false;
+    renderControls();
+  }
+};
 els.diceDisplaySelect.onchange = async () => {
   const previous = state.playerState.dice_display || "outcome";
   try {

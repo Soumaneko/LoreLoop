@@ -1719,7 +1719,9 @@ config_id keeps multiple entries separate. Existing name fields remain readable.
 The model field is one editable ID input with optional suggestions. There is no
 manual/list mode switch or confirmation checkbox. Keyboard highlight stays in
 the input; Enter selects without submitting and Escape closes suggestions.
-Protocol and Base URL are visible, including for Custom. A fresh catalog draft
+Protocol and Base URL live in connection settings: Custom, incomplete targets
+and manually changed targets are expanded, while complete preset connections
+start collapsed with their protocol/address summary visible. A fresh catalog draft
 without a model row requires an explicit protocol and address before testing;
 Custom can explicitly use an SDK default address. Catalog refresh updates only
 candidates, with editor-session checks on asynchronous UI updates. Key ownership
@@ -1728,7 +1730,7 @@ advanced extension, available only on openai_chat.
 
 `model_settings.js` owns the service list, editor drafts, connection tests,
 catalog cache/request tokens, and editor sessions. `app.js` binds it once and
-uses its `open` and `isBusy` entries; explicit callbacks check application
+uses its open/busy and editor-leave entries; explicit callbacks check application
 conflicts, refresh controls, and reload the active configuration. Model setup
 remains available in `needs_model`. Editing a service only changes its private
 draft; `state.modelConfig` continues to represent the server's active service.
@@ -1855,6 +1857,50 @@ raised and editor tokens keep the top bar, composer and Codex at or below the
 reading background's brightness; separation comes from borders and restrained
 tone differences. Their previous brighter surfaces and downward-darkening page
 gradients competed with the prose. The dark theme's palette remains independent.
+
+The system-control drawer groups journey/save controls, adjudication/generation,
+reading/display and management entrances under visible headings. Names and short
+explanations have separate lines; select and checkbox labels identify their actual
+controls. Save creation/management use light text actions, while management
+entrances use full-row buttons. Core Memory remains creator-only. The header
+stays visible while a single body region scrolls. Select rows stack when the
+body's available width is narrow, including resized drawers; other rows keep
+switches aligned to the right. Controls follow the reader theme and retain their
+existing save, busy and draft-protection behavior. Opening focuses the close
+button; closing from within returns focus to the system-control entrance.
+
+Mode switches have larger targets, while difficulty exposes three choices and
+its current dice rule. Difficulty choices share the original setting value and
+write endpoint, lock while saving and restore the last confirmed value on failure.
+Font options preview the same font stacks used by the reader; theme options carry
+small color samples. Save menus wrap full names and the closed control provides
+its full value as a tooltip. Management entrances are full-row buttons. Menu and
+trigger typography share normal weight and size, except for the explicit font
+previews. Character triangles and selected stars are retained and use the fixed
+Songti stack regardless of reader font. Public lookup dialogs bind dismissal
+handlers synchronously when opened, so an immediate Escape restores focus.
+
+`management_workspace.js` keeps system controls, saves, model services and Core
+Memory in one right-hand surface. New-save creation is an inline form shared by
+the compact save section and save manager, with its activation consequence stated
+beside the field. On the control home, creation replaces the selector and actions
+inside their existing bounds, keeping subsequent settings stationary. Failure
+replaces the short hint with an expandable explanation; the complete cause opens
+within an anchored panel without reflowing the settings. Failed creation keeps the name and permits retry; a completed
+creation is not reported as a failed write if the subsequent refresh fails.
+The save manager can switch saves and retains a failed rename draft. Successful
+writes followed by refresh errors are identified separately from write failures.
+
+Management pages replace the control home rather than stacking dialogs. Back
+returns to their parent with its scroll and focus; model editing returns to the
+service list. A single backdrop, fixed navigation header and content-specific
+widths serve all pages. The open workspace contains keyboard focus and makes the
+reading background inert, restoring it when closed. Small screens use the full width for management. Only the
+content region scrolls; model/core actions stay in the footer. Compact controls
+retain their existing adjustable width; child pages use their task-specific
+width. Model and Core Memory guards prevent leaving during writes or silently
+losing edited drafts. Hidden model editors invalidate catalog callbacks and
+clear their API-key field. The original endpoints and save formats are unchanged.
 
 The composer shares the 790px reading-width limit and keeps its padding and
 line height stable through focus changes. Its visible label and help text
@@ -2063,9 +2109,10 @@ switch prompts before discarding dirty record edits; callers must save or
 explicitly discard edits before actions that intentionally replace the records
 projection.
 
-`core_memory_editor.js` owns the Core Memory draft, DOM, loading, saving, and
-close/Escape handlers. `app.js` binds and opens it, supplies action admission,
-and includes its busy state in `playerActionContext`. Uninitialized memory
+`core_memory_editor.js` owns the Core Memory draft, DOM, loading, saving and
+unsaved-change guard. `app.js` binds and opens it, supplies action admission,
+and includes its busy state in `playerActionContext`. The shared management
+workspace owns Back, Escape and closing, consulting the editor before leaving. Uninitialized memory
 shows an explanation and an empty, non-writable editor. Saving locks its inputs,
 add/delete actions, and closing until completion; failures keep the draft and
 successful saves apply the returned items without a second read.

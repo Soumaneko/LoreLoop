@@ -33,7 +33,9 @@ export function syncCustomSelect(selectElement) {
   const label = wrapper.querySelector(".codex-custom-select-label");
   const trigger = wrapper.querySelector(".codex-custom-select-trigger");
   if (label) label.textContent = selected?.textContent || "请选择";
+  wrapper.dataset.value = selected?.value || "";
   if (trigger) {
+    trigger.title = selected?.textContent || "请选择";
     trigger.disabled = selectElement.disabled;
     trigger.setAttribute("aria-disabled", String(selectElement.disabled));
   }

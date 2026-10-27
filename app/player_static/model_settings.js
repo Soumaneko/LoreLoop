@@ -16,20 +16,21 @@ import {
 } from "./model_configs.js";
 import { createModelCombobox } from "./model_combobox.js";
 
-export function createModelSettings({ canManage, onBusyChange, reload, showToast }) {
+export function createModelSettings({ canManage, onBusyChange, reload, showToast, workspace }) {
   const $ = (id) => document.getElementById(id);
   const els = {
     modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
-    closeModelConfigBtn: $("closeModelConfigBtn"), modelConfigIntro: $("modelConfigIntro"), modelPresetNote: $("modelPresetNote"),
+    modelConfigIntro: $("modelConfigIntro"), modelPresetNote: $("modelPresetNote"),
     modelProvider: $("modelProvider"), modelApiKey: $("modelApiKey"),
     modelKeyHint: $("modelKeyHint"), modelBaseUrl: $("modelBaseUrl"), modelName: $("modelName"), modelNameMenu: $("modelNameMenu"),
     modelProtocol: $("modelProtocol"), modelAdvanced: $("modelAdvanced"),
+    modelEndpointDetails: $("modelEndpointDetails"), modelEndpointSummary: $("modelEndpointSummary"),
     modelRefreshBtn: $("modelRefreshBtn"), modelCatalogStatus: $("modelCatalogStatus"),
     modelThinking: $("modelThinking"), modelTestResult: $("modelTestResult"), testModelBtn: $("testModelBtn"), saveModelBtn: $("saveModelBtn"), saveModelOnlyBtn: $("saveModelOnlyBtn"),
     modelProviderSearch: $("modelProviderSearch"), modelProviderResults: $("modelProviderResults"), modelProviderPanel: $("modelProviderPanel"), modelProviderLabel: $("modelProviderLabel"), modelCustomBtn: $("modelCustomBtn"),
     modelProviderSelected: $("modelProviderSelected"), modelProviderChange: $("modelProviderChange"),
     modelProviderExpand: $("modelProviderExpand"), modelConnectionFields: $("modelConnectionFields"), modelConfigActions: $("modelConfigActions"),
-    modelConfigsDialog: $("modelConfigsDialog"), modelConfigsForm: $("modelConfigsForm"), closeModelConfigsBtn: $("closeModelConfigsBtn"),
+    modelConfigsDialog: $("modelConfigsDialog"), modelConfigsForm: $("modelConfigsForm"),
     modelConfigsIntro: $("modelConfigsIntro"), modelConfigsList: $("modelConfigsList"), addModelServiceBtn: $("addModelServiceBtn"),
   };
   const listIntro = els.modelConfigsIntro.textContent;
@@ -141,7 +142,7 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     setModelConfigBusy(true);
     try {
       const catalog = await loadModelCatalog({ force: true });
-      if (session !== modelEditorSession || !els.modelConfigDialog.open || !catalog) return;
+      if (session !== modelEditorSession || !workspace.isOpen("modelConfigDialog") || !catalog) return;
       renderProviderOptions(catalog);
       updateModelCombobox(catalogProviderById(catalog, modelSelection.preset_id));
       showToast("模型目录已刷新");
@@ -281,6 +282,9 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     // A fresh catalog draft has no inferred target until a row or user supplies it.
     els.modelBaseUrl.required = modelDraftIsNew && !custom;
     els.modelProtocol.required = true;
+    els.modelEndpointDetails.open = custom || modelAdvancedTouched || !els.modelProtocol.value
+      || (els.modelBaseUrl.required && !els.modelBaseUrl.value.trim());
+    els.modelEndpointSummary.textContent = `${els.modelProtocol.value || "待选择协议"} · ${els.modelBaseUrl.value.trim() || "默认地址"}`;
   }
 
   function syncModelKeyHint() {
@@ -340,7 +344,6 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
 
   function renderModelConfigForm(config, { required = false } = {}) {
     els.modelConfigDialog.dataset.required = required ? "true" : "false";
-    els.closeModelConfigBtn.hidden = required;
     els.modelConfigIntro.textContent = required
       ? "开始故事前，请先配置并测试本机使用的模型服务。配置不会写入或导出到故事存档。"
       : "模型配置只保存在本机，不会写入或导出到任何故事存档。";
@@ -372,11 +375,11 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     const session = modelEditorSession;
     try {
       const catalog = await loadModelCatalog();
-      if (session !== modelEditorSession || !els.modelConfigDialog.open || !catalog) return;
+      if (session !== modelEditorSession || !workspace.isOpen("modelConfigDialog") || !catalog) return;
       renderProviderOptions(catalog);
       updateModelCombobox(catalogProviderById(catalog, modelSelection.preset_id));
     } catch (error) {
-      if (session !== modelEditorSession || !els.modelConfigDialog.open) return;
+      if (session !== modelEditorSession || !workspace.isOpen("modelConfigDialog")) return;
       renderProviderOptions(modelCatalogCache);
       showModelPresetNote("模型目录暂时不可用，仍可填写服务地址和模型，或使用已保存配置。");
     }
@@ -419,9 +422,9 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
       name: "",
     }, { required });
     refreshControls();
-    if (!els.modelConfigDialog.open) els.modelConfigDialog.showModal();
+    workspace.show("modelConfigDialog");
     window.setTimeout(() => (
-      isNew ? els.modelProviderSearch : config?.has_api_key ? els.modelBaseUrl : els.modelApiKey
+      isNew ? els.modelProviderSearch : config?.has_api_key ? els.modelName : els.modelApiKey
     ).focus(), 0);
   }
 
@@ -440,10 +443,6 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     els.modelProvider.disabled = busy || !modelDraftIsNew;
     els.modelConnectionFields.disabled = busy || (modelDraftIsNew && modelProviderPickerOpen);
     els.modelThinking.disabled = busy || els.modelProtocol.value !== "openai_chat";
-    els.closeModelConfigBtn.hidden = els.modelConfigDialog.dataset.required === "true";
-    els.closeModelConfigBtn.title = busy ? "当前操作完成后可关闭" : "关闭";
-    els.closeModelConfigsBtn.disabled = busy;
-    els.closeModelConfigsBtn.title = busy ? "当前操作完成后可关闭" : "关闭";
     els.addModelServiceBtn.disabled = busy;
     for (const button of els.modelConfigsList.querySelectorAll("button[data-service-action]")) {
       const service = findConfigService(modelConfigsCache?.services || [], button.dataset.configId);
@@ -507,7 +506,6 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
       });
       modelConfigsCache = configs;
       els.modelApiKey.value = "";
-      els.modelConfigDialog.close();
       showList();
       const message = activate ? "模型配置已保存并立即启用" : "模型配置已保存";
       if (activate || payload.config_id === configs.active_config_id) await refreshActiveConfig(message);
@@ -595,12 +593,12 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
   function showList() {
     els.modelConfigsIntro.textContent = listIntro;
     renderModelConfigsList();
-    if (!els.modelConfigsDialog.open) els.modelConfigsDialog.showModal();
+    workspace.show("modelConfigsDialog");
   }
 
   async function openModelConfigs() {
     if (!available()) return;
-    if (els.modelConfigDialog.open) {
+    if (workspace.isOpen("modelConfigDialog")) {
       els.modelConfigDialog.focus();
       return;
     }
@@ -623,13 +621,11 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
       showToast("服务已不存在，请重新打开列表");
       return;
     }
-    els.modelConfigsDialog.close();
     openModelConfig(service, { configId: config_id, isNew: false, activate: true });
   }
 
   function addModelService() {
     if (!available()) return;
-    els.modelConfigsDialog.close();
     openModelConfig({ configured: false, has_api_key: false, base_url: "", model: "",
       thinking: false, protocol: "openai_chat", preset_id: "custom", model_id: "", name: "",
     }, { isNew: true, activate: true });
@@ -668,24 +664,19 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     }
   }
 
-  function closeEditor() {
-    if (modelConfigBusy) { showToast("正在处理模型服务，请等待完成"); return; }
-    if (els.modelConfigDialog.dataset.required === "true") return;
-    if (modelDraftDirty && !window.confirm("有未保存的修改，确定放弃？")) return;
-    els.modelConfigDialog.close();
-    showList();
+  function canLeaveEditor() {
+    if (modelConfigBusy || els.modelConfigDialog.dataset.required === "true") return false;
+    return !modelDraftDirty || window.confirm("有未保存的修改，确定放弃？");
   }
 
-  function closeList() {
-    if (modelConfigBusy) { showToast("正在处理模型服务，请等待完成"); return; }
-    els.modelConfigsDialog.close();
+  function leaveEditor() {
+    modelEditorSession += 1;
+    modelCombobox.close();
+    els.modelApiKey.value = "";
   }
 
   function bind() {
     initModelConfigEditor();
-    els.closeModelConfigBtn.onclick = closeEditor;
-    els.closeModelConfigsBtn.onclick = closeList;
-    els.modelConfigsDialog.addEventListener("cancel", (event) => { event.preventDefault(); closeList(); });
     els.addModelServiceBtn.onclick = addModelService;
     els.saveModelOnlyBtn.onclick = () => saveModelSettings(false);
 
@@ -704,17 +695,17 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     els.modelName.addEventListener("change", onModelNameChanged);
     els.modelProtocol.addEventListener("change", () => {
       modelAdvancedTouched = true;
+      syncEndpointFields();
       syncThinkingField();
       markConnectionDirty();
     });
     els.modelBaseUrl.addEventListener("change", () => {
       modelAdvancedTouched = true;
+      syncEndpointFields();
       markConnectionDirty();
     });
-    els.modelConfigDialog.addEventListener("close", () => { modelEditorSession += 1; modelCombobox.close(); });
-    els.modelConfigDialog.addEventListener("cancel", (event) => { event.preventDefault(); closeEditor(); });
     refreshControls();
   }
 
-  return { bind, open: openModelConfigs, isBusy: () => modelConfigBusy };
+  return { bind, open: openModelConfigs, isBusy: () => modelConfigBusy, canLeaveEditor, leaveEditor };
 }

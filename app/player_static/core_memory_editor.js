@@ -13,14 +13,20 @@ const CORE_MEMORY_STRENGTH_OPTIONS = [
 ];
 const CORE_MEMORY_SOURCE_LABELS = { player: "玩家", campaign_setup: "世界构建" };
 
-export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast, showError }) {
+export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast, workspace, resizeTextarea, reportError }) {
   const els = Object.fromEntries([
-    "coreMemoryDialog", "closeCoreMemoryBtn", "addCoreMemoryBtn", "saveCoreMemoryBtn",
-    "coreMemoryList", "coreMemoryError",
+    "coreMemoryDialog", "addCoreMemoryBtn", "saveCoreMemoryBtn",
+    "coreMemoryList", "coreMemoryError", "coreMemoryStatus",
   ].map(id => [id, document.getElementById(id)]));
   let coreMemoryItems = [];
   let initialized = false;
   let busy = false;
+  let original = "[]";
+
+  function renderStatus() {
+    els.coreMemoryStatus.textContent = JSON.stringify(coreMemoryItems) !== original
+      ? "尚未保存" : initialized ? `${coreMemoryItems.length} 条设定` : "";
+  }
 
   function refreshControls() {
     const writable = initialized && !busy && canWrite();
@@ -29,7 +35,7 @@ export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast
     }
     els.addCoreMemoryBtn.disabled = !writable;
     els.saveCoreMemoryBtn.disabled = !writable;
-    els.closeCoreMemoryBtn.disabled = busy;
+    renderStatus();
   }
 
   function setBusy(value) {
@@ -59,11 +65,14 @@ export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast
       const row = node("div", "core-memory-item");
       const head = node("div", "core-memory-item-head");
       const kindSelect = _buildCoreMemorySelect(CORE_MEMORY_KIND_OPTIONS, item.kind);
-      kindSelect.addEventListener("change", () => { item.kind = kindSelect.value; });
+      kindSelect.addEventListener("change", () => { item.kind = kindSelect.value; renderStatus(); });
       const strengthSelect = _buildCoreMemorySelect(CORE_MEMORY_STRENGTH_OPTIONS, item.strength);
-      strengthSelect.addEventListener("change", () => { item.strength = strengthSelect.value; });
-      head.appendChild(kindSelect);
-      head.appendChild(strengthSelect);
+      strengthSelect.addEventListener("change", () => { item.strength = strengthSelect.value; renderStatus(); });
+      const kindLabel = node("label", "", "分类");
+      kindLabel.appendChild(kindSelect);
+      const strengthLabel = node("label", "", "约束强度");
+      strengthLabel.appendChild(strengthSelect);
+      head.append(kindLabel, strengthLabel);
       head.appendChild(node("span", "core-memory-item-source", CORE_MEMORY_SOURCE_LABELS[item.source] || item.source || ""));
       const removeBtn = node("button", "remove-core-memory-btn", "删除");
       removeBtn.type = "button";
@@ -72,34 +81,44 @@ export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast
         const index = items.indexOf(item);
         if (index >= 0) items.splice(index, 1);
         renderCoreMemoryItems(items);
+        refreshControls();
       };
       head.appendChild(removeBtn);
       row.appendChild(head);
       const textarea = node("textarea");
       textarea.value = item.content || "";
       textarea.rows = 3;
-      textarea.addEventListener("input", () => { item.content = textarea.value; });
+      textarea.setAttribute("aria-label", "设定内容");
+      textarea.addEventListener("input", () => { item.content = textarea.value; resizeTextarea(textarea); renderStatus(); });
       row.appendChild(textarea);
       els.coreMemoryList.appendChild(row);
+      resizeTextarea(textarea);
     }
   }
 
   async function open() {
-    if (busy || els.coreMemoryDialog.open) return;
+    if (busy || workspace.isOpen("coreMemoryDialog")) return;
+    workspace.show("coreMemoryDialog");
+    initialized = false;
+    coreMemoryItems = [];
+    original = "[]";
+    els.coreMemoryList.textContent = "正在读取世界基础…";
     setBusy(true);
     els.coreMemoryError.hidden = true;
     try {
       const payload = await loadCoreMemory();
       initialized = Boolean(payload.initialized);
       coreMemoryItems = initialized ? (payload.items || []).map(item => ({ ...item })) : [];
+      original = JSON.stringify(coreMemoryItems);
       renderCoreMemoryItems(coreMemoryItems);
       if (!initialized) {
         els.coreMemoryError.textContent = "核心记忆尚未初始化，请先完成世界初始化。";
         els.coreMemoryError.hidden = false;
       }
-      els.coreMemoryDialog.showModal();
     } catch (error) {
-      showError(error);
+      reportError(error);
+      els.coreMemoryError.textContent = error?.message || "世界基础读取失败，请返回后重试。";
+      els.coreMemoryError.hidden = false;
     } finally {
       setBusy(false);
     }
@@ -111,6 +130,7 @@ export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast
     try {
       const payload = await saveCoreMemory(coreMemoryItems);
       coreMemoryItems = (payload.items || []).map(item => ({ ...item }));
+      original = JSON.stringify(coreMemoryItems);
       renderCoreMemoryItems(coreMemoryItems);
       els.coreMemoryError.hidden = true;
       showToast("核心记忆已更新");
@@ -122,22 +142,22 @@ export function createCoreMemoryEditor({ node, canWrite, onBusyChange, showToast
     }
   }
 
-  function close() {
-    if (busy) return;
-    els.coreMemoryDialog.close();
+  function canLeave() {
+    if (busy) return false;
+    return JSON.stringify(coreMemoryItems) === original || window.confirm("核心记忆有未保存的修改，确定放弃？");
   }
 
   function bind() {
-    els.closeCoreMemoryBtn.onclick = close;
-    els.coreMemoryDialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
     els.addCoreMemoryBtn.onclick = () => {
       if (busy || !initialized || !canWrite()) return;
       coreMemoryItems.push({ id: "", kind: "narrative_preference", strength: "strong_preference", source: "player", content: "" });
       renderCoreMemoryItems(coreMemoryItems);
       refreshControls();
+      const textarea = els.coreMemoryList.querySelector(".core-memory-item:last-child textarea");
+      textarea?.focus();
     };
     els.saveCoreMemoryBtn.onclick = save;
   }
 
-  return { bind, open, refreshControls, isBusy: () => busy };
+  return { bind, open, refreshControls, isBusy: () => busy, canLeave };
 }
