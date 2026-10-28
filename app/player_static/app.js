@@ -1,4 +1,5 @@
 import { createManagementWorkspace } from "./management_workspace.js";
+import { createAppNavigation } from "./app_navigation.js";
 import { readRefreshSnapshot } from "./state_refresh.js";
 import { createRuntimeNotices } from "./runtime_notices.js";
 import { createCoreMemoryEditor } from "./core_memory_editor.js";
@@ -339,6 +340,7 @@ function renderControls({ updateNavigation = true } = {}) {
   refreshSuggestionControls(context);
   initialization.refreshControls();
   if (updateNavigation) renderTurnNavigator();
+  renderJourneyLibrary();
 }
 
 function renderHeader() {
@@ -737,7 +739,7 @@ function setNavigationActive(key) {
   if (!next) return;
   next.classList.add("active");
   next.setAttribute("aria-current", "step");
-  next.scrollIntoView({ block: "nearest", behavior: "auto" });
+  if (appNavigation.isReading()) next.scrollIntoView({ block: "nearest", behavior: "auto" });
 }
 
 function navigationKeyAtReadingLine(anchors) {
@@ -767,7 +769,7 @@ function sameNavigationAnchors(left, right) {
 }
 
 function refreshNavigationObserver({ force = false } = {}) {
-  if (!els.turnNavigator || els.turnNavigator.hidden) {
+  if (!appNavigation.isReading() || !els.turnNavigator || els.turnNavigator.hidden) {
     navigationObserver?.disconnect();
     navigationObserver = null;
     navigationObservedAnchors = [];
@@ -833,6 +835,7 @@ function settleNavigationTarget(key) {
 }
 
 function scrollToNavigationTarget(element, key) {
+  if (!appNavigation.isReading()) return;
   cancelNavigationSettlement();
   pinnedNavigationKey = key;
   if ("onscrollend" in window) {
@@ -848,6 +851,7 @@ function scrollToNavigationTarget(element, key) {
 }
 
 async function jumpToHistoryTurn(turnIndex) {
+  if (!appNavigation.isReading()) return;
   const jumpSequence = ++navigationJumpSequence;
   let target = els.history.querySelector(`[data-turn-index="${turnIndex}"]`);
   while (!target) {
@@ -918,7 +922,7 @@ async function loadEarlierHistory({
   force = false,
   limit = HISTORY_PAGE_SIZE,
 } = {}) {
-  if (stateRefreshBusy) return 0;
+  if (stateRefreshBusy || !appNavigation.isReading()) return 0;
   if (historyLoadPromise && historyLoadSaveName === state.activeSave) {
     return historyLoadPromise;
   }
@@ -935,8 +939,6 @@ async function loadEarlierHistory({
   const loadPromise = (async () => {
     state.historyLoading = true;
     const saveName = state.activeSave;
-    const previousHeight = document.documentElement.scrollHeight;
-    const previousY = window.scrollY;
     try {
       const page = await request(
         `/api/player/history?before_turn=${encodeURIComponent(history[0].turn_index)}&limit=${encodeURIComponent(limit)}`,
@@ -965,9 +967,10 @@ async function loadEarlierHistory({
         state.playerState.history = [...uniqueEarlier, ...state.playerState.history];
         const fragment = document.createDocumentFragment();
         uniqueEarlier.forEach((turn) => fragment.appendChild(renderTurn(turn)));
+        const anchor = els.history.firstElementChild;
+        const previousTop = anchor?.getBoundingClientRect().top;
         els.history.prepend(fragment);
-        const addedHeight = document.documentElement.scrollHeight - previousHeight;
-        window.scrollTo({ top: previousY + addedHeight, behavior: "auto" });
+        if (appNavigation.isReading() && anchor) window.scrollBy({ top: anchor.getBoundingClientRect().top - previousTop, behavior: "instant" });
       }
       state.playerState.history_pagination = page.pagination || { has_more: false };
       refreshNavigationObserver({ force: true });
@@ -1217,7 +1220,9 @@ function beginEdit(display, closing, actions, variant) {
   editActions.append(cancel, save);
   renderControls();
   editor.focus();
+  const visit = appNavigation.revision;
   window.setTimeout(() => {
+    if (!editor.isConnected || !appNavigation.isReading() || visit !== appNavigation.revision) return;
     const rect = editor.getBoundingClientRect();
     const targetY = window.scrollY + rect.top - 100;
     window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
@@ -2157,7 +2162,6 @@ function enterModelSetup(config) {
   state.modelConfig = config;
   setOperationMode("needs_model");
   initialization.hide();
-  modelSettings.open();
 }
 
 async function loadAll({ scroll = false, resumeOperation = true, knownModelConfig = null, completePlayerWrite = false } = {}) {
@@ -2173,6 +2177,9 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
   const previousSaveId = state.activeSave;
   state.activeSave = saves.active;
   if (previousSaveId !== state.activeSave) {
+    appNavigation.invalidateReading();
+    els.playerInput.value = "";
+    autoSizeInput();
     clearRuntimeNotices();
     recordsDirty = false;
     state.events = null;
@@ -2281,7 +2288,6 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     }
     return;
   }
-  if (playerState.needs_init) initialization.open();
   if (scroll) scrollToBottom(scroll, () => { state.historyPagingEnabled = true; });
   else window.requestAnimationFrame(() => { state.historyPagingEnabled = true; });
 }
@@ -2301,15 +2307,18 @@ async function bootstrap() {
   state.modelConfig = modelConfig;
   if (!modelConfig.configured) {
     enterModelSetup(modelConfig);
+    modelSettings.open();
     return;
   }
   restorePlayerShell();
   await loadAll({ scroll: "instant", knownModelConfig: modelConfig });
+  if (state.playerState?.needs_init && appNavigation.isReading()) initialization.open();
 }
 
 function setProgress(step) {
   const label = progressLabels[step];
   if (label) els.streamingLabel.textContent = label;
+  if (label && !appNavigation.isReading()) $("journeyLibraryStatus").textContent = `${modeLabels[state.mode]} · ${label}`;
   const confirmationLabel = document.querySelector("#confirmationProgress .confirmation-progress-label");
   if (label && confirmationLabel) confirmationLabel.textContent = label;
 }
@@ -2845,12 +2854,18 @@ const coreMemoryEditor = createCoreMemoryEditor({
 
 const modelSettings = createModelSettings({
   canManage: canManageModelSettings, onBusyChange: renderControls,
-  reload: loadAll, showToast, workspace: systemWorkspace,
+  async reload(options) {
+    const firstSetup = state.mode === "needs_model";
+    await loadAll(options);
+    if (firstSetup && appNavigation.isReading() && state.playerState?.needs_init) initialization.open();
+  },
+  showToast, workspace: systemWorkspace,
 });
 
 const initialization = createInitialization({
   setOperationMode, loadAll, acknowledgeHandledOperation, acknowledgeFailedOperation,
   showToast, newRequestId,
+  canPresent: () => appNavigation.isReading(),
   onEvent(event) {
     if (handleRuntimeNotice(event)) return true;
     tokenUsage.handleEvent(event);
@@ -2858,6 +2873,61 @@ const initialization = createInitialization({
     return false;
   },
 });
+
+const appNavigation = createAppNavigation({
+  saveId: () => state.activeSave,
+  beforeLeave: preparePageNavigation,
+  onChange() {
+    ++navigationJumpSequence;
+    cancelNavigationSettlement();
+    pinnedNavigationKey = null;
+    const notices = $(appNavigation.isReading() ? "readingNotices" : "libraryNotices");
+    notices.append($("runtimeNotices"), els.errorCard);
+    refreshNavigationObserver({ force: true });
+    autoSizeInput();
+    renderJourneyLibrary();
+  },
+});
+
+function pageNavigationBlocked() {
+  return stateRefreshBusy || saveManagerBusy || playerWriteBusy || recordsSaveBusy || difficultySaveBusy
+    || modelSettings.isBusy() || coreMemoryEditor.isBusy() || ["booting", "switching"].includes(state.mode);
+}
+
+async function preparePageNavigation() {
+  if (pageNavigationBlocked()) { showToast("当前操作尚未完成，请稍候"); return false; }
+  if (pendingEditor) { showToast("请先保存或取消正文编辑"); return false; }
+  const saveId = state.activeSave;
+  if ($("initDialog").open && !await initialization.close()) return false;
+  closeCodexProfile({ restoreFocus: false });
+  if (document.querySelector("dialog[open]")) return false;
+  for (const popover of [els.tokenUsageDialog, els.settingInfoDialog]) {
+    if (popover.hidePopover) popover.hidePopover();
+    else popover.removeAttribute("open");
+  }
+  if (els.drawer.classList.contains("open") && !await systemWorkspace.close()) return false;
+  if (!await closeRecordsDrawer()) return false;
+  if (saveId !== state.activeSave || pageNavigationBlocked()) return false;
+  closeLeftDrawer();
+  els.drawerBackdrop.hidden = true;
+  return true;
+}
+
+function renderJourneyLibrary() {
+  const blocked = pageNavigationBlocked();
+  $("openJourneyLibraryBtn").disabled = blocked;
+  $("journeyLibraryName").textContent = state.saves.find(save => save.save_id === state.activeSave)?.name
+    || (state.activeSave ? "当前旅程" : "尚无可继续的旅程");
+  const uncertain = state.uncertainConfirmation?.saveId === state.activeSave;
+  $("journeyLibraryStatus").textContent = uncertain ? "上一次确认的结果尚未核实，请查看当前回合并核实结果。"
+    : (state.playerState?.needs_init && initialization.status()) || modeLabels[state.mode] || "等待行动";
+  const button = $("continueJourneyBtn");
+  button.disabled = blocked;
+  button.textContent = !state.modelConfig?.configured ? "配置模型服务"
+    : state.playerState?.needs_init ? "继续创建"
+    : uncertain || ["generating", "confirming"].includes(state.mode) ? "查看当前进度"
+    : activePending() ? "查看待确认回合" : "继续旅程";
+}
 
 function setOperationMode(mode) {
   setStateMode(mode);
@@ -2938,6 +3008,7 @@ async function switchSave(saveId) {
       body: JSON.stringify({ save_id: saveId }),
     });
     state.suggestions = []; await loadAll({ scroll: "instant", completePlayerWrite: true }); closeDrawer();
+    if (appNavigation.isReading() && state.playerState?.needs_init) initialization.open();
   } catch (error) { els.saveSelect.value = state.activeSave; syncCustomSelect(els.saveSelect); showError(error); }
   finally { playerWriteBusy = false; renderControls(); }
 }
@@ -2955,7 +3026,10 @@ async function createSave(name) {
       body: JSON.stringify({ name, activate: true }),
     });
     state.suggestions = [];
-    try { await loadAll({ scroll: "instant", completePlayerWrite: true }); }
+    try {
+      await loadAll({ scroll: "instant", completePlayerWrite: true });
+      if (appNavigation.isReading() && state.playerState?.needs_init) initialization.open();
+    }
     catch (error) {
       reportClientError(error, "created_save_refresh_failed");
       setOperationMode("error");
@@ -4263,11 +4337,13 @@ function openDrawer() { systemWorkspace.show(); }
 function closeDrawer() { return systemWorkspace.close(); }
 
 function scrollToBottom(mode = "smooth", onSettled = null) {
+  const visit = appNavigation.revision;
+  const canScroll = () => appNavigation.isReading() && visit === appNavigation.revision;
   const behavior = mode === "smooth" ? "smooth" : "auto";
-  const move = () => window.scrollTo({
-    top: document.documentElement.scrollHeight,
-    behavior,
-  });
+  const move = () => {
+    if (!canScroll()) return;
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+  };
   window.requestAnimationFrame(() => {
     move();
     if (mode === "instant") {
@@ -4292,6 +4368,19 @@ els.playerInput.addEventListener("keydown", (event) => { if (event.key === "Ente
 els.generateBtn.onclick = generateTurn;
 els.stopGenerationBtn.onclick = stopActiveGeneration;
 els.dismissErrorBtn.onclick = clearError;
+const openJourneyLibrary = event => {
+  event.preventDefault();
+  event.stopPropagation();
+  appNavigation.showLibrary();
+};
+$("openJourneyLibraryBtn").onclick = openJourneyLibrary;
+$("journeyLibraryBrand").onclick = openJourneyLibrary;
+$("continueJourneyBtn").onclick = async event => {
+  event.stopPropagation();
+  if (!await appNavigation.showReading()) return;
+  if (!state.modelConfig?.configured) modelSettings.open();
+  else if (state.playerState?.needs_init) initialization.open();
+};
 els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;
 if (els.closeLeftDrawerBtn) els.closeLeftDrawerBtn.onclick = closeLeftDrawer;
 if (els.openLeftDrawerRailBtn) els.openLeftDrawerRailBtn.onclick = () => { if (els.leftDrawer.classList.contains("open")) closeLeftDrawer(); else openLeftDrawer(); };
@@ -4357,8 +4446,7 @@ $("workspaceBackBtn").onclick = () => systemWorkspace.back();
 function stateRefreshBlockReason() {
   if (stateRefreshBusy) return "正在刷新状态，请稍候";
   if (playerActionContext().busy || difficultySaveBusy || state.historyLoading
-    || !["idle", "pending", "needs_init", "error"].includes(state.mode)) return "当前操作尚未完成，请稍候";
-  if (!state.activeSave) return "请先选择存档";
+    || !["idle", "pending", "needs_init", "needs_model", "error"].includes(state.mode)) return "当前操作尚未完成，请稍候";
   if (state.uncertainConfirmation?.saveId === state.activeSave) return "请先核实上一次确认的结果";
   if (pendingEditor) return "请先保存或取消正文编辑";
   if ((systemWorkspace.isOpen("modelConfigDialog") && modelSettings.hasUnsavedChanges())
@@ -4381,6 +4469,9 @@ async function refreshGameView() {
   try {
     const snapshot = await readRefreshSnapshot({ request, loadRecords, loadEvents,
       saveId: state.activeSave, earliestTurn: state.playerState?.history?.[0]?.turn_index });
+    if (snapshot.playerState.needs_init && !$("initDialog").open) {
+      await initialization.loadDraft(snapshot.playerState);
+    }
     const scrollY = window.scrollY;
     const anchor = [...els.story.querySelectorAll(".turn[data-turn-index], #activePlayerAction")]
       .find(element => element.getBoundingClientRect().bottom > 90 && element.getClientRects().length);
@@ -4395,6 +4486,12 @@ async function refreshGameView() {
     const selectedId = selectedVariant()?.turn_id;
     stateRefreshBusy = false;
     ++recordsRefreshGeneration;
+    if (state.activeSave !== snapshot.saves.active) {
+      appNavigation.invalidateReading();
+      els.playerInput.value = "";
+      autoSizeInput();
+    }
+    state.activeSave = snapshot.saves.active;
     state.saves = snapshot.saves.saves || [];
     state.modelConfig = snapshot.modelConfig;
     state.playerState = snapshot.playerState;

@@ -533,7 +533,7 @@ def test_manual_refresh_reads_complete_snapshot_without_recovering_operations():
     script = r'''
 import assert from "node:assert/strict";
 const {readRefreshSnapshot} = await import(process.argv[1]);
-let operations = [], active = "save", failRecords = false;
+let operations = [], active = "save", failRecords = false, saveId = "save";
 const calls = [];
 const request = async (path, options) => {
   assert.equal(options?.method || "GET", "GET", "refresh must only read");
@@ -545,7 +545,7 @@ const request = async (path, options) => {
   if (path.includes("/history?")) return {history:[{turn_index:2},{turn_index:3}], pagination:{has_more:true}};
   throw new Error("unexpected request: " + path);
 };
-const read = () => readRefreshSnapshot({request, saveId:"save", earliestTurn:2,
+const read = () => readRefreshSnapshot({request, saveId, earliestTurn:2,
   loadRecords: async view => {
     assert.equal(view, "advanced");
     if (failRecords) throw new Error("records unavailable");
@@ -567,5 +567,7 @@ assert.ok(!calls.includes("/api/player/state"), "recovery is left to its existin
 operations = [];
 active = "other";
 await assert.rejects(read, /当前存档已改变/);
+saveId = null;
+assert.equal((await read()).saves.active, "other", "initial configuration refresh can establish the active save without a write");
 '''
     _run_js(script, (STATIC_DIR / "state_refresh.js").resolve().as_uri())

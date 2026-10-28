@@ -1756,6 +1756,32 @@ DOM bindings, form stages, drafts, submission, and operation subscriptions; it
 reuses the existing draft and campaign-setup helpers. Application coordination
 uses explicit callbacks rather than importing the entry module.
 
+`app_navigation.js` owns the reading/library view and its scroll/focus context,
+separately from the operation mode. The brand and Journey Library control use
+guarded in-page navigation instead of reloading the document. Leaving reading
+retains its DOM, unsent input, selected candidate and disclosures; returning does
+not reload state or subscribe again. Scroll context is save-scoped and invalidated
+when another save becomes active, together with the old unsent input. Dirty
+editors use their existing leave protection, and conflicting writes or manual
+refresh block navigation. Hidden reading surfaces and archive entrances are inert;
+drawers/popovers close before switching, and focus returns to a visible control.
+
+The current library is a minimal current-journey/status/continue surface. Cold
+startup still uses the existing reading/model/initialization entry behavior;
+the complete library, default startup landing and global management pages belong
+to the subsequent tickets. Generation and confirmation can continue while the
+library is visible. Errors and outcome-verification actions use the same nodes
+on the visible page. Delayed scroll, paging and observer callbacks cannot move
+the hidden page. Background reloads do not open model or initialization editors;
+initialization recovery still consumes its result and saves the stage without
+presenting the dialog in the library. Explicit continue opens that saved stage.
+When first model activation succeeded but its initial state read failed, a
+read-only refresh may establish the active save; once established, refresh
+continues to reject a different active save.
+For an uninitialized save with its form closed, refresh loads the initialization
+draft before installing the snapshot. A failed draft read leaves the previous
+state intact; an open form retains its unsaved input.
+
 The reading column is capped at 790px, leaving roughly 720px for scene prose
 on a wide desktop. Confirmed turns use open prose with a fine separator;
 pending and streaming scenes retain a light container and visible status.

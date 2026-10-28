@@ -11,7 +11,7 @@ import {
 
 export function createInitialization({
   setOperationMode, loadAll, onEvent, acknowledgeHandledOperation,
-  acknowledgeFailedOperation, showToast, newRequestId,
+  acknowledgeFailedOperation, showToast, newRequestId, canPresent = () => true,
 }) {
   const $ = (id) => document.getElementById(id);
   const els = {
@@ -112,7 +112,7 @@ export function createInitialization({
     if (currentOperation) return false;
     const campaignSetup = operation.metadata?.stage === "campaign_setup";
     startOperation(campaignSetup ? "campaign_setup" : "opening");
-    open();
+    if (canPresent()) open();
     try {
       await subscribe(
         `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
@@ -298,9 +298,9 @@ export function createInitialization({
     });
   }
 
-  async function loadInitializationDraft() {
+  async function loadInitializationDraft(playerState = state.playerState) {
     if (currentOperation === "closing") return;
-    const committed = state.playerState?.initialization;
+    const committed = playerState?.initialization;
     if (
       committed?.phase
       && committed.phase !== "config"
@@ -335,15 +335,17 @@ export function createInitialization({
   async function closeInitializationDialog() {
     if (currentOperation) {
       showToast(els.initStageHint.textContent);
-      return;
+      return false;
     }
     startOperation("closing");
     try {
       await persistInitializationDraft();
       els.initDialog.close();
+      return true;
     } catch (error) {
       reportClientError(error, "initialization_draft_save_failed");
       showToast("初始化草稿暂未保存，请重试关闭");
+      return false;
     } finally {
       finishOperation();
     }
@@ -590,6 +592,8 @@ export function createInitialization({
     refreshControls();
   }
 
-  return { bind, loadDraft: loadInitializationDraft, open, hide,
+  return { bind, loadDraft: loadInitializationDraft, open, hide, close: closeInitializationDialog,
+    status: () => currentOperation === "recovery" ? els.initStageHint.textContent
+      : !els.initError.hidden ? els.initError.textContent : "",
     resumeOperation: resumeInitializationOperation, refreshControls };
 }

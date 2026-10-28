@@ -12,7 +12,7 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="/" aria-label="续章首页">
+      <a id="journeyLibraryBrand" class="brand" href="/" aria-label="续章旅程库">
         <span class="brand-mark" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
@@ -20,14 +20,15 @@
         </span>
         <span><strong>续章</strong><small>LORELOOP</small></span>
       </a>
-      <div class="world-meta" aria-live="polite">
+      <div class="world-meta" aria-live="polite" data-reading-only>
         <span id="worldTime"></span>
         <i></i>
         <span id="worldLocation"></span>
       </div>
       <div class="top-actions">
         <span id="statusPill" class="status-pill" data-mode="idle"><b></b><span>就绪</span></span>
-        <div class="time-travel-group">
+        <button id="openJourneyLibraryBtn" class="text-button" type="button" data-reading-only>旅程库</button>
+        <div class="time-travel-group" data-reading-only>
           <button id="undoBtn" class="icon-button time-travel-button" type="button" aria-label="撤销上一回合" title="撤销上一回合 (↶)" disabled>
             <span>↶</span>
           </button>
@@ -44,6 +45,16 @@
       </div>
     </header>
 
+    <main id="journeyLibraryPage" class="journey-library-page" hidden inert>
+      <h1 id="journeyLibraryTitle" tabindex="-1">旅程库</h1>
+      <section class="journey-library-current" aria-labelledby="journeyLibraryName">
+        <h2 id="journeyLibraryName">正在读取当前旅程</h2>
+        <p id="journeyLibraryStatus" role="status"></p>
+        <button id="continueJourneyBtn" class="primary-action" type="button">继续旅程</button>
+      </section>
+      <div id="libraryNotices"></div>
+    </main>
+    <div id="readingPage" class="reading-page" data-reading-only>
     <main class="story-layout">
       <section id="story" class="story" aria-live="polite">
         <div id="welcome" class="welcome-card" hidden>
@@ -67,6 +78,7 @@
           <div class="suggestions-heading"><h2>一些可能的方向</h2><p>填入后可修改，也可以自由描述其他行动</p></div>
           <div id="suggestionList" class="suggestion-list"></div>
         </section>
+        <div id="readingNotices">
         <details id="runtimeNotices" class="runtime-notices" hidden>
           <summary id="runtimeNoticeSummary">近期运行提示</summary>
           <ul id="runtimeNoticeList"></ul>
@@ -75,6 +87,7 @@
           <strong id="errorTitle">这次回应没有完成</strong>
           <p id="errorMessage">请查看失败原因，核实当前状态后再继续。</p>
           <button id="dismissErrorBtn" type="button">知道了</button>
+        </div>
         </div>
       </section>
     </main>
@@ -100,12 +113,13 @@
         </div>
       </div>
     </footer>
+    </div>
   </div>
 
   <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
 
   <!-- Records Rail: always-on collapsed tabs -->
-  <nav id="recordsRail" class="records-rail" aria-label="世界档案分类">
+  <nav id="recordsRail" class="records-rail" aria-label="世界档案分类" data-reading-only>
     <!-- Hero Button for In-Game Codex -->
     <button id="openLeftDrawerRailBtn" class="records-rail-hero-btn" type="button" title="角色与局内资产" aria-label="局内典籍：角色与局内资产" aria-controls="leftDrawer" aria-expanded="false">
       <span class="codex-icon" aria-hidden="true">

@@ -4,7 +4,7 @@ export async function readRefreshSnapshot({ request, loadRecords, loadEvents, sa
     request("/api/player/model-config"),
     request("/api/player/operations/recoverable"),
   ]);
-  if (saves.active !== saveId) throw new Error("当前存档已改变，请重新选择存档后刷新。");
+  if (saveId != null && saves.active !== saveId) throw new Error("当前存档已改变，请重新选择存档后刷新。");
   if (!modelConfig.configured) throw new Error("模型服务尚未配置，请先检查模型设置。");
   // Refresh never resumes or acknowledges operations, which can write saved progress.
   if (recovery.operations?.length) throw new Error("有尚未处理的操作，请先核实或恢复该操作，再刷新状态。");
