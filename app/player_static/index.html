@@ -9,7 +9,7 @@
   <script src="/assets/prepaint.js"></script>
   <link rel="stylesheet" href="/assets/styles.css" />
 </head>
-<body>
+<body data-page="library">
   <div class="app-shell">
     <header class="topbar">
       <a id="journeyLibraryBrand" class="brand" href="/" aria-label="续章旅程库">
@@ -25,7 +25,11 @@
         <i></i>
         <span id="worldLocation"></span>
       </div>
-      <div class="top-actions">
+      <nav class="library-app-nav" aria-label="应用导航" data-library-only>
+        <button id="libraryNavBtn" type="button" aria-current="page">旅程库</button>
+        <button id="libraryModelsBtn" type="button">模型服务 <span id="libraryModelMark"></span></button>
+      </nav>
+      <div class="top-actions" data-reading-only>
         <span id="statusPill" class="status-pill" data-mode="idle"><b></b><span>就绪</span></span>
         <button id="openJourneyLibraryBtn" class="text-button" type="button" data-reading-only>旅程库</button>
         <div class="time-travel-group" data-reading-only>
@@ -45,16 +49,11 @@
       </div>
     </header>
 
-    <main id="journeyLibraryPage" class="journey-library-page" hidden inert>
-      <h1 id="journeyLibraryTitle" tabindex="-1">旅程库</h1>
-      <section class="journey-library-current" aria-labelledby="journeyLibraryName">
-        <h2 id="journeyLibraryName">正在读取当前旅程</h2>
-        <p id="journeyLibraryStatus" role="status"></p>
-        <button id="continueJourneyBtn" class="primary-action" type="button">继续旅程</button>
-      </section>
+    <main id="journeyLibraryPage" class="journey-library-page">
+      <div id="journeyLibraryContent"><h1 id="journeyLibraryTitle" tabindex="-1">旅程库</h1><p>正在读取旅程……</p></div>
       <div id="libraryNotices"></div>
     </main>
-    <div id="readingPage" class="reading-page" data-reading-only>
+    <div id="readingPage" class="reading-page" data-reading-only hidden inert>
     <main class="story-layout">
       <section id="story" class="story" aria-live="polite">
         <div id="welcome" class="welcome-card" hidden>
@@ -116,6 +115,16 @@
     </div>
   </div>
 
+  <input id="importSaveInput" type="file" accept=".zip,application/zip" hidden />
+  <div id="journeyMenu" class="journey-command-menu" role="menu" aria-label="旅程操作" hidden></div>
+  <dialog id="renameJourneyDialog" class="modal journey-rename-dialog" aria-labelledby="renameJourneyTitle">
+    <form id="renameJourneyForm">
+      <h2 id="renameJourneyTitle">重命名旅程</h2>
+      <label>旅程名称<input id="renameJourneyInput" maxlength="80" autocomplete="off" required /></label>
+      <p id="renameJourneyError" class="journey-form-error" role="alert" hidden></p>
+      <div class="journey-task-actions"><button id="cancelRenameJourneyBtn" class="journey-secondary" type="button">取消</button><button class="primary-action" type="submit">保存名称</button></div>
+    </form>
+  </dialog>
   <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
 
   <!-- Records Rail: always-on collapsed tabs -->
@@ -218,28 +227,7 @@
             <button id="experienceModeCreatorBtn" type="button" title="完整世界管理、导演信息与调用细节">创作者</button>
           </div>
         </div>
-        <div class="save-block">
-          <div class="save-selection">
-          <label for="saveSelect">存档选择</label>
-          <div class="inline-control"><select id="saveSelect"></select></div>
-          <div class="save-actions">
-            <button id="newSaveBtn" type="button">新建存档</button>
-            <button id="manageSavesBtn" type="button">管理本地存档</button>
-          </div>
-          </div>
-          <div id="homeNewSaveSlot">
-            <form id="saveForm" class="inline-save-form" hidden>
-              <label for="saveNameInput">存档名称</label>
-              <input id="saveNameInput" aria-describedby="newSaveNote" maxlength="64" autocomplete="off" placeholder="例如：临安旧事" required />
-              <p id="newSaveNote" class="new-save-note">创建后将切换到新存档。</p>
-              <details id="newSaveError" class="form-error" role="alert" hidden>
-                <summary>创建未完成，查看原因</summary>
-                <p id="newSaveErrorMessage" tabindex="0"></p>
-              </details>
-              <div class="inline-save-actions"><button id="saveCancelBtn" type="button">取消</button><button id="createSaveConfirmBtn" class="primary-action" type="submit">创建存档</button></div>
-            </form>
-          </div>
-        </div>
+        <button id="drawerJourneyLibraryBtn" class="control-entry" type="button"><span>旅程库</span><span class="control-entry-description">继续或管理旅程</span><span class="control-entry-arrow" aria-hidden="true">›</span></button>
       </section>
       <section class="control-group" aria-label="判定与生成">
         <h3>判定与生成</h3>
@@ -340,25 +328,6 @@
         </button>
       </section>
     </div>
-  <section id="saveManagerDialog" hidden class="workspace-page save-manager-modal">
-    <section class="save-manager-shell">
-
-      <div class="save-manager-toolbar">
-        <button id="managerNewSaveBtn" type="button">新建存档</button>
-        <button id="importSaveBtn" type="button">从 ZIP 导入</button>
-        <input id="importSaveInput" type="file" accept=".zip,application/zip" hidden />
-      </div>
-      <div id="managerNewSaveSlot"></div>
-      <form id="importSaveForm" class="save-import-panel" hidden>
-        <label><span id="importSaveFileName">已选择 ZIP</span><input id="importSaveName" maxlength="80" autocomplete="off" placeholder="导入后的存档名称" required /></label>
-        <div class="save-card-confirm-actions"><button id="cancelImportSaveBtn" class="soft-button" type="button">取消</button><button class="primary-action" type="submit">开始导入</button></div>
-      </form>
-      <div class="workspace-content">
-      <div id="saveManagerError" class="form-error" role="alert" hidden></div>
-      <div id="saveCardList" class="save-card-list"></div>
-      </div>
-    </section>
-  </section>
   <section id="modelConfigDialog" hidden class="workspace-page model-config-modal">
     <form id="modelConfigForm">
 

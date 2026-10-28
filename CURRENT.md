@@ -1766,18 +1766,35 @@ editors use their existing leave protection, and conflicting writes or manual
 refresh block navigation. Hidden reading surfaces and archive entrances are inert;
 drawers/popovers close before switching, and focus returns to a visible control.
 
-The current library is a minimal current-journey/status/continue surface. Cold
-startup still uses the existing reading/model/initialization entry behavior;
-the complete library, default startup landing and global management pages belong
-to the subsequent tickets. Generation and confirmation can continue while the
-library is visible. Errors and outcome-verification actions use the same nodes
-on the visible page. Delayed scroll, paging and observer callbacks cannot move
-the hidden page. Background reloads do not open model or initialization editors;
-initialization recovery still consumes its result and saves the stage without
-presenting the dialog in the library. Explicit continue opens that saved stage.
-When first model activation succeeded but its initial state read failed, a
-read-only refresh may establish the active save; once established, refresh
-continues to reject a different active save.
+Cold startup lands in the Journey Library, including when no model service is
+configured. `journey_library.js` owns the single save list and create, import,
+rename, copy, export and delete interactions through the existing save APIs.
+The current journey has a prominent filled region; other journeys use compact
+rows, and secondary management actions live in each journey's menu. Metadata
+uses existing public save fields and never requests a generated story summary.
+Selecting a journey enters reading or its saved initialization stage directly;
+continuing the current journey does not switch saves again. Initialization drafts
+load before installing the new player state, so a failed read is retried on entry.
+New/import naming uses a main-content task page, while rename/delete use focused dialogs. Failed
+writes preserve input; successful creation/import followed by a read failure
+retries reading and entry without repeating the completed write. List failures
+remain distinct from an empty library. Unconfigured users can manage saves;
+explicit configure-and-continue resumes the selected journey after configuration.
+The top navigation establishes the global page shell; model services still use
+the existing single workspace implementation and initialization retains its
+existing dialog pending their separate migration tickets.
+
+Generation and confirmation can continue while the library is visible. Errors
+and outcome-verification actions use the same nodes on the visible page. Delayed
+scroll, paging and observer callbacks cannot move the hidden page. Background
+reloads do not open model or initialization editors; initialization recovery still
+consumes its result and saves the stage without presenting the dialog in the
+library. Explicit continue opens that saved stage. When first model activation
+succeeded but its initial state read failed, a read-only refresh may establish
+the active save; once established, refresh continues to reject a different active
+save. With no model configured, library refresh updates the save list without
+requiring story state. Unsaved journey names and rename drafts block manual
+refresh until completed or cancelled.
 For an uninitialized save with its form closed, refresh loads the initialization
 draft before installing the snapshot. A failed draft read leaves the previous
 state intact; an open form retains its unsaved input.
@@ -1939,16 +1956,10 @@ inert background prevents interaction with those covered entries.
 Reading typography, theme brightness and interaction contracts remain
 unchanged.
 
-`management_workspace.js` keeps system controls, saves, model services and Core
-Memory in one right-hand surface. New-save creation is an inline form shared by
-the compact save section and save manager, with its activation consequence stated
-beside the field. On the control home, creation replaces the selector and actions
-inside their existing bounds, keeping subsequent settings stationary. Failure
-replaces the short hint with an expandable explanation; the complete cause opens
-within an anchored panel without reflowing the settings. Failed creation keeps the name and permits retry; a completed
-creation is not reported as a failed write if the subsequent refresh fails.
-The save manager can switch saves and retains a failed rename draft. Successful
-writes followed by refresh errors are identified separately from write failures.
+`management_workspace.js` keeps system controls, model services and Core Memory
+in one right-hand surface. Save selection and management live exclusively in the
+Journey Library; the control home retains an entry to that same page. Save APIs
+and archive formats are unchanged.
 
 Management pages replace the control home rather than stacking dialogs. Back
 returns to their parent with its scroll and focus; model editing returns to the

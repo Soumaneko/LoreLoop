@@ -2,12 +2,21 @@ export function createAppNavigation({ saveId, beforeLeave, onChange }) {
   const reading = document.getElementById("readingPage");
   const library = document.getElementById("journeyLibraryPage");
   const readingOnly = [...document.querySelectorAll("[data-reading-only]")];
-  let current = "reading";
+  let current = "library";
   let revision = 0;
   let navigating = false;
   let readingPosition = null;
   let libraryY = 0;
   document.body.dataset.page = current;
+
+  function display() {
+    const isReading = current === "reading";
+    for (const element of readingOnly) { element.hidden = !isReading; element.inert = !isReading; }
+    for (const element of document.querySelectorAll("[data-library-only]")) { element.hidden = isReading; element.inert = isReading; }
+    library.hidden = isReading; library.inert = isReading;
+    document.body.dataset.page = current;
+  }
+  display();
 
   function captureReading() {
     const anchor = [...reading.querySelectorAll(".turn[data-turn-index], #activePlayerAction, #pendingCard")]
@@ -33,13 +42,7 @@ export function createAppNavigation({ saveId, beforeLeave, onChange }) {
       revision += 1;
       const visit = revision;
       const isReading = current === "reading";
-      for (const element of readingOnly) {
-        element.hidden = !isReading;
-        element.inert = !isReading;
-      }
-      library.hidden = isReading;
-      library.inert = isReading;
-      document.body.dataset.page = current;
+      display();
       onChange();
       const restore = () => {
         if (visit !== revision) return;
