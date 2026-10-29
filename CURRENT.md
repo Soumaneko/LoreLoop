@@ -1803,15 +1803,21 @@ writes preserve input; successful creation/import followed by a read failure
 retries reading and entry without repeating the completed write. List failures
 remain distinct from an empty library. Unconfigured users can manage saves;
 explicit configure-and-continue resumes the selected journey after configuration.
-Journey Library and Model Services navigation sit together immediately after
-the logo on the left, including while reading. The duplicate right-hand library
-button is removed. Navigation hover/focus uses a light theme-accent fill; the
-smaller model-status label uses success color when configured and warning color
-when unconfigured. Narrow reading windows separate navigation and story actions
+Journey Library, Current Journey and Model Services navigation sit together
+immediately after the logo on the left, including while reading. Current Journey
+reuses the active-save continuation path and is selected in reading or creation;
+it is disabled without an active journey and preserves existing leave guards. The duplicate right-hand library
+button is removed. Navigation hover/focus uses a low-contrast foreground tint across the header height; the
+smaller model-status label sits below Model Services without adding horizontal
+width, using success color when configured and warning color when unconfigured.
+Navigation type and gaps are compact while preserving full labels. Narrow reading windows separate navigation and story actions
 into two rows to preserve complete labels and usable action targets. The top
 navigation is shared with the global model list and editor. Model
-navigation records its reading/library/creation source: editor Back returns to the list;
-module Back returns to the source with its position and focus. Exiting the editor
+navigation records its reading/library/creation source: editor Back returns to
+the list, while Escape can return to the source with its position and focus.
+Global pages use the top navigation rather than duplicate header return buttons;
+creation retains its bottom save-and-return action, and naming/import tasks
+retain Cancel. Exiting the editor
 checks unsaved changes, invalidates its session, closes suggestions and clears the
 Key field. Ordinary saves and service activation remain on the model page; only
 an explicit configure-and-continue intent enters the chosen journey. Leaving the

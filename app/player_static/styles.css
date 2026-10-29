@@ -3062,17 +3062,17 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 #modelPage .model-test-result[data-status="success"] { border-block-color:var(--positive-border); }
 
 /* Journey library: a single home and save-management surface. */
-.app-navigation { display:flex; align-items:center; align-self:stretch; gap:36px; min-width:0; }
+.app-navigation { display:flex; align-items:center; align-self:stretch; gap:26px; min-width:0; }
 .world-meta { justify-content:center; min-width:0; overflow:hidden; white-space:nowrap; }
 .world-meta span { overflow:hidden; text-overflow:ellipsis; }
-.library-app-nav { align-self: stretch; display: flex; gap: 30px; flex-shrink:0; }
-.library-app-nav button { position: relative; padding: 0; border: 0; background: none; color: var(--muted); font: 14px var(--serif); cursor: pointer; white-space:nowrap; isolation:isolate; transition:color .18s var(--ease-smooth); }
+.library-app-nav { align-self: stretch; display: flex; gap: 22px; flex-shrink:0; }
+.library-app-nav button { position: relative; padding: 0; border: 0; background: none; color: var(--muted); font: 13px var(--serif); cursor: pointer; white-space:nowrap; isolation:isolate; transition:color .18s var(--ease-smooth); }
 .library-app-nav button[aria-current] { color: var(--gold-bright); }
 .library-app-nav button[aria-current]::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--gold); }
-.library-app-nav button::before { content:""; position:absolute; inset:0 -10px; z-index:-1; background:var(--gold-soft); opacity:0; pointer-events:none; transition:opacity .18s var(--ease-smooth); }
-.library-app-nav button:hover:not(:disabled), .library-app-nav button:focus-visible:not(:disabled) { color:var(--gold-bright); }
-.library-app-nav button:hover:not(:disabled)::before, .library-app-nav button:focus-visible:not(:disabled)::before { opacity:1; }
-#libraryModelMark { font-size:10px; margin-left:5px; }
+.library-app-nav button::before { content:""; position:absolute; inset:0 -8px; z-index:-1; background:var(--ink); opacity:0; pointer-events:none; transition:opacity .18s var(--ease-smooth); }
+.library-app-nav button:not([aria-current]):hover:not(:disabled), .library-app-nav button:not([aria-current]):focus-visible:not(:disabled) { color:var(--ink); }
+.library-app-nav button:hover:not(:disabled)::before, .library-app-nav button:focus-visible:not(:disabled)::before { opacity:.045; }
+#libraryModelMark { position:absolute; top:calc(50% + 9px); left:50%; transform:translateX(-50%); margin:0; font-size:10px; line-height:11px; white-space:nowrap; }
 #libraryModelMark[data-configured="true"] { color:var(--positive-text); }
 #libraryModelMark[data-configured="false"] { color:var(--warning-text); }
 .journey-library-page { width: min(1000px, calc(100% - 80px)); margin: 46px auto 64px; }
@@ -3122,7 +3122,6 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .journey-empty h2 { margin: 0 0 12px; color: var(--gold-bright); font: 500 23px/1.5 var(--serif); }
 .journey-empty p { margin: 0 0 25px; color: var(--muted); }
 .journey-empty .journey-heading-actions { justify-content: center; }
-.journey-task-back { margin-bottom: 23px; }
 .journey-task-form { max-width: 620px; padding: 24px; margin: 22px auto 0; background: var(--surface-soft); border-block: 1px solid var(--line-strong); }
 .journey-task-form input, .journey-rename-dialog input { width: 100%; padding: 11px 12px; margin-top: 8px; border: 1px solid var(--line-strong); border-radius: 0; background: var(--editor-bg); color: var(--ink); font: 15px/1.6 var(--serif); }
 .journey-help { color: var(--muted); font: 13px/1.7 var(--serif); }
@@ -3134,7 +3133,7 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 @media(max-width:680px) {
  .journey-library-page { width: calc(100% - 40px); margin: 30px auto 40px; }
  .journey-library-page h1 { font-size: 26px; }
- .app-navigation { gap:24px; } .library-app-nav { gap: 22px; } .library-app-nav button { font-size: 13px; } #libraryModelMark { display: none; }
+ .app-navigation { gap:18px; } .library-app-nav { gap:18px; } .library-app-nav button { font-size:12px; }
  .journey-heading { flex-wrap: wrap; gap: 16px; margin-bottom: 22px; } .journey-heading-actions { gap: 13px; }
  .journey-heading-actions button { padding: 8px 12px; font-size: 13px; min-height: 38px; }
  .journey-heading-actions .journey-quiet { padding-inline: 0; }
@@ -3207,7 +3206,6 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 }
 
 /* Creation follows the global shell and keeps the task in one continuous form. */
-.creation-back { margin-bottom:12px; padding:0; min-height:28px; }
 .creation-heading { display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; margin:0 0 24px; }
 #creationJourneyName { color:var(--muted); font:14px/1.6 var(--serif); overflow-wrap:anywhere; }
 .creation-stages { display:flex; gap:0; margin:0 0 28px; padding:0; list-style:none; border-block:1px solid var(--line); background:var(--surface-soft); }
@@ -3308,7 +3306,7 @@ html:has(#modelConfigDialog:not([hidden])) { scroll-padding-bottom:calc(var(--mo
 body:has(#creationPage:not([hidden])) .toast { bottom:calc(var(--creation-actions-height,100px) + 16px); }
 body:has(#modelConfigDialog:not([hidden]) #modelConfigActions:not([hidden])) .toast { bottom:calc(var(--model-actions-height,82px) + 16px); }
 
-@media(max-width:480px) {
+@media(max-width:560px) {
  body[data-page="reading"] .topbar { height:auto; flex-wrap:wrap; gap:0; }
  body[data-page="reading"] .app-navigation { width:100%; height:46px; }
  body[data-page="reading"] .top-actions { width:100%; min-height:42px; justify-content:flex-end; padding:4px 0; border-top:1px solid var(--line); }

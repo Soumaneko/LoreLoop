@@ -333,6 +333,7 @@ function renderControls({ updateNavigation = true } = {}) {
   if (updateNavigation) renderTurnNavigator();
   journeyLibrary.refreshControls();
   $("modelBackBtn").disabled = pageNavigationBlocked();
+  $("currentJourneyNavBtn").disabled = pageNavigationBlocked() || !state.activeSave || !state.saves.some(save => save.save_id === state.activeSave);
   $("libraryModelsBtn").disabled = !canManageModelSettings() || modelSettings.isBusy();
   $("currentModelSummary").textContent = state.modelConfig?.configured
     ? [state.modelConfig.name, state.modelConfig.model].filter(Boolean).join(" · ") : "未配置";
@@ -4219,6 +4220,9 @@ const openJourneyLibrary = async event => {
 };
 $("journeyLibraryBrand").onclick = openJourneyLibrary;
 $("libraryNavBtn").onclick = openJourneyLibrary;
+$("currentJourneyNavBtn").onclick = () => {
+  if (!appNavigation.isReading() && !appNavigation.isCreation() && !$("currentJourneyNavBtn").disabled) journeyLibrary.continueCurrent();
+};
 $("libraryModelsBtn").onclick = () => openModelSettings();
 $("drawerJourneyLibraryBtn").onclick = openJourneyLibrary;
 els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;

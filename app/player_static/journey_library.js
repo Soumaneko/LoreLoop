@@ -165,10 +165,10 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
   }
   async function canLeave() {
     if (busy) return false;
-    if (!task || entryRetry || !$("journeyTaskName").value.trim()) return true;
-    const accepted = await showConfirm({ title: "放弃填写？", message: "已填写的旅程名称还没有保存。", confirmText: "放弃填写", cancelText: "继续填写" });
-    if (accepted) task = null;
-    return accepted;
+    if (!task) return true;
+    const accepted = entryRetry || !$("journeyTaskName").value.trim() || await showConfirm({ title: "放弃填写？", message: "已填写的旅程名称还没有保存。", confirmText: "放弃填写", cancelText: "继续填写" });
+    if (accepted) { task = null; entryRetry = null; error = ""; render(); }
+    return Boolean(accepted);
   }
   async function home() {
     const kind = task?.kind;
@@ -180,7 +180,7 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
   function openTask(kind, file = null) {
     if (busy || !canManage()) return;
     task = { kind, file }; error = ""; closeMenu(); content.replaceChildren();
-    const back = button("‹ 返回旅程库", "journey-quiet journey-task-back", home); const title = node("h1", "", kind === "new" ? "新建旅程" : "导入旅程"); title.id = "journeyLibraryTitle"; title.tabIndex = -1;
+    const title = node("h1", "", kind === "new" ? "新建旅程" : "导入旅程"); title.id = "journeyLibraryTitle"; title.tabIndex = -1;
     const form = node("form", "journey-task-form");
     if (file) form.append(node("p", "journey-file", file.name));
     const label = node("label", "", "旅程名称"); const input = node("input"); input.id = "journeyTaskName"; input.required = true; input.maxLength = 80; input.autocomplete = "off"; input.placeholder = "为这段旅程起一个名字";
@@ -188,7 +188,7 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     const help = node("p", "journey-help", kind === "new" ? "接下来填写世界与主角，名称之后也可以修改。" : "导入后进入这段旅程，已有存档不会被覆盖。");
     const alert = node("p", "journey-form-error"); alert.id = "journeyTaskError"; alert.hidden = true; alert.setAttribute("role", "alert");
     const actions = node("div", "journey-task-actions"); const submit = node("button", "primary-action", kind === "new" ? "创建并继续" : "导入并进入"); submit.type = "submit"; actions.append(button("取消", "journey-secondary", home), submit);
-    form.append(label, help, alert, actions); content.append(back, title, form);
+    form.append(label, help, alert, actions); content.append(title, form);
     form.onsubmit = event => {
       event.preventDefault(); const name = input.value.trim(); if (!name || busy || entryRetry) return;
       mutate(() => kind === "new" ? post("create", { name, activate: true }) : importSaveArchive(file, name), kind === "new" ? "旅程已创建" : "旅程已导入", true);
@@ -199,7 +199,7 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     if (busy) return;
     try {
       await onEnter(save.save_id, activeId === save.save_id);
-      if (entryRetry === save.save_id) { entryRetry = null; error = ""; render(); }
+      if (!task && entryRetry === save.save_id) { entryRetry = null; error = ""; render(); }
     }
     catch (cause) { errorMessage(cause); }
   }
@@ -280,6 +280,10 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     document.addEventListener("keydown", event => { if (event.key === "Escape" && !menu.hidden) { event.preventDefault(); const id = menuSave?.save_id; closeMenu(); document.querySelector(`[data-journey-menu="${id}"]`)?.focus(); } });
   }
   return { bind, update, refresh, render, refreshControls, canLeave, home, closeMenu,
+    continueCurrent: () => {
+      const current = state.saves.find(save => save.save_id === activeId);
+      if (current) return enterJourney(current);
+    },
     hasUnsavedChanges: () => Boolean(task && !entryRetry && $("journeyTaskName")?.value.trim())
       || Boolean(dialog.open && $("renameJourneyInput").value !== renameSave?.name),
   };

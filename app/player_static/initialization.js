@@ -16,7 +16,7 @@ export function createInitialization({
   const $ = (id) => document.getElementById(id);
   const els = {
     continueInitBtn: $("continueInitBtn"),
-    initForm: $("initForm"), leaveCreationBtn: $("leaveCreationBtn"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
+    initForm: $("initForm"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
     initConfigFields: $("initConfigFields"),
     initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
     initWorldStyle: $("initWorldStyle"), initCustomWorldStyleWrap: $("initCustomWorldStyleWrap"),
@@ -594,10 +594,9 @@ export function createInitialization({
     els.editInitConfigBtn.hidden = campaignSetupCommitted;
     els.regenerateCampaignSetupBtn.hidden = campaignSetupCommitted;
     els.initSubmitBtn.disabled = busy || !staged;
-    els.leaveCreationBtn.disabled = busy;
     $("saveCreationDraftBtn").disabled = busy;
     $("saveCreationDraftBtn").textContent = currentOperation === "closing" ? "正在保存……" : "保存并返回";
-    els.leaveCreationBtn.title = busy ? "当前操作完成后可返回" : "保存并返回旅程库";
+    $("saveCreationDraftBtn").title = busy ? "当前操作完成后可返回" : "保存并返回旅程库";
     els.campaignSetupBtn.textContent = currentOperation === "recovery" ? "正在核实……" : currentOperation === "campaign_setup" ? "正在生成……" : "生成世界惯例";
     els.regenerateCampaignSetupBtn.textContent = currentOperation === "regenerate" ? "正在生成……" : "重新生成";
     els.initSubmitBtn.textContent = currentOperation === "recovery" ? "正在核实……" : currentOperation === "opening" ? "正在生成开场……"
@@ -635,7 +634,6 @@ export function createInitialization({
     }
     els.initForm.addEventListener("submit", (event) => { event.preventDefault(); initialize(); });
     els.continueInitBtn.onclick = open;
-    els.leaveCreationBtn.onclick = () => navigation.showLibrary();
     $("saveCreationDraftBtn").onclick = () => navigation.showLibrary();
     $("creationModelsBtn").onclick = () => requestModels();
     enhanceCustomSelect(els.initWorldStyle);

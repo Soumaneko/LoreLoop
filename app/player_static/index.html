@@ -23,7 +23,8 @@
       </a>
       <nav class="library-app-nav" aria-label="应用导航">
         <button id="libraryNavBtn" type="button" aria-current="page">旅程库</button>
-        <button id="libraryModelsBtn" type="button">模型服务 <span id="libraryModelMark"></span></button>
+        <button id="currentJourneyNavBtn" type="button" disabled>当前旅程</button>
+        <button id="libraryModelsBtn" type="button">模型服务<span id="libraryModelMark"></span></button>
       </nav>
       </div>
       <div class="world-meta" aria-live="polite" data-reading-only>
@@ -56,7 +57,7 @@
     </main>
     <main id="modelPage" class="journey-library-page model-page" hidden inert>
       <div class="model-page-heading">
-        <div><button id="modelBackBtn" class="journey-quiet" type="button">‹ 返回旅程库</button><h1 id="modelPageTitle" tabindex="-1">模型服务</h1></div>
+        <div><button id="modelBackBtn" class="journey-quiet" type="button" hidden>‹ 返回模型服务</button><h1 id="modelPageTitle" tabindex="-1">模型服务</h1></div>
         <button id="addModelServiceBtn" class="journey-secondary" type="button">添加服务</button>
       </div>
       <div id="modelSyncError" class="journey-notice" role="alert" hidden><span id="modelSyncErrorMessage"></span><button id="retryModelSyncBtn" class="journey-secondary" type="button">重新同步</button></div>
@@ -150,7 +151,6 @@
       <div id="modelNotices"></div>
     </main>
     <main id="creationPage" class="journey-library-page creation-page" hidden inert>
-      <button id="leaveCreationBtn" class="journey-quiet creation-back" type="button">‹ 保存并返回旅程库</button>
       <div class="creation-heading"><h1 id="creationTitle" tabindex="-1">创建旅程</h1><span id="creationJourneyName"></span></div>
       <ol class="creation-stages" aria-label="创建进度"><li data-creation-stage="config"><span>1</span>填写设定</li><li data-creation-stage="campaign_setup"><span>2</span>检查世界惯例</li><li data-creation-stage="opening"><span>3</span>生成开场</li></ol>
       <p id="initStageHint" class="creation-intro"></p>

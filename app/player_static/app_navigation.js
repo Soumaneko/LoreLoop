@@ -23,8 +23,8 @@ export function createAppNavigation({ saveId, beforeLeave, onChange }) {
     document.getElementById("modelConfigDialog").hidden = current !== "modelEditor";
     document.getElementById("addModelServiceBtn").hidden = current !== "models";
     document.getElementById("modelPageTitle").textContent = current === "modelEditor" ? "配置模型服务" : "模型服务";
-    document.getElementById("modelBackBtn").textContent = current === "modelEditor" ? "‹ 返回模型服务" : modelSource === "reading" ? "‹ 返回故事" : modelSource === "creation" ? "‹ 返回创建旅程" : "‹ 返回旅程库";
-    for (const [id, active] of [["libraryNavBtn", current === "library"], ["libraryModelsBtn", models]]) {
+    document.getElementById("modelBackBtn").hidden = current !== "modelEditor";
+    for (const [id, active] of [["libraryNavBtn", current === "library"], ["currentJourneyNavBtn", isReading || current === "creation"], ["libraryModelsBtn", models]]) {
       const button = document.getElementById(id);
       if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     }
@@ -69,7 +69,7 @@ export function createAppNavigation({ saveId, beforeLeave, onChange }) {
         if (!restoreFocus) return;
         const focus = position?.focus || (!isReading && positions.get(current)?.focus);
         if (focus?.isConnected && !focus.disabled && !focus.closest("[hidden], [inert]")) focus.focus({ preventScroll: true });
-        else document.getElementById(isReading ? "libraryNavBtn" : current === "library" ? "journeyLibraryTitle" : current === "creation" ? "creationTitle" : "modelPageTitle").focus({ preventScroll: true });
+        else document.getElementById(isReading ? "currentJourneyNavBtn" : current === "library" ? "journeyLibraryTitle" : current === "creation" ? "creationTitle" : "modelPageTitle").focus({ preventScroll: true });
       };
       restore();
       window.requestAnimationFrame(() => restore(false));
