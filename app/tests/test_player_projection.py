@@ -610,8 +610,9 @@ def test_player_operation_projection_is_allow_listed():
     assert "private" not in str(operation)
 
 
-def test_player_save_payload_removes_server_root():
-    payload = player_saves_payload({
+@pytest.mark.parametrize("has_result", [False, True])
+def test_player_save_payload_removes_server_root(has_result):
+    raw_payload = {
         "active": "8e4e1da7-00a0-4a63-83c7-d6726694077a",
         "root": "/private/server/path",
         "saves": [{
@@ -625,7 +626,19 @@ def test_player_save_payload_removes_server_root():
             "location": "北门",
             "path": "/private/server/path/莱尔",
         }],
-    })
+    }
+    if has_result:
+        raw_payload["save"] = {
+            **raw_payload["saves"][0],
+            "save_id": "ae664e46-adfc-4055-a2e4-689138d75265",
+            "active": False,
+        }
+    payload = player_saves_payload(raw_payload)
 
     assert "root" not in payload
     assert "path" not in payload["saves"][0]
+    if has_result:
+        assert payload["save"] == {key: value for key, value in raw_payload["save"].items() if key != "path"}
+        assert payload["save"]["save_id"] != payload["active"]
+    else:
+        assert "save" not in payload

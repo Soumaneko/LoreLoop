@@ -72,11 +72,11 @@ text, state-change audit and opening fingerprint in the same database. Detailed
 audit payloads follow the bounded undo window; saved version IDs remain queryable. `initialization_draft.json` is an editable
 setup draft, not canonical campaign state. It stores the raw setup form values
 (including empty fields, blank list lines, temporarily over-limit text, and
-ability rows that only carry a description) so unfinished edits survive closing
-and reloading; restore picks the stage from the draft envelope and prefers those
+ability rows that only carry a description) so unfinished edits survive leaving
+the creation page and reloading; restore picks the stage from the draft envelope and prefers those
 raw values, using the structured snapshot for generated values awaiting edits. Draft
 saving never runs the submit contract - completeness is checked only at
-`initialization_opening` - and a failed save keeps the dialog open to retry.
+`initialization_opening` - and a failed save keeps the creation page and input available to retry.
 `.runtime/control.db` stores pending scenes, runtime notices, the bounded
 Undo/Redo snapshot list (`.snapshots/`).
 
@@ -1720,6 +1720,11 @@ config_id keeps multiple entries separate. Existing name fields remain readable.
 The model field is one editable ID input with optional suggestions. There is no
 manual/list mode switch or confirmation checkbox. Keyboard highlight stays in
 the input; Enter selects without submitting and Escape closes suggestions.
+Protocol uses the shared custom select, including its Songti triangle and
+selection mark; model suggestions and the input share the same theme font and
+text size. Required/optional labels follow the creation form, with API Key
+required only when a new key is actually needed. Model deletion and dirty-editor
+leave use the shared confirmation dialog and await the user's decision.
 Protocol and Base URL live in connection settings: Custom, incomplete targets
 and manually changed targets are expanded, while complete preset connections
 start collapsed with their protocol/address summary visible. A fresh catalog draft
@@ -1736,8 +1741,11 @@ conflicts, refresh controls, and reload the active configuration. The single lis
 and editor live in the global page shell, reached from the library or reading
 controls. The current service uses a filled region; remaining services use compact
 rows. Connection fields, catalog suggestions and test results use the existing
-editor logic. The form is width-limited, and its action row remains available
-while scrolling. Model setup remains available in `needs_model`. Editing a service
+editor logic. The form is width-limited, and its action row stays fixed to the
+viewport bottom, including at the document end. Creation uses the same fixed
+action-bar treatment: page-background color, inset buttons, clear secondary
+actions and a shared prominent primary action. ResizeObserver records each bar
+height to reserve content space and keep toast feedback above the controls. Model setup remains available in `needs_model`. Editing a service
 only changes its private draft; `state.modelConfig` continues to represent the
 server's active service. Failed list reads offer an explicit retry and are not
 presented as an empty service list.
@@ -1767,9 +1775,8 @@ DOM bindings, form stages, drafts, submission, and operation subscriptions; it
 reuses the existing draft and campaign-setup helpers. Application coordination
 uses explicit callbacks rather than importing the entry module.
 
-`app_navigation.js` owns reading, library, model-list and model-editor views and
-their scroll/focus context,
-separately from the operation mode. The brand and Journey Library control use
+`app_navigation.js` owns reading, library, creation, model-list and model-editor
+views and their scroll/focus context, separately from the operation mode. The brand and Journey Library control use
 guarded in-page navigation instead of reloading the document. Leaving reading
 retains its DOM, unsent input, selected candidate and disclosures; returning does
 not reload state or subscribe again. Scroll context is save-scoped and invalidated
@@ -1784,6 +1791,10 @@ rename, copy, export and delete interactions through the existing save APIs.
 The current journey has a prominent filled region; other journeys use compact
 rows, and secondary management actions live in each journey's menu. Metadata
 uses existing public save fields and never requests a generated story summary.
+Player save responses retain the individual `save` result from lifecycle writes,
+using the same public-field allow-list as the list. Create/import entry uses that
+result ID, which may differ from the active save for an imported journey; server
+paths remain excluded from both representations.
 Selecting a journey enters reading or its saved initialization stage directly;
 continuing the current journey does not switch saves again. Initialization drafts
 load before installing the new player state, so a failed read is retried on entry.
@@ -1792,30 +1803,59 @@ writes preserve input; successful creation/import followed by a read failure
 retries reading and entry without repeating the completed write. List failures
 remain distinct from an empty library. Unconfigured users can manage saves;
 explicit configure-and-continue resumes the selected journey after configuration.
-The top navigation is shared with the global model list and editor. Model
-navigation records its reading/library source: editor Back returns to the list;
+Journey Library and Model Services navigation sit together immediately after
+the logo on the left, including while reading. The duplicate right-hand library
+button is removed. Navigation hover/focus uses a light theme-accent fill; the
+smaller model-status label uses success color when configured and warning color
+when unconfigured. Narrow reading windows separate navigation and story actions
+into two rows to preserve complete labels and usable action targets. The top
+navigation is shared with the global model list and editor. Model
+navigation records its reading/library/creation source: editor Back returns to the list;
 module Back returns to the source with its position and focus. Exiting the editor
 checks unsaved changes, invalidates its session, closes suggestions and clears the
 Key field. Ordinary saves and service activation remain on the model page; only
 an explicit configure-and-continue intent enters the chosen journey. Leaving the
 module cancels that intent. Deferred navigation callbacks restore scroll without
-reclaiming focus from a newly focused editor input. Initialization retains its
-existing dialog pending its separate migration ticket.
+reclaiming focus from a newly focused editor input.
+
+Initialization uses a single full creation page in the global shell rather than
+a dialog. New and unfinished journeys enter the same stored stage. The initial
+form groups world, protagonist and story expectations without forcing a wizard
+page per group. Review hides the initial form behind a read-only summary and
+focuses the editable public world conventions. Confirmed conventions remain
+locked and offer only continuation of opening generation. Generation and
+recovery show their actual stage and keep conflicting controls locked; no new
+background-execution or cancellation behavior is introduced. Ability descriptions
+use multiline fields, while draft capture and submit validation retain the
+existing initialization contract.
+
+Leaving creation saves the raw draft through the existing API, including before
+entering model settings. Save failure keeps the page and input, exposes the cause
+and allows retry without requiring a complete form. A model-module return
+restores creation, while ordinary model changes stay on the model page. An
+explicit generation request blocked by missing model configuration carries only
+that continuation, returns to creation after successful configuration and resumes
+it once; cancelling model navigation clears the continuation. Completed setup
+moves the visible page to review from the top, and a completed opening moves an
+already-visible creation page to reading with its pending opening, never directly
+to confirmed history. Background recovery in the library consumes and saves
+results without switching pages. Full creation uses existing draft/setup and
+Operation helpers; editable presets remain a separate follow-up.
 
 Generation and confirmation can continue while the library is visible. Errors
 and outcome-verification actions use the same nodes on the visible page. Delayed
 scroll, paging and observer callbacks cannot move the hidden page. Background
 reloads do not open model or initialization editors; initialization recovery still
-consumes its result and saves the stage without presenting the dialog in the
-library. Explicit continue opens that saved stage. When first model activation
+consumes its result and saves the stage without presenting the creation page in
+the library. Explicit continue opens that saved stage. When first model activation
 succeeded but its initial state read failed, a read-only refresh may establish
 the active save; once established, refresh continues to reject a different active
 save. With no model configured, library refresh updates the save list without
 requiring story state. Unsaved journey names and rename drafts block manual
 refresh until completed or cancelled.
-For an uninitialized save with its form closed, refresh loads the initialization
-draft before installing the snapshot. A failed draft read leaves the previous
-state intact; an open form retains its unsaved input.
+For an uninitialized save while creation is hidden, refresh loads the
+initialization draft before installing the snapshot. A failed draft read leaves the previous
+state intact; a visible creation page retains its unsaved input.
 
 The reading column is capped at 790px, leaving roughly 720px for scene prose
 on a wide desktop. Confirmed turns use open prose with a fine separator;

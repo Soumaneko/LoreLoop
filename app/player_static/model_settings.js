@@ -1,4 +1,5 @@
 import { request } from "./api.js";
+import { enhanceCustomSelect, syncCustomSelect } from "./custom_select.js";
 import {
   applyRowDecision,
   findProvider as findCatalogProvider,
@@ -16,7 +17,7 @@ import {
 } from "./model_configs.js";
 import { createModelCombobox } from "./model_combobox.js";
 
-export function createModelSettings({ canManage, onBusyChange, onConfigured, reload, showToast, navigation }) {
+export function createModelSettings({ canManage, onBusyChange, onConfigured, reload, showToast, showConfirm, navigation }) {
   const $ = (id) => document.getElementById(id);
   const els = {
     modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
@@ -284,6 +285,7 @@ export function createModelSettings({ canManage, onBusyChange, onConfigured, rel
     els.modelProtocol.required = true;
     els.modelEndpointDetails.open = custom || modelAdvancedTouched || !els.modelProtocol.value
       || (els.modelBaseUrl.required && !els.modelBaseUrl.value.trim());
+    syncCustomSelect(els.modelProtocol);
     els.modelEndpointSummary.textContent = `${els.modelProtocol.value || "待选择协议"} · ${els.modelBaseUrl.value.trim() || "默认地址"}`;
   }
 
@@ -295,6 +297,7 @@ export function createModelSettings({ canManage, onBusyChange, onConfigured, rel
       || els.modelProtocol.value !== original.protocol
       || els.modelBaseUrl.value.trim() !== original.base_url
     );
+    els.modelApiKey.required = !hasKey || changed;
     els.modelApiKey.placeholder = "填写 API Key";
     els.modelKeyHint.textContent = changed
       ? "服务已改变，请填写此服务的 Key。保存前原配置仍有效。"
@@ -437,6 +440,8 @@ export function createModelSettings({ canManage, onBusyChange, onConfigured, rel
     els.modelProvider.disabled = busy || !modelDraftIsNew;
     els.modelConnectionFields.disabled = busy || (modelDraftIsNew && modelProviderPickerOpen);
     els.modelThinking.disabled = busy || els.modelProtocol.value !== "openai_chat";
+    els.modelProtocol.disabled = els.modelConnectionFields.disabled;
+    syncCustomSelect(els.modelProtocol);
     els.addModelServiceBtn.disabled = busy;
     $("retryModelServicesBtn").disabled = busy;
     $("retryModelSyncBtn").disabled = busy;
@@ -634,6 +639,7 @@ export function createModelSettings({ canManage, onBusyChange, onConfigured, rel
     } finally {
       setModelConfigBusy(false);
     }
+    return true;
   }
 
   function editModelService(config_id) {
@@ -672,7 +678,7 @@ export function createModelSettings({ canManage, onBusyChange, onConfigured, rel
 
   async function deleteModelService(row) {
     if (!available() || row.config_id === modelConfigsCache?.active_config_id) return;
-    if (!window.confirm(`确定删除服务「${row.name}」？此操作不可撤销。`)) return;
+    if (!await showConfirm({ title: "删除模型服务？", message: `将删除“${row.name}”的本机配置与密钥，此操作无法撤销。`, confirmText: "删除服务", isDanger: true })) return;
     if (!available() || row.config_id === modelConfigsCache?.active_config_id
         || !findConfigService(modelConfigsCache?.services || [], row.config_id)) return;
     setModelConfigBusy(true);
@@ -687,19 +693,22 @@ export function createModelSettings({ canManage, onBusyChange, onConfigured, rel
     }
   }
 
-  function canLeaveEditor() {
+  async function canLeaveEditor() {
     if (modelConfigBusy) return false;
-    return !modelDraftDirty || window.confirm("有未保存的修改，确定放弃？");
+    return !modelDraftDirty || await showConfirm({ title: "放弃未保存的修改？", message: "当前模型配置尚未保存，离开后会丢弃这些修改。", confirmText: "放弃修改", cancelText: "继续编辑" });
   }
 
   function leaveEditor() {
     modelEditorSession += 1;
     modelCombobox.close();
+    els.modelProtocol.disabled = true;
+    syncCustomSelect(els.modelProtocol);
     els.modelApiKey.value = "";
   }
 
   function bind() {
     initModelConfigEditor();
+    enhanceCustomSelect(els.modelProtocol);
     els.addModelServiceBtn.onclick = addModelService;
     $("retryModelServicesBtn").onclick = openModelConfigs;
     $("retryModelSyncBtn").onclick = retryModelSync;

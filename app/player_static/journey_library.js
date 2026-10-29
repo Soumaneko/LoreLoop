@@ -159,7 +159,9 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     }
     if (dialog.open) for (const el of dialog.querySelectorAll("input,button")) el.disabled = busy;
     if (task && entryRetry) for (const el of content.querySelectorAll("input, button[type='submit']")) el.disabled = true;
-    $("libraryModelMark").textContent = state.modelConfig?.configured ? "已配置" : "未配置";
+    const modelMark = $("libraryModelMark");
+    modelMark.textContent = state.modelConfig?.configured ? "已配置" : "未配置";
+    modelMark.dataset.configured = String(Boolean(state.modelConfig?.configured));
   }
   async function canLeave() {
     if (busy) return false;

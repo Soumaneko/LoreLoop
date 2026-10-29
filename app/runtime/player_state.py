@@ -353,24 +353,27 @@ def _load_player_state(runtime: CampaignRuntime) -> dict[str, Any]:
 
 
 def player_saves_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Remove server paths from SaveManager responses."""
-    return {
-        "active": payload.get("active"),
-        "saves": [
-            {
-                key: value
-                for key, value in save.items()
-                if key in {
-                    "save_id",
-                    "name",
-                    "active",
-                    "initialized",
-                    "last_played_at",
-                    "turn_count",
-                    "protagonist_name",
-                    "location",
-                }
+    """Keep public save metadata, including operation results, without server paths."""
+    def public_save(save: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in save.items()
+            if key in {
+                "save_id",
+                "name",
+                "active",
+                "initialized",
+                "last_played_at",
+                "turn_count",
+                "protagonist_name",
+                "location",
             }
-            for save in payload.get("saves", [])
-        ],
+        }
+
+    result = {
+        "active": payload.get("active"),
+        "saves": [public_save(save) for save in payload.get("saves", [])],
     }
+    if "save" in payload:
+        result["save"] = public_save(payload["save"])
+    return result

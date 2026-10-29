@@ -12,6 +12,7 @@
 <body data-page="library">
   <div class="app-shell">
     <header class="topbar">
+      <div class="app-navigation">
       <a id="journeyLibraryBrand" class="brand" href="/" aria-label="续章旅程库">
         <span class="brand-mark" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -20,18 +21,18 @@
         </span>
         <span><strong>续章</strong><small>LORELOOP</small></span>
       </a>
+      <nav class="library-app-nav" aria-label="应用导航">
+        <button id="libraryNavBtn" type="button" aria-current="page">旅程库</button>
+        <button id="libraryModelsBtn" type="button">模型服务 <span id="libraryModelMark"></span></button>
+      </nav>
+      </div>
       <div class="world-meta" aria-live="polite" data-reading-only>
         <span id="worldTime"></span>
         <i></i>
         <span id="worldLocation"></span>
       </div>
-      <nav class="library-app-nav" aria-label="应用导航" data-global-only>
-        <button id="libraryNavBtn" type="button" aria-current="page">旅程库</button>
-        <button id="libraryModelsBtn" type="button">模型服务 <span id="libraryModelMark"></span></button>
-      </nav>
       <div class="top-actions" data-reading-only>
         <span id="statusPill" class="status-pill" data-mode="idle"><b></b><span>就绪</span></span>
-        <button id="openJourneyLibraryBtn" class="text-button" type="button" data-reading-only>旅程库</button>
         <div class="time-travel-group" data-reading-only>
           <button id="undoBtn" class="icon-button time-travel-button" type="button" aria-label="撤销上一回合" title="撤销上一回合 (↶)" disabled>
             <span>↶</span>
@@ -128,9 +129,9 @@
       </div>
       <div id="modelTestResult" class="model-test-result" role="status" hidden></div>
       </div>
-      <div id="modelConfigActions" class="modal-actions workspace-actions" hidden>
-        <button id="testModelBtn" type="button">测试连接</button>
-        <button id="saveModelOnlyBtn" type="button">保存</button>
+      <div id="modelConfigActions" class="modal-actions workspace-actions page-actions" data-action-bar="model" hidden>
+        <button id="testModelBtn" class="journey-secondary" type="button">测试连接</button>
+        <button id="saveModelOnlyBtn" class="journey-secondary" type="button">保存</button>
         <button id="saveModelBtn" class="primary-action" type="submit">保存并启用</button>
       </div>
     </form>
@@ -148,6 +149,53 @@
   </section>
       <div id="modelNotices"></div>
     </main>
+    <main id="creationPage" class="journey-library-page creation-page" hidden inert>
+      <button id="leaveCreationBtn" class="journey-quiet creation-back" type="button">‹ 保存并返回旅程库</button>
+      <div class="creation-heading"><h1 id="creationTitle" tabindex="-1">创建旅程</h1><span id="creationJourneyName"></span></div>
+      <ol class="creation-stages" aria-label="创建进度"><li data-creation-stage="config"><span>1</span>填写设定</li><li data-creation-stage="campaign_setup"><span>2</span>检查世界惯例</li><li data-creation-stage="opening"><span>3</span>生成开场</li></ol>
+      <p id="initStageHint" class="creation-intro"></p>
+      <p id="initError" class="creation-error" role="alert" hidden></p>
+      <div id="creationModelNotice" class="journey-notice" hidden><p>生成前需要配置模型服务，已填写内容会保留。</p><button id="creationModelsBtn" class="journey-secondary" type="button">配置模型服务</button></div>
+      <form id="initForm" autocomplete="off">
+        <details id="creationOriginalSummary" class="creation-summary" hidden><summary>查看初始设定</summary><p id="creationSummaryText"></p></details>
+        <section id="creationStatus" class="creation-status" role="status" hidden><h2 id="creationStatusTitle"></h2><p id="creationStatusText"></p><div class="creation-status-row"><span>初始设定</span><span id="creationConfigStatus"></span></div><div class="creation-status-row"><span>世界惯例</span><span id="creationSetupStatus"></span></div><div class="creation-status-row"><span>开场正文</span><span id="creationOpeningStatus"></span></div></section>
+        <fieldset id="initConfigFields" class="init-fieldset creation-band"><section class="creation-group"><div class="creation-group-heading"><h2>世界</h2><p>故事发生在哪里</p></div><div class="creation-fields">            <label class="wide"><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
+            <label><span>能力体系</span><select id="initAbilitySystem" name="ability_system" required><option>无超自然</option><option>低超自然</option><option selected>魔法</option><option>灵能</option><option>科技奇迹</option><option>自定义</option></select></label>
+            <label><span>世界风格</span><select id="initWorldStyle" name="world_style" required><option>古典奇幻</option><option>现代都市</option><option>科幻未来</option><option>武侠</option><option>仙侠</option><option>末日废土</option><option>自定义</option></select></label>
+            <label id="initCustomAbilityWrap" hidden><span>自定义能力体系</span><textarea name="custom_ability_system" placeholder="说明这个世界的能力来源、边界与常见形式"></textarea></label>
+            <label id="initCustomWorldStyleWrap" hidden><span>自定义世界风格</span><textarea name="custom_world_style" placeholder="描述这个世界的美学、氛围与时代特征"></textarea></label></div></section><section class="creation-group"><div class="creation-group-heading"><h2>主角</h2><p>你将扮演谁</p></div><div class="creation-fields">          <label><span>主角姓名</span><input name="protagonist_name" required placeholder="莱尔" /></label>
+          <label><span>性别</span><select name="protagonist_gender"><option>男</option><option>女</option><option>其他</option></select></label>
+          <label><span>年龄</span><input name="protagonist_age" type="number" min="0" placeholder="可选" /></label>
+          <label class="wide"><span>人物介绍</span><textarea name="protagonist_introduction" placeholder="一名带着未解谜团踏上旅途的年轻法师"></textarea></label>
+
+          <section class="wide init-collection">
+            <div class="collection-heading"><span>主角能力（最多 3 项）</span><button id="addAbilityBtn" class="text-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加能力</button></div>
+            <div id="abilityRows" class="ability-list"></div>
+          </section>
+
+</div></section><section class="creation-group"><div class="creation-group-heading"><h2>故事期待</h2><p>希望怎样经历这段旅程</p></div><div class="creation-fields">          <label class="wide"><span>长期故事体验</span><textarea name="story_expectation" required maxlength="1200" placeholder="探索未知，认识可信赖的同伴，并逐渐揭开世界的秘密"></textarea></label>
+          <div id="storyInspirationTags" class="wide inspiration-tags" aria-label="体验启发标签">
+            <button type="button" data-value="实力养成">实力养成</button>
+            <button type="button" data-value="建立关系">建立关系</button>
+            <button type="button" data-value="探索世界">探索世界</button>
+            <button type="button" data-value="调查秘密">调查秘密</button>
+            <button type="button" data-value="建立势力">建立势力</button>
+            <button type="button" data-value="困难生存">困难生存</button>
+          </div>
+          <label><span>失败惩罚</span><select name="failure_severity" required><option>宽容</option><option selected>适中</option><option>真实残酷</option></select></label></div></section></fieldset>
+        <section id="campaignSetupStage" class="creation-band" hidden><section class="creation-group"><div class="creation-group-heading"><h2>日常与社会</h2><p>普通人熟悉的世界</p></div><div class="creation-fields">          <label class="wide"><span>货币单位</span><input id="setupCurrencyUnit" name="setup_currency_unit" maxlength="40" required disabled placeholder="例如：金币" /></label>
+          <label class="wide"><span>文明与技术基准</span><textarea id="setupCivilizationBaseline" name="setup_civilization_baseline" rows="2" maxlength="200" required disabled placeholder="概括普通人日常可用的技术与生产水平"></textarea></label>          <label><span>主要存在主体</span><textarea id="setupPeoplesAndBeings" name="setup_peoples_and_beings" rows="3" required disabled placeholder="每行一项，每项不超过 10 个字"></textarea></label>
+          <label><span>主导势力</span><textarea id="setupDominantPowers" name="setup_dominant_powers" rows="3" required disabled placeholder="每行一项，填写 1 至 3 项，每项不超过 10 个字"></textarea></label>
+</div></section><section class="creation-group"><div class="creation-group-heading"><h2>力量与边界</h2><p>能做到什么，不能做什么</p></div><div class="creation-fields">          <label class="wide"><span>力量来源</span><textarea id="setupPowerSource" name="setup_power_source" rows="2" maxlength="120" required disabled placeholder="例如：魔法"></textarea></label>
+          <label><span>力量普及率</span><select id="setupPowerPrevalence" name="setup_power_prevalence" required disabled><option>罕见</option><option>少数人掌握</option><option>较为常见</option><option>社会基础</option></select></label>
+          <label><span>力量习得难度</span><select id="setupPowerLearningDifficulty" name="setup_power_learning_difficulty" required disabled><option>困难</option><option>适中</option><option>轻松</option></select></label>
+          <label class="wide"><span>力量限制</span><textarea id="setupPowerLimitation" name="setup_power_limitation" rows="2" maxlength="80" required disabled placeholder="概括这套力量不能突破的边界"></textarea></label>
+</div></section><section class="creation-group"><div class="creation-group-heading"><h2>世界冲突</h2><p>故事中的长期张力</p></div><div class="creation-fields">          <label class="wide"><span>世界主要冲突</span><textarea id="setupMajorWorldConflicts" name="setup_major_world_conflicts" rows="3" required disabled placeholder="每行一项，填写 1 至 2 项，每项不超过 50 个字"></textarea></label>
+</div></section></section>
+        <footer class="creation-footer page-actions" data-action-bar="creation"><p id="creationConfirmHint" hidden>确认后，初始设定与世界惯例将锁定，随后生成开场。</p><div class="creation-footer-buttons"><button id="saveCreationDraftBtn" class="journey-secondary" type="button">保存并返回</button><div id="initConfigActions"><button id="campaignSetupBtn" class="primary-action" type="button">生成世界惯例</button></div><div id="campaignSetupActions" hidden><button id="editInitConfigBtn" class="journey-secondary" type="button">修改初始设定</button><button id="regenerateCampaignSetupBtn" class="journey-secondary" type="button">重新生成</button><button id="initSubmitBtn" class="primary-action" type="submit">确认惯例并生成开场</button></div></div></footer>
+      </form>
+      <div id="creationNotices"></div>
+    </main>
     <div id="readingPage" class="reading-page" data-reading-only hidden inert>
     <main class="story-layout">
       <section id="story" class="story" aria-live="polite">
@@ -155,7 +203,7 @@
           <div class="sigil">✦</div>
           <h1>故事等待你的选择</h1>
           <p>这里没有预设答案。描述你想做的事，世界会记住已经发生的一切。</p>
-          <button id="continueInitBtn" class="primary-action" type="button" hidden>继续初始化</button>
+          <button id="continueInitBtn" class="primary-action" type="button" hidden>继续创建</button>
         </div>
         <div id="history" class="history"></div>
         <div id="activePlayerAction" class="active-player-action" hidden></div>
@@ -485,69 +533,6 @@
     </section>
   </dialog>
 
-  <dialog id="initDialog" class="modal init-modal">
-    <form method="dialog" id="initForm" autocomplete="off">
-      <header class="init-modal-header">
-        <h2>塑造你的起点</h2>
-        <button id="closeInitDialogBtn" class="close-button" type="button" aria-label="返回故事界面">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </header>
-      <p id="initStageHint">填写世界、主角与长期体验要求，然后生成可确认的公开世界惯例。</p>
-      <fieldset id="initConfigFields" class="init-fieldset">
-        <div class="form-grid">
-          <div id="initOriginalFields" class="form-subgrid wide">
-            <label class="wide"><span>世界名称</span><input name="world_name" required placeholder="泰瑞大陆" /></label>
-            <label><span>能力体系</span><select id="initAbilitySystem" name="ability_system" required><option>无超自然</option><option>低超自然</option><option selected>魔法</option><option>灵能</option><option>科技奇迹</option><option>自定义</option></select></label>
-            <label><span>世界风格</span><select id="initWorldStyle" name="world_style" required><option>古典奇幻</option><option>现代都市</option><option>科幻未来</option><option>武侠</option><option>仙侠</option><option>末日废土</option><option>自定义</option></select></label>
-            <label id="initCustomAbilityWrap" hidden><span>自定义能力体系</span><textarea name="custom_ability_system" placeholder="说明这个世界的能力来源、边界与常见形式"></textarea></label>
-            <label id="initCustomWorldStyleWrap" hidden><span>自定义世界风格</span><textarea name="custom_world_style" placeholder="描述这个世界的美学、氛围与时代特征"></textarea></label>
-          </div>
-
-          <label><span>主角姓名</span><input name="protagonist_name" required placeholder="莱尔" /></label>
-          <label><span>性别</span><select name="protagonist_gender"><option>男</option><option>女</option><option>其他</option></select></label>
-          <label><span>年龄</span><input name="protagonist_age" type="number" min="0" placeholder="可选" /></label>
-          <label class="wide"><span>人物介绍</span><textarea name="protagonist_introduction" placeholder="一名带着未解谜团踏上旅途的年轻法师"></textarea></label>
-
-          <section class="wide init-collection">
-            <div class="collection-heading"><span>主角能力（最多 3 项）</span><button id="addAbilityBtn" class="text-button" type="button">＋ 添加能力</button></div>
-            <div id="abilityRows" class="ability-list"></div>
-          </section>
-
-          <label><span>失败惩罚</span><select name="failure_severity" required><option>宽容</option><option selected>适中</option><option>真实残酷</option></select></label>
-
-          <label class="wide"><span>长期故事体验</span><textarea name="story_expectation" required maxlength="1200" placeholder="探索未知，认识可信赖的同伴，并逐渐揭开世界的秘密"></textarea></label>
-          <div id="storyInspirationTags" class="wide inspiration-tags" aria-label="体验启发标签">
-            <button type="button" data-value="实力养成">实力养成</button>
-            <button type="button" data-value="建立关系">建立关系</button>
-            <button type="button" data-value="探索世界">探索世界</button>
-            <button type="button" data-value="调查秘密">调查秘密</button>
-            <button type="button" data-value="建立势力">建立势力</button>
-            <button type="button" data-value="困难生存">困难生存</button>
-          </div>
-        </div>
-      </fieldset>
-
-      <section id="campaignSetupStage" class="campaign-setup-stage" hidden>
-        <div class="section-heading"><span>公开世界惯例</span><i></i></div>
-        <p>以下内容将成为长期稳定的世界常识。确认前可以直接编辑。</p>
-        <div class="form-grid">
-          <label><span>货币单位</span><input id="setupCurrencyUnit" name="setup_currency_unit" maxlength="40" required disabled placeholder="例如：金币" /></label>
-          <label><span>力量来源</span><textarea id="setupPowerSource" name="setup_power_source" rows="2" maxlength="120" required disabled placeholder="例如：魔法"></textarea></label>
-          <label><span>力量普及率</span><select id="setupPowerPrevalence" name="setup_power_prevalence" required disabled><option>罕见</option><option>少数人掌握</option><option>较为常见</option><option>社会基础</option></select></label>
-          <label><span>力量习得难度</span><select id="setupPowerLearningDifficulty" name="setup_power_learning_difficulty" required disabled><option>困难</option><option>适中</option><option>轻松</option></select></label>
-          <label class="wide"><span>力量限制</span><textarea id="setupPowerLimitation" name="setup_power_limitation" rows="2" maxlength="80" required disabled placeholder="概括这套力量不能突破的边界"></textarea></label>
-          <label class="wide"><span>主要存在主体</span><textarea id="setupPeoplesAndBeings" name="setup_peoples_and_beings" rows="3" required disabled placeholder="每行一项，每项不超过 10 个字"></textarea></label>
-          <label class="wide"><span>世界主要冲突</span><textarea id="setupMajorWorldConflicts" name="setup_major_world_conflicts" rows="3" required disabled placeholder="每行一项，填写 1 至 2 项，每项不超过 50 个字"></textarea></label>
-          <label class="wide"><span>主导势力</span><textarea id="setupDominantPowers" name="setup_dominant_powers" rows="3" required disabled placeholder="每行一项，填写 1 至 3 项，每项不超过 10 个字"></textarea></label>
-          <label class="wide"><span>文明与技术基准</span><textarea id="setupCivilizationBaseline" name="setup_civilization_baseline" rows="2" maxlength="200" required disabled placeholder="概括普通人日常可用的技术与生产水平"></textarea></label>
-        </div>
-      </section>
-      <div id="initError" class="form-error" hidden></div>
-      <div id="initConfigActions" class="modal-actions"><button id="campaignSetupBtn" class="primary-action" type="button">生成公开世界惯例</button></div>
-      <div id="campaignSetupActions" class="modal-actions" hidden><button id="editInitConfigBtn" type="button">返回修改设定</button><button id="regenerateCampaignSetupBtn" type="button">重新生成惯例</button><button id="initSubmitBtn" class="primary-action" value="default">确认惯例并生成开场</button></div>
-    </form>
-  </dialog>
 
   <div id="tokenUsageDialog" class="token-usage-popover" popover="auto" role="dialog" aria-label="用量明细">
     <section class="token-usage-dialog-shell">

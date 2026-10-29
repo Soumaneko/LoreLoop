@@ -11,12 +11,12 @@ import {
 
 export function createInitialization({
   setOperationMode, loadAll, onEvent, acknowledgeHandledOperation,
-  acknowledgeFailedOperation, showToast, newRequestId, canPresent = () => true,
+  acknowledgeFailedOperation, showToast, newRequestId, navigation, requestModels,
 }) {
   const $ = (id) => document.getElementById(id);
   const els = {
     continueInitBtn: $("continueInitBtn"),
-    initDialog: $("initDialog"), initForm: $("initForm"), closeInitDialogBtn: $("closeInitDialogBtn"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
+    initForm: $("initForm"), leaveCreationBtn: $("leaveCreationBtn"), initSubmitBtn: $("initSubmitBtn"), initError: $("initError"),
     initConfigFields: $("initConfigFields"),
     initAbilitySystem: $("initAbilitySystem"), initCustomAbilityWrap: $("initCustomAbilityWrap"),
     initWorldStyle: $("initWorldStyle"), initCustomWorldStyleWrap: $("initCustomWorldStyleWrap"),
@@ -33,6 +33,7 @@ export function createInitialization({
   let initConfigSnapshot = null;
   let campaignSetupCommitted = false;
   let currentOperation = null;
+  let recoveryStage = "campaign_setup";
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -49,7 +50,7 @@ export function createInitialization({
         await persistInitializationDraft();
       } catch (error) {
         reportClientError(error, "initialization_draft_save_failed");
-        showToast("公开世界惯例已生成，但初始化草稿暂未保存");
+        showToast("世界惯例已生成，但草稿暂未保存");
       }
     }
   }
@@ -65,6 +66,7 @@ export function createInitialization({
 
   function startOperation(operation) {
     currentOperation = operation;
+    if (operation !== "closing") recoveryStage = operation === "opening" ? "opening" : "campaign_setup";
     els.initError.hidden = true;
     if (operation === "closing") refreshControls();
     else setOperationMode("generating");
@@ -75,11 +77,16 @@ export function createInitialization({
       setOperationMode("generating");
       return;
     }
+    const operation = currentOperation;
     currentOperation = null;
     if (state.mode === "generating") {
       setOperationMode(state.playerState?.needs_init ? "needs_init"
         : state.playerState?.pending?.length ? "pending" : "idle");
     } else refreshControls();
+    if (["campaign_setup", "regenerate"].includes(operation) && initConfigSnapshot && els.initError.hidden && navigation.isCreation()) {
+      $("creationTitle").focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
   }
 
   async function handleOperationFailure(error, operationId = null) {
@@ -112,7 +119,7 @@ export function createInitialization({
     if (currentOperation) return false;
     const campaignSetup = operation.metadata?.stage === "campaign_setup";
     startOperation(campaignSetup ? "campaign_setup" : "opening");
-    if (canPresent()) open();
+    if (navigation.isCreation()) refreshControls();
     try {
       await subscribe(
         `/api/player/operations/${encodeURIComponent(operation.operation_id)}/events?after=0`,
@@ -120,7 +127,6 @@ export function createInitialization({
       );
       await acknowledgeHandledOperation(operation.operation_id);
       if (campaignSetup) return false;
-      els.initDialog.close();
       return true;
     } catch (error) {
       if (!campaignSetup) await reloadAfterFailure();
@@ -332,7 +338,7 @@ export function createInitialization({
     }
   }
 
-  async function closeInitializationDialog() {
+  async function saveBeforeLeave() {
     if (currentOperation) {
       showToast(els.initStageHint.textContent);
       return false;
@@ -340,11 +346,12 @@ export function createInitialization({
     startOperation("closing");
     try {
       await persistInitializationDraft();
-      els.initDialog.close();
       return true;
     } catch (error) {
       reportClientError(error, "initialization_draft_save_failed");
-      showToast("初始化草稿暂未保存，请重试关闭");
+      els.initError.textContent = `填写内容暂未保存，请重试保存后再离开。${error.message || ""}`;
+      els.initError.hidden = false;
+      if (navigation.isCreation()) els.initError.scrollIntoView({ block: "nearest" });
       return false;
     } finally {
       finishOperation();
@@ -373,10 +380,15 @@ export function createInitialization({
     const nameInput = node("input", "ability-name");
     nameInput.placeholder = `能力 ${index} 名称`;
     nameInput.value = name;
-    const descInput = node("input", "ability-description");
+    const descInput = node("textarea", "ability-description");
+    descInput.rows = 2;
+    nameInput.setAttribute("aria-label", `能力 ${index} 名称`);
+    descInput.setAttribute("aria-label", `能力 ${index} 说明`);
     descInput.placeholder = `能力 ${index} 的效果、边界或代价`;
     descInput.value = description;
-    const removeBtn = node("button", "ability-remove-btn", "×");
+    const removeBtn = node("button", "ability-remove-btn");
+    removeBtn.setAttribute("aria-label", `移除能力 ${index}`);
+    removeBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
     removeBtn.type = "button";
     removeBtn.onclick = () => {
       if (!canEditConfig()) return;
@@ -412,7 +424,7 @@ export function createInitialization({
       if (control) control.value = value;
     }
     refreshControls();
-    if (!currentOperation && !committed) els.setupCurrencyUnit.focus();
+    if (navigation.isCreation() && !currentOperation && !committed) els.setupCurrencyUnit.focus();
   }
 
   function showConfigStage() {
@@ -425,6 +437,7 @@ export function createInitialization({
   function editInitConfig() {
     if (currentOperation || campaignSetupCommitted) return;
     showConfigStage();
+    if (navigation.isCreation()) { window.scrollTo({ top: 0, behavior: "instant" }); els.initForm.elements.world_name.focus({ preventScroll: true }); }
   }
 
   async function requestCampaignSetup({ regenerate = false } = {}) {
@@ -442,6 +455,7 @@ export function createInitialization({
       els.initError.hidden = false;
       return;
     }
+    if (!state.modelConfig?.configured) { await requestModels(() => requestCampaignSetup({ regenerate })); return; }
     let submitted = false;
     startOperation(regenerate ? "regenerate" : "campaign_setup");
     try {
@@ -482,6 +496,8 @@ export function createInitialization({
       return;
     }
     const payload = { config: initConfigSnapshot, campaign_setup: campaignSetup };
+    if (!state.modelConfig?.configured) { await requestModels(initialize); return; }
+    let completed = false;
     let submitted = false;
     startOperation("opening");
     try {
@@ -492,8 +508,8 @@ export function createInitialization({
         request_id: newRequestId(),
       }, handleInitializationEvent);
       await acknowledgeHandledOperation(operationId);
-      els.initDialog.close();
       await loadAll({ scroll: "instant", resumeOperation: false });
+      completed = true;
     }
     catch (error) {
       if (submitted) {
@@ -507,20 +523,61 @@ export function createInitialization({
     finally {
       finishOperation();
     }
+    if (completed && navigation.isCreation()) await navigation.showReading();
   }
 
-  function open() {
-    refreshControls();
-    if (!els.initDialog.open) els.initDialog.showModal();
-  }
+  function open() { refreshControls(); return navigation.showCreation(); }
 
-  function hide() {
-    if (els.initDialog.open) els.initDialog.close();
+  function renderSummary() {
+    if (!initConfigSnapshot) return;
+    const config = initConfigSnapshot;
+    const lines = [
+      `世界：${config.world_name || ""} · ${config.world_style || ""}`,
+      `能力体系：${config.custom_ability_system || config.ability_system || ""}`,
+      `主角：${config.protagonist_name || ""} · ${config.protagonist_gender || ""}${config.protagonist_age != null ? ` · ${config.protagonist_age} 岁` : ""}`,
+      `人物介绍：${config.protagonist_introduction || "未填写"}`,
+      `主角能力：${(config.protagonist_abilities || []).map(ability => `${ability.name}：${ability.description}`).join("；") || "未填写"}`,
+      `失败惩罚：${config.failure_severity || "适中"}`,
+      `故事期待：${config.story_expectation || ""}`,
+    ];
+    if (campaignSetupCommitted) {
+      const setup = state.playerState?.initialization?.campaign_setup;
+      if (setup) lines.push(`货币单位：${setup.currency_unit}`, `力量来源：${setup.public_power_baseline.source}`,
+        `力量普及率：${setup.public_power_baseline.prevalence}`, `习得难度：${setup.public_power_baseline.learning_difficulty}`,
+        `力量限制：${setup.public_power_baseline.limitation}`, `主要存在主体：${setup.peoples_and_beings.join("、")}`,
+        `主导势力：${setup.dominant_powers.join("、")}`, `世界冲突：${setup.major_world_conflicts.join("；")}`, `文明与技术：${setup.civilization_baseline}`);
+    }
+    $("creationSummaryText").textContent = lines.join("\n");
+    $("creationOriginalSummary").querySelector("summary").textContent = campaignSetupCommitted
+      ? "查看已确认的设定与世界惯例" : `查看初始设定 · ${config.world_name || ""} / ${config.protagonist_name || ""}`;
   }
 
   function refreshControls() {
     const busy = Boolean(currentOperation);
     const staged = Boolean(initConfigSnapshot);
+    const working = busy && currentOperation !== "closing";
+    els.initConfigFields.hidden = staged || working;
+    $("creationJourneyName").textContent = state.saves?.find(save => save.save_id === state.activeSave)?.name || "";
+    $("creationModelNotice").hidden = Boolean(state.modelConfig?.configured);
+    $("creationModelsBtn").disabled = busy;
+    $("creationOriginalSummary").hidden = !staged || working;
+    $("creationConfirmHint").hidden = !staged || campaignSetupCommitted || working;
+    $("creationStatus").hidden = !working && !campaignSetupCommitted;
+    const phase = currentOperation === "opening" || campaignSetupCommitted || currentOperation === "recovery" && recoveryStage === "opening"
+      ? "opening" : staged || working ? "campaign_setup" : "config";
+    for (const step of document.querySelectorAll("[data-creation-stage]")) {
+      if (step.dataset.creationStage === phase) step.setAttribute("aria-current", "step"); else step.removeAttribute("aria-current");
+    }
+    $("creationStatusTitle").textContent = currentOperation === "recovery" ? "正在核实上次任务"
+      : working ? phase === "opening" ? "正在生成开场" : "正在生成世界惯例"
+      : !els.initError.hidden ? "开场暂未完成" : "世界惯例已确认";
+    $("creationStatusText").textContent = currentOperation === "recovery" ? "上次任务中途断开，结果尚未核实。核实前请不要重复提交。"
+      : working ? phase === "opening" ? "世界惯例已确认，正在撰写故事的第一幕。" : "根据你的设定，整理可供检查的世界常识。"
+      : "初始设定与世界惯例已锁定，可以继续生成开场。";
+    $("creationConfigStatus").textContent = [initConfigSnapshot?.world_name || els.initForm.elements.world_name.value, initConfigSnapshot?.protagonist_name || els.initForm.elements.protagonist_name.value].filter(Boolean).join(" · ") || "已填写";
+    $("creationSetupStatus").textContent = campaignSetupCommitted ? "已确认" : currentOperation === "recovery" ? "核实中" : working ? "生成中" : "待确认";
+    $("creationOpeningStatus").textContent = currentOperation === "opening" ? "生成中" : currentOperation === "recovery" && phase === "opening" ? "核实中" : "等待生成";
+    renderSummary();
     els.continueInitBtn.hidden = !state.playerState?.needs_init;
     els.continueInitBtn.disabled = state.mode === "switching";
     els.initConfigFields.disabled = busy || staged || campaignSetupCommitted;
@@ -528,7 +585,7 @@ export function createInitialization({
       select.disabled = els.initConfigFields.disabled;
     }
     els.initConfigActions.hidden = staged;
-    els.campaignSetupStage.hidden = !staged;
+    els.campaignSetupStage.hidden = !staged || working || campaignSetupCommitted;
     els.campaignSetupActions.hidden = !staged;
     setCampaignSetupControlsDisabled(busy || !staged || campaignSetupCommitted);
     els.campaignSetupBtn.disabled = !canGenerateSetup(false);
@@ -537,18 +594,20 @@ export function createInitialization({
     els.editInitConfigBtn.hidden = campaignSetupCommitted;
     els.regenerateCampaignSetupBtn.hidden = campaignSetupCommitted;
     els.initSubmitBtn.disabled = busy || !staged;
-    els.closeInitDialogBtn.disabled = busy;
-    els.closeInitDialogBtn.title = busy ? "当前操作完成后可关闭" : "返回故事界面";
-    els.campaignSetupBtn.textContent = currentOperation === "campaign_setup" ? "正在生成……" : "生成公开世界惯例";
-    els.regenerateCampaignSetupBtn.textContent = currentOperation === "regenerate" ? "正在生成……" : "重新生成惯例";
-    els.initSubmitBtn.textContent = currentOperation === "opening" ? "正在生成开场……"
+    els.leaveCreationBtn.disabled = busy;
+    $("saveCreationDraftBtn").disabled = busy;
+    $("saveCreationDraftBtn").textContent = currentOperation === "closing" ? "正在保存……" : "保存并返回";
+    els.leaveCreationBtn.title = busy ? "当前操作完成后可返回" : "保存并返回旅程库";
+    els.campaignSetupBtn.textContent = currentOperation === "recovery" ? "正在核实……" : currentOperation === "campaign_setup" ? "正在生成……" : "生成世界惯例";
+    els.regenerateCampaignSetupBtn.textContent = currentOperation === "regenerate" ? "正在生成……" : "重新生成";
+    els.initSubmitBtn.textContent = currentOperation === "recovery" ? "正在核实……" : currentOperation === "opening" ? "正在生成开场……"
       : campaignSetupCommitted ? "继续生成开场" : "确认惯例并生成开场";
     els.initStageHint.textContent = currentOperation === "recovery"
       ? "任务结果尚未核实，请按 Ctrl+Shift+R 重新加载或重启应用继续恢复；当前不能修改或重新提交。"
-      : busy ? (currentOperation === "closing" ? "正在保存初始化草稿，请稍候。" : "正在处理初始化，请等待当前任务完成。")
-      : campaignSetupCommitted ? "公开世界惯例和 CoreMemory 已确认。继续生成私有开局基础与开场正文。"
-      : staged ? "检查并修改公开世界惯例；提交后将正式建立 CoreMemory，不能返回修改。"
-      : "填写世界、主角与长期体验要求，然后生成可确认的公开世界惯例。";
+      : busy ? (currentOperation === "closing" ? "正在保存填写内容，请稍候。" : "正在创建旅程，请等待当前任务完成。")
+      : campaignSetupCommitted ? "初始设定与世界惯例已确认，可以继续生成开场。"
+      : staged ? "这些内容会成为故事中稳定的世界常识，确认前可以直接修改。"
+      : "先确定故事的世界与主角。标有 * 的内容需要填写，其余可按你的想法补充。";
     syncCustomSelects([
       els.initWorldStyle, els.initAbilitySystem,
       els.initForm.elements.protagonist_gender, els.initForm.elements.failure_severity,
@@ -576,11 +635,9 @@ export function createInitialization({
     }
     els.initForm.addEventListener("submit", (event) => { event.preventDefault(); initialize(); });
     els.continueInitBtn.onclick = open;
-    els.closeInitDialogBtn.onclick = closeInitializationDialog;
-    els.initDialog.addEventListener("cancel", (event) => {
-      event.preventDefault();
-      closeInitializationDialog();
-    });
+    els.leaveCreationBtn.onclick = () => navigation.showLibrary();
+    $("saveCreationDraftBtn").onclick = () => navigation.showLibrary();
+    $("creationModelsBtn").onclick = () => requestModels();
     enhanceCustomSelect(els.initWorldStyle);
     enhanceCustomSelect(els.initAbilitySystem);
     enhanceCustomSelect(els.initForm.elements.protagonist_gender);
@@ -592,7 +649,8 @@ export function createInitialization({
     refreshControls();
   }
 
-  return { bind, loadDraft: loadInitializationDraft, open, hide, close: closeInitializationDialog,
+  return { bind, loadDraft: loadInitializationDraft, open, canLeave: saveBeforeLeave,
+    isBusy: () => Boolean(currentOperation),
     status: () => currentOperation === "recovery" ? els.initStageHint.textContent
       : !els.initError.hidden ? els.initError.textContent : "",
     resumeOperation: resumeInitializationOperation, refreshControls };

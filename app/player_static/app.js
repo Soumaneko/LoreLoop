@@ -83,6 +83,7 @@ let streamBuffer = "";
 let streamFrame = 0;
 let saveManagerBusy = false;
 let resumeJourney = null;
+let resumeCreation = null;
 let activeGenerationRun = null;
 let pendingEditor = null;
 let playerWriteBusy = false;
@@ -202,7 +203,7 @@ function showError(
     configBtn.className = "error-config-btn";
     configBtn.type = "button";
     configBtn.textContent = "打开模型设置";
-    configBtn.onclick = () => modelSettings.open();
+    configBtn.onclick = () => openModelSettings();
     els.errorCard.appendChild(configBtn);
   }
   if (options.recheckConfirmation) {
@@ -1995,7 +1996,6 @@ function restorePlayerShell() {
 function enterModelSetup(config) {
   state.modelConfig = config;
   setOperationMode("needs_model");
-  initialization.hide();
 }
 
 async function loadAll({ scroll = false, resumeOperation = true, knownModelConfig = null, knownSaves = null, completePlayerWrite = false } = {}) {
@@ -2125,6 +2125,7 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     }
     return;
   }
+  if (!state.playerState?.needs_init && appNavigation.isCreation() && !initialization.isBusy()) await appNavigation.showReading();
   if (scroll) scrollToBottom(scroll, () => { state.historyPagingEnabled = true; });
   else window.requestAnimationFrame(() => { state.historyPagingEnabled = true; });
 }
@@ -2137,6 +2138,13 @@ async function bootstrap() {
   new ResizeObserver(([entry]) => {
     document.documentElement.style.setProperty("--composer-height", `${entry.target.getBoundingClientRect().height}px`);
   }).observe(els.playerInput.closest(".composer-shell"));
+  const actionBars = new ResizeObserver(entries => {
+    for (const { target } of entries) {
+      const height = target.getBoundingClientRect().height;
+      if (height) document.documentElement.style.setProperty(`--${target.dataset.actionBar}-actions-height`, `${height}px`);
+    }
+  });
+  for (const bar of document.querySelectorAll("[data-action-bar]")) actionBars.observe(bar);
   applyUiMode();
   restoreRecordsTabPreference();
   await readerPreferences.load();
@@ -2689,15 +2697,29 @@ const modelSettings = createModelSettings({
     try { await loadAll(options); modelSettings.clearSyncError(); }
     catch (error) { setOperationMode("error"); throw error; }
   },
-  showToast,
+  showToast, showConfirm: showConfirmModal,
   navigation: {
     show: id => appNavigation.show(id === "modelConfigDialog" ? "modelEditor" : "models"),
     isOpen: id => id === "modelConfigDialog" ? appNavigation.isModelEditor() : appNavigation.isModels() && !appNavigation.isModelEditor(),
   },
 });
 
+async function openModelSettings(continueCreation = null) {
+  const fromCreation = appNavigation.isCreation();
+  if (await modelSettings.open() && fromCreation) resumeCreation = continueCreation;
+}
+
 function resumeConfiguredJourney() {
-  if (!resumeJourney || !state.modelConfig?.configured) return;
+  if (!state.modelConfig?.configured) return;
+  if (resumeCreation) {
+    const continuation = resumeCreation; resumeCreation = null;
+    queueMicrotask(async () => {
+      try { if (await appNavigation.showCreation()) await continuation(); }
+      catch (error) { showError(error); }
+    });
+    return;
+  }
+  if (!resumeJourney) return;
   const id = resumeJourney; resumeJourney = null;
   queueMicrotask(() => enterJourney(id).catch(error => showError(error)));
 }
@@ -2705,7 +2727,13 @@ function resumeConfiguredJourney() {
 const initialization = createInitialization({
   setOperationMode, loadAll, acknowledgeHandledOperation, acknowledgeFailedOperation,
   showToast, newRequestId,
-  canPresent: () => appNavigation.isReading(),
+  navigation: {
+    isCreation: () => appNavigation.isCreation(),
+    showCreation: () => appNavigation.showCreation(),
+    showLibrary: () => appNavigation.showLibrary(),
+    showReading: () => appNavigation.showReading(),
+  },
+  requestModels: openModelSettings,
   onEvent(event) {
     if (handleRuntimeNotice(event)) return true;
     tokenUsage.handleEvent(event);
@@ -2719,11 +2747,11 @@ const appNavigation = createAppNavigation({
   beforeLeave: preparePageNavigation,
   onChange(previous) {
     if (previous === "modelEditor") modelSettings.leaveEditor();
-    if (["models", "modelEditor"].includes(previous) && !appNavigation.isModels()) resumeJourney = null;
+    if (["models", "modelEditor"].includes(previous) && !appNavigation.isModels()) { resumeJourney = null; resumeCreation = null; }
     ++navigationJumpSequence;
     cancelNavigationSettlement();
     pinnedNavigationKey = null;
-    const notices = $(appNavigation.isReading() ? "readingNotices" : appNavigation.isModels() ? "modelNotices" : "libraryNotices");
+    const notices = $(appNavigation.isReading() ? "readingNotices" : appNavigation.isModels() ? "modelNotices" : appNavigation.isCreation() ? "creationNotices" : "libraryNotices");
     notices.append($("runtimeNotices"), els.errorCard);
     refreshNavigationObserver({ force: true });
     autoSizeInput();
@@ -2741,10 +2769,10 @@ async function preparePageNavigation(destination) {
   if (pageNavigationBlocked()) { showToast("当前操作尚未完成，请稍候"); return false; }
   if (pendingEditor) { showToast("请先保存或取消正文编辑"); return false; }
   const saveId = state.activeSave;
-  if (appNavigation.isModelEditor() && !modelSettings.canLeaveEditor()) return false;
+  if (appNavigation.isModelEditor() && !await modelSettings.canLeaveEditor()) return false;
   if (appNavigation.isLibrary() && !["models", "modelEditor"].includes(destination) && !await journeyLibrary.canLeave()) return false;
   journeyLibrary.closeMenu();
-  if ($("initDialog").open && !await initialization.close()) return false;
+  if (appNavigation.isCreation() && !await initialization.canLeave()) return false;
   closeCodexProfile({ restoreFocus: false });
   if (document.querySelector("dialog[open]")) return false;
   for (const popover of [els.tokenUsageDialog, els.settingInfoDialog]) {
@@ -2770,7 +2798,7 @@ const journeyLibrary = createJourneyLibrary({
     try { await loadAll({ knownSaves }); }
     catch (error) { setOperationMode("error"); throw error; }
   },
-  onModels: () => modelSettings.open(),
+  onModels: () => openModelSettings(),
   showConfirm: showConfirmModal, showToast,
   reportError: error => reportClientError(error, "journey_library_failed"),
 });
@@ -2835,7 +2863,7 @@ async function confirmDiscardUnsavedPendingEdit() {
 
 async function enterJourney(saveId, alreadyActive = false) {
   if (!state.saves.some(save => save.save_id === saveId)) throw new Error("这段旅程已不在列表中，请重新读取。");
-  if (!state.modelConfig?.configured) { resumeJourney = saveId; modelSettings.open(); return; }
+  if (!state.modelConfig?.configured) { resumeJourney = saveId; openModelSettings(); return; }
   if (saveId !== state.activeSave || !state.playerState) {
     if (!canChangePlayerState(playerActionContext())) return;
     const target = pendingTarget();
@@ -2849,9 +2877,9 @@ async function enterJourney(saveId, alreadyActive = false) {
     } finally { playerWriteBusy = false; renderControls(); }
   }
   if (!state.playerState || state.activeSave !== saveId) return;
+  if (state.playerState.needs_init) { await initialization.open(); return; }
   if (!appNavigation.isReading() && !await appNavigation.showReading()) return;
-  if (state.playerState.needs_init) initialization.open();
-  else if (state.uncertainConfirmation?.saveId === saveId) await els.errorCard.querySelector(".error-retry-btn")?.onclick();
+  if (state.uncertainConfirmation?.saveId === saveId) await els.errorCard.querySelector(".error-retry-btn")?.onclick();
 }
 
 async function openLeftDrawer() {
@@ -4189,10 +4217,9 @@ const openJourneyLibrary = async event => {
     if (await journeyLibrary.home()) $("journeyLibraryTitle").focus({ preventScroll: true });
   }
 };
-$("openJourneyLibraryBtn").onclick = openJourneyLibrary;
 $("journeyLibraryBrand").onclick = openJourneyLibrary;
 $("libraryNavBtn").onclick = openJourneyLibrary;
-$("libraryModelsBtn").onclick = () => modelSettings.open();
+$("libraryModelsBtn").onclick = () => openModelSettings();
 $("drawerJourneyLibraryBtn").onclick = openJourneyLibrary;
 els.openDrawerBtn.onclick = openDrawer; els.closeDrawerBtn.onclick = closeDrawer;
 if (els.closeLeftDrawerBtn) els.closeLeftDrawerBtn.onclick = closeLeftDrawer;
@@ -4214,7 +4241,7 @@ els.drawerBackdrop.onclick = async () => {
   closeLeftDrawer();
   closeRecordsDrawer();
 };
-els.modelSettingsBtn.onclick = () => modelSettings.open();
+els.modelSettingsBtn.onclick = () => openModelSettings();
 function backWorkspace() { return systemWorkspace.back(); }
 $("workspaceBackBtn").onclick = backWorkspace;
 $("modelBackBtn").onclick = () => appNavigation.backModels();
@@ -4255,7 +4282,7 @@ async function refreshGameView() {
     }
     const snapshot = await readRefreshSnapshot({ request, loadRecords, loadEvents,
       saveId: state.activeSave, earliestTurn: state.playerState?.history?.[0]?.turn_index });
-    if (snapshot.playerState.needs_init && !$("initDialog").open) {
+    if (snapshot.playerState.needs_init && !appNavigation.isCreation()) {
       await initialization.loadDraft(snapshot.playerState);
     }
     const scrollY = window.scrollY;
@@ -4341,9 +4368,9 @@ document.addEventListener("keydown", (event) => {
       backWorkspace();
       return;
     }
-    if (appNavigation.isModels()) {
+    if (appNavigation.isModels() || appNavigation.isCreation()) {
       event.preventDefault();
-      appNavigation.backModels();
+      if (appNavigation.isModels()) appNavigation.backModels(); else appNavigation.showLibrary();
       return;
     }
     let closed = false;
