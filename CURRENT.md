@@ -1698,8 +1698,9 @@ only a model reuses the stored Key. The store reads format v3 directly;
 unreadable configurations retain their original file and report the cause.
 The management surface (`/api/player/model-configs`, activate/delete) drives
 service switching.
-Missing model configuration opens the service manager, where users can add a
-service or edit an existing service with a missing Key by its saved ID. The
+Explicit model setup opens the shared global Model Services page, where users
+can add a service or edit one with a missing Key by its saved ID. Missing
+configuration does not force setup on startup or prevent returning to the library. The
 editor keeps Provider identity locked, including after connection tests; fresh
 draft Provider changes clear the typed Key and update the service name. Key
 hints distinguish retaining this service's Key from an endpoint/protocol change
@@ -1731,9 +1732,15 @@ advanced extension, available only on openai_chat.
 `model_settings.js` owns the service list, editor drafts, connection tests,
 catalog cache/request tokens, and editor sessions. `app.js` binds it once and
 uses its open/busy and editor-leave entries; explicit callbacks check application
-conflicts, refresh controls, and reload the active configuration. Model setup
-remains available in `needs_model`. Editing a service only changes its private
-draft; `state.modelConfig` continues to represent the server's active service.
+conflicts, refresh controls, and reload the active configuration. The single list
+and editor live in the global page shell, reached from the library or reading
+controls. The current service uses a filled region; remaining services use compact
+rows. Connection fields, catalog suggestions and test results use the existing
+editor logic. The form is width-limited, and its action row remains available
+while scrolling. Model setup remains available in `needs_model`. Editing a service
+only changes its private draft; `state.modelConfig` continues to represent the
+server's active service. Failed list reads offer an explicit retry and are not
+presented as an empty service list.
 
 List loading, explicit catalog refresh, testing, saving, activation, and deletion
 share one busy flag. Conflicting handlers and close/Escape entries check that
@@ -1746,7 +1753,11 @@ Successful writes apply the returned list directly. Application state reloads
 when activation changes or the active service is edited; saving/deleting an
 inactive service keeps the current service. A failed write preserves the draft
 and typed Key. If only the subsequent application reload fails, the successful
-write remains visible and feedback distinguishes it from a failed save.
+write remains visible and feedback distinguishes it from a failed save. A
+persistent notice offers a read-only synchronization retry without repeating the
+completed save or activation; successful synchronization clears it. The explicit
+configure-and-continue callback runs after model writes and internal navigation
+finish, so navigation locks cannot consume the continuation intent prematurely.
 
 ## 19. Player, Debug, and Operation Surfaces
 
@@ -1756,7 +1767,8 @@ DOM bindings, form stages, drafts, submission, and operation subscriptions; it
 reuses the existing draft and campaign-setup helpers. Application coordination
 uses explicit callbacks rather than importing the entry module.
 
-`app_navigation.js` owns the reading/library view and its scroll/focus context,
+`app_navigation.js` owns reading, library, model-list and model-editor views and
+their scroll/focus context,
 separately from the operation mode. The brand and Journey Library control use
 guarded in-page navigation instead of reloading the document. Leaving reading
 retains its DOM, unsent input, selected candidate and disclosures; returning does
@@ -1780,9 +1792,15 @@ writes preserve input; successful creation/import followed by a read failure
 retries reading and entry without repeating the completed write. List failures
 remain distinct from an empty library. Unconfigured users can manage saves;
 explicit configure-and-continue resumes the selected journey after configuration.
-The top navigation establishes the global page shell; model services still use
-the existing single workspace implementation and initialization retains its
-existing dialog pending their separate migration tickets.
+The top navigation is shared with the global model list and editor. Model
+navigation records its reading/library source: editor Back returns to the list;
+module Back returns to the source with its position and focus. Exiting the editor
+checks unsaved changes, invalidates its session, closes suggestions and clears the
+Key field. Ordinary saves and service activation remain on the model page; only
+an explicit configure-and-continue intent enters the chosen journey. Leaving the
+module cancels that intent. Deferred navigation callbacks restore scroll without
+reclaiming focus from a newly focused editor input. Initialization retains its
+existing dialog pending its separate migration ticket.
 
 Generation and confirmation can continue while the library is visible. Errors
 and outcome-verification actions use the same nodes on the visible page. Delayed
@@ -1956,21 +1974,22 @@ inert background prevents interaction with those covered entries.
 Reading typography, theme brightness and interaction contracts remain
 unchanged.
 
-`management_workspace.js` keeps system controls, model services and Core Memory
-in one right-hand surface. Save selection and management live exclusively in the
-Journey Library; the control home retains an entry to that same page. Save APIs
-and archive formats are unchanged.
+`management_workspace.js` keeps system controls and Core Memory in one right-hand
+surface. Save management lives exclusively in the Journey Library and model
+services use their single global list/editor. The control home retains entries
+to those pages and a current model summary. Entering model services closes the
+workspace; returning restores reading rather than opening the old drawer. Save
+APIs, model configuration formats and archive formats are unchanged.
 
 Management pages replace the control home rather than stacking dialogs. Back
-returns to their parent with its scroll and focus; model editing returns to the
-service list. A single backdrop, fixed navigation header and content-specific
-widths serve all pages. The open workspace contains keyboard focus and makes the
+returns to their parent with its scroll and focus. A single backdrop, fixed
+navigation header and content-specific widths serve the workspace pages. The open workspace contains keyboard focus and makes the
 reading background inert, restoring it when closed. Small screens use the full width for management. Only the
-content region scrolls; model/core actions stay in the footer. Compact controls
+content region scrolls; Core Memory actions stay in the footer. Compact controls
 retain their existing adjustable width; child pages use their task-specific
-width. Model and Core Memory guards prevent leaving during writes or silently
-losing edited drafts. Hidden model editors invalidate catalog callbacks and
-clear their API-key field. The original endpoints and save formats are unchanged.
+width. Core Memory guards prevent leaving during writes or silently losing
+edited drafts; model pages enforce their corresponding guards in global
+navigation. The original endpoints and save formats are unchanged.
 
 The composer shares the 790px reading-width limit and keeps its padding and
 line height stable through focus changes. Its visible label and help text

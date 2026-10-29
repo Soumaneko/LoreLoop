@@ -16,7 +16,7 @@ import {
 } from "./model_configs.js";
 import { createModelCombobox } from "./model_combobox.js";
 
-export function createModelSettings({ canManage, onBusyChange, reload, showToast, workspace }) {
+export function createModelSettings({ canManage, onBusyChange, onConfigured, reload, showToast, navigation }) {
   const $ = (id) => document.getElementById(id);
   const els = {
     modelConfigDialog: $("modelConfigDialog"), modelConfigForm: $("modelConfigForm"),
@@ -142,7 +142,7 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     setModelConfigBusy(true);
     try {
       const catalog = await loadModelCatalog({ force: true });
-      if (session !== modelEditorSession || !workspace.isOpen("modelConfigDialog") || !catalog) return;
+      if (session !== modelEditorSession || !navigation.isOpen("modelConfigDialog") || !catalog) return;
       renderProviderOptions(catalog);
       updateModelCombobox(catalogProviderById(catalog, modelSelection.preset_id));
       showToast("模型目录已刷新");
@@ -299,7 +299,7 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     els.modelKeyHint.textContent = changed
       ? "服务已改变，请填写此服务的 Key。保存前原配置仍有效。"
       : hasKey
-        ? "此配置已保存 Key，留空保留；密钥不会传回浏览器。"
+        ? "已保存 API Key，留空可保留；密钥不会再次显示。"
         : "请填写此服务的 Key。测试不会保存配置。";
   }
 
@@ -342,11 +342,8 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     markConnectionDirty();
   }
 
-  function renderModelConfigForm(config, { required = false } = {}) {
-    els.modelConfigDialog.dataset.required = required ? "true" : "false";
-    els.modelConfigIntro.textContent = required
-      ? "开始故事前，请先配置并测试本机使用的模型服务。配置不会写入或导出到故事存档。"
-      : "模型配置只保存在本机，不会写入或导出到任何故事存档。";
+  function renderModelConfigForm(config) {
+    els.modelConfigIntro.textContent = "服务与密钥只保存在本机，不随故事存档导出。";
     els.modelApiKey.value = "";
     modelDraftOriginal = { ...config };
     els.modelBaseUrl.value = config.base_url || "";
@@ -368,18 +365,17 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     syncEndpointFields();
     syncModelKeyHint();
     invalidateModelConnectionTest();
-    void enhanceModelConfigWithCatalog(config);
   }
 
-  async function enhanceModelConfigWithCatalog(config) {
+  async function enhanceModelConfigWithCatalog() {
     const session = modelEditorSession;
     try {
       const catalog = await loadModelCatalog();
-      if (session !== modelEditorSession || !workspace.isOpen("modelConfigDialog") || !catalog) return;
+      if (session !== modelEditorSession || !navigation.isOpen("modelConfigDialog") || !catalog) return;
       renderProviderOptions(catalog);
       updateModelCombobox(catalogProviderById(catalog, modelSelection.preset_id));
     } catch (error) {
-      if (session !== modelEditorSession || !workspace.isOpen("modelConfigDialog")) return;
+      if (session !== modelEditorSession || !navigation.isOpen("modelConfigDialog")) return;
       renderProviderOptions(modelCatalogCache);
       showModelPresetNote("模型目录暂时不可用，仍可填写服务地址和模型，或使用已保存配置。");
     }
@@ -395,8 +391,7 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
   }
 
 
-  function openModelConfig(config, {
-    required = false,
+  async function openModelConfig(config, {
     configId = "",
     isNew = false,
     activate = true,
@@ -420,12 +415,11 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
       preset_id: "custom",
       model_id: "",
       name: "",
-    }, { required });
+    });
     refreshControls();
-    workspace.show("modelConfigDialog");
-    window.setTimeout(() => (
-      isNew ? els.modelProviderSearch : config?.has_api_key ? els.modelName : els.modelApiKey
-    ).focus(), 0);
+    if (!await navigation.show("modelConfigDialog")) return;
+    void enhanceModelConfigWithCatalog();
+    (isNew ? els.modelProviderSearch : config?.has_api_key ? els.modelName : els.modelApiKey).focus();
   }
 
   function setModelConfigBusy(busy) {
@@ -444,6 +438,8 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     els.modelConnectionFields.disabled = busy || (modelDraftIsNew && modelProviderPickerOpen);
     els.modelThinking.disabled = busy || els.modelProtocol.value !== "openai_chat";
     els.addModelServiceBtn.disabled = busy;
+    $("retryModelServicesBtn").disabled = busy;
+    $("retryModelSyncBtn").disabled = busy;
     for (const button of els.modelConfigsList.querySelectorAll("button[data-service-action]")) {
       const service = findConfigService(modelConfigsCache?.services || [], button.dataset.configId);
       button.disabled = busy || (button.dataset.serviceAction === "activate"
@@ -485,10 +481,23 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
   async function refreshActiveConfig(message) {
     try {
       await reload({ scroll: "instant", resumeOperation: false });
+      clearSyncError();
       showToast(message);
     } catch (error) {
+      $("modelSyncErrorMessage").textContent = `${message}，但故事状态暂未更新：${error.message}`;
+      $("modelSyncError").hidden = false;
       showToast(`${message}，但当前状态暂未刷新：${error.message}`);
     }
+  }
+
+  function clearSyncError() { $("modelSyncError").hidden = true; }
+
+  async function retryModelSync() {
+    if (!available()) return;
+    setModelConfigBusy(true);
+    try { await refreshActiveConfig("模型服务状态已同步"); }
+    finally { setModelConfigBusy(false); }
+    if ($("modelSyncError").hidden) onConfigured();
   }
 
   async function saveModelSettings(activate = modelDraftActivate) {
@@ -500,13 +509,15 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     }
     const payload = { ...modelConfigPayload(), activate };
     setModelConfigBusy(true);
+    let saved = false;
     try {
       const configs = await request("/api/player/model-configs", {
         method: "POST", body: JSON.stringify(payload),
       });
       modelConfigsCache = configs;
       els.modelApiKey.value = "";
-      showList();
+      modelDraftDirty = false;
+      saved = true;
       const message = activate ? "模型配置已保存并立即启用" : "模型配置已保存";
       if (activate || payload.config_id === configs.active_config_id) await refreshActiveConfig(message);
       else showToast(message);
@@ -514,6 +525,10 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
       showModelTestResult("error", error.message || "模型配置未能保存");
     } finally {
       setModelConfigBusy(false);
+    }
+    if (saved) {
+      if (navigation.isOpen("modelConfigDialog")) await showList();
+      onConfigured();
     }
   }
 
@@ -523,19 +538,20 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
   }
 
   function renderModelConfigsList() {
-    const data = modelConfigsCache || { services: [], active_config_id: "" };
-    const rows = buildServiceRows(data.services || [], data.active_config_id || "");
+    if (!modelConfigsCache) { els.modelConfigsList.textContent = ""; return; }
+    const data = modelConfigsCache;
+    const rows = buildServiceRows(data.services || [], data.active_config_id || "").sort((a, b) => Number(b.active) - Number(a.active));
     els.modelConfigsList.textContent = "";
     if (!rows.length) {
       const empty = document.createElement("div");
       empty.className = "empty";
-      empty.textContent = "尚未添加任何模型服务。";
+      empty.textContent = "还没有模型服务。添加服务并测试连接后，就可以开始故事。";
       els.modelConfigsList.append(empty);
       return;
     }
     for (const row of rows) {
       const div = document.createElement("div");
-      div.className = "service-row";
+      div.className = `service-row${row.active ? " is-current" : ""}`;
       const head = document.createElement("div");
       head.className = "service-row-head";
       const name = document.createElement("span");
@@ -582,7 +598,7 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
       if (!row.has_api_key) {
         const missing = document.createElement("div");
         missing.className = "service-row-missing-key";
-        missing.textContent = "此服务缺少 Key，请编辑并填写。";
+        missing.textContent = "尚未填写 API Key，补充后即可启用。";
         div.append(missing);
       }
       els.modelConfigsList.append(div);
@@ -590,25 +606,31 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     refreshControls();
   }
 
-  function showList() {
+  async function showList() {
     els.modelConfigsIntro.textContent = listIntro;
+    els.modelConfigsIntro.removeAttribute("role");
+    $("retryModelServicesBtn").hidden = true;
     renderModelConfigsList();
-    workspace.show("modelConfigsDialog");
+    return navigation.isOpen("modelConfigsDialog") || await navigation.show("modelConfigsDialog");
   }
 
   async function openModelConfigs() {
     if (!available()) return;
-    if (workspace.isOpen("modelConfigDialog")) {
+    if (navigation.isOpen("modelConfigDialog")) {
       els.modelConfigDialog.focus();
       return;
     }
+    if (!await showList()) return;
     setModelConfigBusy(true);
-    showList();
+    if (!modelConfigsCache) els.modelConfigsIntro.textContent = "正在读取模型服务……";
     try {
       await refreshModelConfigs();
+      els.modelConfigsIntro.textContent = listIntro;
       renderModelConfigsList();
     } catch (error) {
-      els.modelConfigsIntro.textContent = `${error.message || "服务列表暂未加载"}；请关闭后重新打开重试。`;
+      els.modelConfigsIntro.textContent = `${error.message || "暂时无法读取服务列表"}。请重试。`;
+      els.modelConfigsIntro.setAttribute("role", "alert");
+      $("retryModelServicesBtn").hidden = false;
     } finally {
       setModelConfigBusy(false);
     }
@@ -645,6 +667,7 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     } finally {
       setModelConfigBusy(false);
     }
+    onConfigured();
   }
 
   async function deleteModelService(row) {
@@ -665,7 +688,7 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
   }
 
   function canLeaveEditor() {
-    if (modelConfigBusy || els.modelConfigDialog.dataset.required === "true") return false;
+    if (modelConfigBusy) return false;
     return !modelDraftDirty || window.confirm("有未保存的修改，确定放弃？");
   }
 
@@ -678,6 +701,8 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
   function bind() {
     initModelConfigEditor();
     els.addModelServiceBtn.onclick = addModelService;
+    $("retryModelServicesBtn").onclick = openModelConfigs;
+    $("retryModelSyncBtn").onclick = retryModelSync;
     els.saveModelOnlyBtn.onclick = () => saveModelSettings(false);
 
     els.testModelBtn.onclick = testModelConnection;
@@ -707,6 +732,6 @@ export function createModelSettings({ canManage, onBusyChange, reload, showToast
     refreshControls();
   }
 
-  return { bind, open: openModelConfigs, isBusy: () => modelConfigBusy,
+  return { bind, clearSyncError, open: openModelConfigs, isBusy: () => modelConfigBusy,
     hasUnsavedChanges: () => modelDraftDirty, canLeaveEditor, leaveEditor };
 }

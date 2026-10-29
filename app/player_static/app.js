@@ -331,6 +331,10 @@ function renderControls({ updateNavigation = true } = {}) {
   initialization.refreshControls();
   if (updateNavigation) renderTurnNavigator();
   journeyLibrary.refreshControls();
+  $("modelBackBtn").disabled = pageNavigationBlocked();
+  $("libraryModelsBtn").disabled = !canManageModelSettings() || modelSettings.isBusy();
+  $("currentModelSummary").textContent = state.modelConfig?.configured
+    ? [state.modelConfig.name, state.modelConfig.model].filter(Boolean).join(" · ") : "未配置";
 }
 
 function renderHeader() {
@@ -2148,7 +2152,7 @@ async function bootstrap() {
 function setProgress(step) {
   const label = progressLabels[step];
   if (label) els.streamingLabel.textContent = label;
-  if (label && !appNavigation.isReading() && $("journeyLibraryStatus")) $("journeyLibraryStatus").textContent = label;
+  if (label && appNavigation.isLibrary() && $("journeyLibraryStatus")) $("journeyLibraryStatus").textContent = label;
   const confirmationLabel = document.querySelector("#confirmationProgress .confirmation-progress-label");
   if (label && confirmationLabel) confirmationLabel.textContent = label;
 }
@@ -2664,15 +2668,11 @@ function canManageModelSettings() {
 const systemWorkspace = createManagementWorkspace({
   pages: {
     systemControlHome: { title: "系统控制" },
-    modelConfigsDialog: { title: "模型服务", parent: "systemControlHome", width: 680 },
-    modelConfigDialog: { title: "配置模型服务", parent: "modelConfigsDialog", width: 680 },
     coreMemoryDialog: { title: "核心记忆", parent: "systemControlHome", width: 820 },
   },
-  beforeLeave: page => page === "coreMemoryDialog" ? coreMemoryEditor.canLeave()
-    : page === "modelConfigDialog" ? modelSettings.canLeaveEditor() : true,
-  onLeave: page => { if (page === "modelConfigDialog") modelSettings.leaveEditor(); },
-  canNavigate: () => !stateRefreshBusy && !saveManagerBusy && !playerWriteBusy && !modelSettings.isBusy() && !coreMemoryEditor.isBusy()
-    && !(systemWorkspace.isOpen("modelConfigDialog") && $("modelConfigDialog").dataset.required === "true"),
+  beforeLeave: page => page === "coreMemoryDialog" ? coreMemoryEditor.canLeave() : true,
+  onLeave() {},
+  canNavigate: () => !stateRefreshBusy && !saveManagerBusy && !playerWriteBusy && !modelSettings.isBusy() && !coreMemoryEditor.isBusy(),
 });
 
 const coreMemoryEditor = createCoreMemoryEditor({
@@ -2683,14 +2683,17 @@ const coreMemoryEditor = createCoreMemoryEditor({
 
 const modelSettings = createModelSettings({
   canManage: canManageModelSettings,
-  onBusyChange() {
-    renderControls();
-    if (!modelSettings.isBusy()) resumeConfiguredJourney();
-  },
+  onBusyChange: renderControls,
+  onConfigured: resumeConfiguredJourney,
   async reload(options) {
-    await loadAll(options);
+    try { await loadAll(options); modelSettings.clearSyncError(); }
+    catch (error) { setOperationMode("error"); throw error; }
   },
-  showToast, workspace: systemWorkspace,
+  showToast,
+  navigation: {
+    show: id => appNavigation.show(id === "modelConfigDialog" ? "modelEditor" : "models"),
+    isOpen: id => id === "modelConfigDialog" ? appNavigation.isModelEditor() : appNavigation.isModels() && !appNavigation.isModelEditor(),
+  },
 });
 
 function resumeConfiguredJourney() {
@@ -2714,11 +2717,13 @@ const initialization = createInitialization({
 const appNavigation = createAppNavigation({
   saveId: () => state.activeSave,
   beforeLeave: preparePageNavigation,
-  onChange() {
+  onChange(previous) {
+    if (previous === "modelEditor") modelSettings.leaveEditor();
+    if (["models", "modelEditor"].includes(previous) && !appNavigation.isModels()) resumeJourney = null;
     ++navigationJumpSequence;
     cancelNavigationSettlement();
     pinnedNavigationKey = null;
-    const notices = $(appNavigation.isReading() ? "readingNotices" : "libraryNotices");
+    const notices = $(appNavigation.isReading() ? "readingNotices" : appNavigation.isModels() ? "modelNotices" : "libraryNotices");
     notices.append($("runtimeNotices"), els.errorCard);
     refreshNavigationObserver({ force: true });
     autoSizeInput();
@@ -2732,11 +2737,12 @@ function pageNavigationBlocked() {
     || modelSettings.isBusy() || coreMemoryEditor.isBusy() || ["booting", "switching"].includes(state.mode);
 }
 
-async function preparePageNavigation() {
+async function preparePageNavigation(destination) {
   if (pageNavigationBlocked()) { showToast("当前操作尚未完成，请稍候"); return false; }
   if (pendingEditor) { showToast("请先保存或取消正文编辑"); return false; }
   const saveId = state.activeSave;
-  if (!appNavigation.isReading() && !await journeyLibrary.canLeave()) return false;
+  if (appNavigation.isModelEditor() && !modelSettings.canLeaveEditor()) return false;
+  if (appNavigation.isLibrary() && !["models", "modelEditor"].includes(destination) && !await journeyLibrary.canLeave()) return false;
   journeyLibrary.closeMenu();
   if ($("initDialog").open && !await initialization.close()) return false;
   closeCodexProfile({ restoreFocus: false });
@@ -4140,11 +4146,7 @@ function renderEventRecords(events, error = null) {
 
 
 function openDrawer() { systemWorkspace.show(); }
-async function closeDrawer() {
-  const closed = await systemWorkspace.close();
-  if (closed && !state.modelConfig?.configured) resumeJourney = null;
-  return closed;
-}
+function closeDrawer() { return systemWorkspace.close(); }
 
 function scrollToBottom(mode = "smooth", onSettled = null) {
   const visit = appNavigation.revision;
@@ -4181,7 +4183,7 @@ els.dismissErrorBtn.onclick = clearError;
 const openJourneyLibrary = async event => {
   event.preventDefault();
   event.stopPropagation();
-  if (appNavigation.isReading()) appNavigation.showLibrary();
+  if (!appNavigation.isLibrary()) appNavigation.showLibrary();
   else {
     if (els.drawer.classList.contains("open") && !await closeDrawer()) return;
     if (await journeyLibrary.home()) $("journeyLibraryTitle").focus({ preventScroll: true });
@@ -4213,11 +4215,9 @@ els.drawerBackdrop.onclick = async () => {
   closeRecordsDrawer();
 };
 els.modelSettingsBtn.onclick = () => modelSettings.open();
-async function backWorkspace() {
-  await systemWorkspace.back();
-  if (!state.modelConfig?.configured && !systemWorkspace.isOpen("modelConfigsDialog") && !systemWorkspace.isOpen("modelConfigDialog")) resumeJourney = null;
-}
+function backWorkspace() { return systemWorkspace.back(); }
 $("workspaceBackBtn").onclick = backWorkspace;
+$("modelBackBtn").onclick = () => appNavigation.backModels();
 function stateRefreshBlockReason() {
   if (stateRefreshBusy) return "正在刷新状态，请稍候";
   if (playerActionContext().busy || difficultySaveBusy || state.historyLoading
@@ -4225,7 +4225,7 @@ function stateRefreshBlockReason() {
   if (state.uncertainConfirmation?.saveId === state.activeSave) return "请先核实上一次确认的结果";
   if (pendingEditor) return "请先保存或取消正文编辑";
   if (journeyLibrary.hasUnsavedChanges()) return "请先完成或取消当前填写";
-  if ((systemWorkspace.isOpen("modelConfigDialog") && modelSettings.hasUnsavedChanges())
+  if ((appNavigation.isModelEditor() && modelSettings.hasUnsavedChanges())
     || (systemWorkspace.isOpen("coreMemoryDialog") && coreMemoryEditor.hasUnsavedChanges())
     || recordsDirty || els.recordsDrawer.querySelector(".record-edit:not([hidden])")) return "请先保存或取消未保存的修改";
   return "";
@@ -4243,7 +4243,7 @@ async function refreshGameView() {
   surfaces.forEach(element => { element.inert = true; });
   renderControls({ updateNavigation: false });
   try {
-    if (!appNavigation.isReading() && !state.modelConfig?.configured) {
+    if (!state.modelConfig?.configured) {
       state.modelConfig = await request("/api/player/model-config");
       if (!state.modelConfig.configured) {
         const saves = await request("/api/player/saves");
@@ -4304,6 +4304,7 @@ async function refreshGameView() {
     const nextAnchor = anchorSelector && els.story.querySelector(anchorSelector);
     window.scrollTo({ top: nextAnchor ? scrollY + nextAnchor.getBoundingClientRect().top - anchorTop : scrollY, behavior: "instant" });
     showToast("已同步最新故事状态");
+    modelSettings.clearSyncError();
     resumeConfiguredJourney();
   } catch (error) {
     reportClientError(error, "refresh_game_view_failed");
@@ -4338,6 +4339,11 @@ document.addEventListener("keydown", (event) => {
     if (els.drawer.classList.contains("open")) {
       event.preventDefault();
       backWorkspace();
+      return;
+    }
+    if (appNavigation.isModels()) {
+      event.preventDefault();
+      appNavigation.backModels();
       return;
     }
     let closed = false;
