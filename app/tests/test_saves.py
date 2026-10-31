@@ -3,6 +3,7 @@ from app.core.client_error import ClientValidationError
 import json
 import os
 import threading
+from pathlib import Path
 import pytest
 from app.domain.core_memory import InitConfig, build_initial_current_state
 from app.domain.current_state import PlayerState, make_default_state
@@ -19,6 +20,89 @@ from app.runtime.paths import (
 from app.runtime.saves import SaveManager
 from app.runtime.session import CampaignRuntime, PendingOpening, PendingTurn
 from app.runtime.turn_history import CampaignHistory
+
+
+@pytest.mark.parametrize("preset_id", ["fantasy", "wuxia", "xianxia"])
+def test_bundled_opening_is_complete_and_each_creation_is_isolated(
+    campaign_runtime, tmp_path, preset_id,
+):
+    from app.runtime.initialization import initialization_fingerprint
+    from app.domain.core_memory import build_core_memory
+    from app.runtime.player_state import load_player_state
+    from app.runtime.opening_presets import opening_preset
+
+    runtime = campaign_runtime
+    manager = SaveManager(tmp_path / "preset#%20saves", runtime=runtime)
+    original_id = manager.active_id
+    preset, _ = opening_preset(preset_id)
+    source = json.loads((Path(__file__).resolve().parents[2] / "scripts" / "opening_presets"
+                         / f"{preset_id}.json").read_text(encoding="utf-8"))
+    first = manager.create("", preset_id=preset_id)
+    second = manager.create("", preset_id=preset_id)
+    assert first.save_id != second.save_id
+    assert (first.name, second.name) == (preset["name"], preset["name"] + " 2")
+    assert manager.active_id == original_id
+
+    manager.switch(first.save_id)
+    record = runtime.initialization.load()
+    assert record.phase == "opening_pending" and record.foundation is not None
+    assert record.config.model_dump() == InitConfig.model_validate(source["config"]).model_dump()
+    assert record.campaign_setup.model_dump() == source["campaign_setup"]
+    assert record.foundation.model_dump() == source["foundation"]
+    assert record.fingerprint == initialization_fingerprint(record.config, record.campaign_setup)
+    assert runtime.stores.core_memory.load() == record.core_memory
+    assert record.core_memory == build_core_memory(record.config, record.campaign_setup)
+    assert record.core_memory.items
+    current = runtime.stores.current_state.load()
+    assert current.player.name == record.config.protagonist_name
+    assert current.resources.money == record.foundation.initial_resources.money
+    assert current.resources.inventory == record.foundation.initial_resources.inventory
+    for key, value in source["opening_state"].items():
+        assert current.model_dump()[key] == value
+    assert {setting.name: {
+        "kind": setting.kind, "name": setting.name, "summary": setting.summary,
+        "public_facts": setting.public_facts, "hidden_facts": setting.hidden_facts,
+    } for setting in runtime.stores.world_setting.list_all()} == {
+        setting["name"]: setting for setting in source["settings"]
+    }
+    assert not runtime.operations.list()
+    state = load_player_state()
+    assert state["needs_init"] is False
+    assert state["initialization"]["phase"] == "opening_pending"
+    assert state["history"] == []
+    assert state["pending"][0]["kind"] == "opening"
+    pending = runtime.pending_openings.values()[0]
+    assert pending.initialization_fingerprint == record.fingerprint
+    assert pending.current_state == current
+    assert pending.scene_result.scene_text == preset["opening"]
+    assert pending.scene_result == SceneWriterResult.model_validate(source["opening_scene"])
+    assert pending.scene_result.closing_prompt
+    runtime.save_pending_scene_edit(pending.turn_id, "仅修改第一个副本")
+    manager.switch(second.save_id)
+    assert runtime.pending_openings.values()[0].scene_result.scene_text == preset["opening"]
+    manager.switch(first.save_id)
+    assert runtime.pending_openings.values()[0].scene_result.scene_text == "仅修改第一个副本"
+    manager.switch(original_id)
+    assert runtime.initialization.load() is None
+    assert not runtime.pending_openings.values()
+
+
+def test_preset_creation_rejection_preserves_existing_saves(campaign_runtime, tmp_path, monkeypatch):
+    from app.runtime import saves
+    manager = SaveManager(tmp_path / "saves", runtime=campaign_runtime)
+    before = manager.payload()
+    with pytest.raises(ClientValidationError, match="预设不存在"):
+        manager.create("", preset_id="../fantasy")
+    existing = manager.list()[0]
+    with pytest.raises(ClientValidationError, match="已存在"):
+        manager.create(existing.name, preset_id="fantasy")
+    def reject_archive(*_args):
+        raise OSError("preset could not be read")
+    monkeypatch.setattr(saves, "extract_archive", reject_archive)
+    with pytest.raises(OSError, match="preset could not be read"):
+        manager.create("新的预设副本", preset_id="fantasy")
+    assert manager.payload() == before
+    assert not list(manager.root.glob(".import-*"))
 
 
 def _pending_turn(

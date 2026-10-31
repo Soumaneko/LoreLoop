@@ -3127,6 +3127,48 @@ body[data-ui-mode="player"] [data-creator-only] { display: none !important; }
 .journey-help { color: var(--muted); font: 13px/1.7 var(--serif); }
 .journey-task-actions { justify-content: flex-end; margin-top: 24px; }
 .journey-task-actions .primary-action { padding: 10px 18px; }
+.journey-task-form-new { max-width:780px; padding:28px; }
+.journey-presets { margin-top:26px; padding-top:17px; border-top:1px solid var(--line); }
+.journey-preset-toggle { display:flex; align-items:center; gap:10px; min-height:38px; padding:6px 0; background:none; border:0; color:var(--ink); font:14px var(--serif); }
+.journey-preset-triangle { font:12px var(--font-songti); color:var(--muted); }
+.journey-preset-toggle small { color:var(--muted); font:12px var(--serif); letter-spacing:0; }
+.journey-preset-toggle:hover:not(:disabled) { color:var(--gold-bright); }
+.journey-preset-layout { display:grid; grid-template-columns:185px minmax(0,1fr); gap:0 25px; margin-top:17px; }
+.journey-preset-list { display:flex; flex-direction:column; gap:3px; padding-right:20px; border-right:1px solid var(--line); }
+.journey-preset-option { min-height:76px; padding:12px; text-align:left; border:0; background:transparent; font-family:var(--serif); letter-spacing:0; }
+.journey-preset-option span { display:block; margin-bottom:4px; font-size:12px; color:var(--muted); }
+.journey-preset-option strong { display:block; font-size:15px; font-weight:500; color:var(--ink); }
+.journey-preset-option:hover:not(:disabled), .journey-preset-option[aria-pressed="true"] { background:var(--gold-soft); }
+.journey-preset-option[aria-pressed="true"] strong { color:var(--gold-bright); }
+.journey-preset-option[aria-pressed="true"] span { color:var(--ink); }
+.journey-preset-detail { min-width:0; }
+.journey-preset-detail h2 { margin:0 0 11px; font:500 24px/1.4 var(--serif); }
+.journey-preset-detail p { margin:0 0 15px; font:14px/1.85 var(--serif); overflow-wrap:anywhere; }
+.journey-preset-character { margin-block:16px; padding-block:12px; border-block:1px solid var(--line); }
+.journey-preset-character dt { margin-bottom:5px; color:var(--muted); font-size:12px; }
+.journey-preset-character dd { margin:0; font:14px/1.8 var(--serif); }
+.journey-preset-experience { color:var(--muted); }
+.journey-preset-opening { margin-top:18px; padding-top:13px; border-top:1px solid var(--line); }
+.journey-preset-opening summary { min-height:32px; cursor:pointer; font:13px/1.7 var(--serif); }
+.journey-preset-opening summary::marker { color:var(--muted); font-family:var(--font-songti); }
+.journey-preset-opening p { margin-bottom:15px; font:15px/1.95 var(--serif); }
+.journey-preset-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:19px; padding-top:17px; border-top:1px solid var(--line); }
+.journey-preset-footer p { margin:0; color:var(--muted); font:12px/1.7 var(--serif); }
+.journey-preset-footer .primary-action { flex-shrink:0; padding:10px 16px; font:700 14px var(--serif); }
+.journey-presets button:focus-visible, .journey-preset-opening summary:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
+@media(max-width:680px) {
+ .journey-task-form-new { padding:20px; }
+ .journey-preset-layout { grid-template-columns:1fr; gap:22px; }
+ .journey-preset-list { padding:0 0 14px; border-right:0; border-bottom:1px solid var(--line); gap:2px; }
+ .journey-preset-option { display:flex; align-items:baseline; gap:15px; min-height:44px; padding:10px; }
+ .journey-preset-option span { min-width:48px; margin:0; }
+ .journey-preset-option strong { font-size:14px; }
+ .journey-preset-detail h2 { font-size:23px; }
+ .journey-preset-toggle { flex-wrap:wrap; gap:8px; }
+ .journey-preset-toggle small { width:100%; padding-left:20px; }
+ .journey-preset-footer { flex-direction:column; align-items:flex-start; gap:12px; }
+ .journey-preset-footer .primary-action { width:100%; }
+}
 .journey-file { padding-bottom: 18px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .journey-form-error { color: var(--negative-text); font: 13px/1.7 var(--serif); white-space: pre-wrap; overflow-wrap: anywhere; }
 .journey-rename-dialog { width: min(430px, calc(100% - 36px)); }

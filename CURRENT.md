@@ -229,6 +229,21 @@ and prepared opening together. The
 Director base flow always runs for both opening confirmation and both Director
 stages of later turns, regardless of the player/creator experience mode.
 
+Three bundled story starts (traditional fantasy, wuxia and xianxia) use the same
+initialization and save format. Reviewed authoring JSON lives under
+`scripts/opening_presets`; `scripts/build_opening_presets.py` supplies the authored
+agent outputs to the normal initialization graph in a temporary application
+directory, without model calls. It exports complete `opening_pending` saves,
+including CoreMemory, public campaign conventions, Opening Foundation, initial
+state and world settings, and the recoverable pending scene. No opening or
+player turn is pre-confirmed. Authoring separates world style and protagonist
+background from temporary opening circumstances. Objective world descriptions
+are retained as world-setting facts; `opening_state` supplies the reviewed clock
+and current player status to both CurrentState and the pending opening before
+export. The public catalog and read-only ZIPs live under
+`app/opening_presets` and are collected by the desktop bundle. The archives are
+maintained against the current save format and checked through real imports.
+
 ## 4. Generation Pipeline
 
 The normal turn graph is:
@@ -1803,6 +1818,19 @@ writes preserve input; successful creation/import followed by a read failure
 retries reading and entry without repeating the completed write. List failures
 remain distinct from an empty library. Unconfigured users can manage saves;
 explicit configure-and-continue resumes the selected journey after configuration.
+The new-journey naming task defaults to custom creation and offers a collapsed
+story-start selector. Expanding it loads `/api/player/opening-presets`; the same
+name input is retained while browsing genres and opening excerpts. A separate
+Start Journey action allows a blank name (using an available preset title),
+while custom creation still requires a name. `/api/player/saves/create` accepts
+an optional fixed `preset_id`: it imports a complete independent copy with a new
+save ID, initially inactive, then the normal entry flow activates it and opens
+reading at its unconfirmed opening. An explicit duplicate name is rejected;
+automatic preset names receive a numeric suffix. Listing does not create a save
+or call a model. Model configuration and committed-write/read-failure retries
+continue the same saved copy. Import naming does not display presets. Presets
+have no special runtime mode after creation; normal edit, confirmation and
+Undo/Redo behavior applies.
 Journey Library, Current Journey and Model Services navigation sit together
 immediately after the logo on the left, including while reading. Current Journey
 reuses the active-save continuation path and is selected in reading or creation;

@@ -47,6 +47,7 @@ from app.runtime.model_config import (
     test_model_connection,
 )
 from app.runtime.models_dev_catalog import catalog_response as model_presets
+from app.runtime.opening_presets import list_opening_presets
 from app.runtime.initialization_draft import (
     load_initialization_draft,
     save_initialization_draft,

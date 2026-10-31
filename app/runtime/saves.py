@@ -114,7 +114,16 @@ class SaveManager:
         name: str,
         *,
         activate: bool = True,
+        preset_id: str | None = None,
     ) -> SaveInfo:
+        if preset_id is not None:
+            from .opening_presets import opening_preset
+
+            preset, archive = opening_preset(preset_id)
+            return self.import_from(
+                archive, name if name.strip() else preset["name"],
+                unique_name=not name.strip(),
+            )
         with self.runtime.save_task(), self._lock:
             clean_name = self._available_name(name)
             path = self._create_directory(clean_name)
@@ -230,8 +239,15 @@ class SaveManager:
             finally:
                 temporary.unlink(missing_ok=True)
 
-    def import_from(self, archive: str | Path, name: str) -> SaveInfo:
+    def import_from(self, archive: str | Path, name: str, *, unique_name: bool = False) -> SaveInfo:
         with self.runtime.save_task(), self._lock:
+            if unique_name:
+                base_name = validate_save_name(name)
+                names = {item.name.casefold() for item in self.list()}
+                suffix = 2
+                while name.casefold() in names:
+                    name = f"{base_name} {suffix}"
+                    suffix += 1
             clean_name = self._available_name(name)
             save_id = str(uuid4())
             destination = self._save_path(save_id)
@@ -397,6 +413,7 @@ def create_save(payload: dict[str, Any]) -> dict[str, Any]:
     save = _get_save_manager().create(
         str(payload.get("name", "")),
         activate=bool(payload.get("activate", True)),
+        preset_id=payload.get("preset_id"),
     )
     return {"save": save.as_dict(), **_get_save_manager().payload()}
 

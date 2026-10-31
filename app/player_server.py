@@ -27,6 +27,7 @@ from app.api import (
     import_save_archive,
     list_operations,
     list_saves,
+    list_opening_presets,
     load_player_history,
     load_player_records,
     load_player_state,
@@ -213,6 +214,9 @@ class PlayerHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/player/saves":
             self._handle_player_json(lambda: player_saves_payload(list_saves()))
+            return
+        if path == "/api/player/opening-presets":
+            self._handle_player_json(list_opening_presets)
             return
         if path == "/api/player/records":
             view = parse_qs(parsed_url.query).get("view", ["general"])[0]

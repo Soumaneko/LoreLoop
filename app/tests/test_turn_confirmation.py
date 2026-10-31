@@ -170,7 +170,7 @@ def test_director_confirmation_node_never_mutates_dry_run():
     }
 
 
-def _prepare_persistence_test(monkeypatch, *, opening=False):
+def _prepare_persistence_test(monkeypatch, *, opening_pending=None):
     from app.domain.core_memory import CoreMemory
     from app.domain.continuity import ContinuityProjection
     from app.domain.current_state.changes import StateChangeSet
@@ -180,15 +180,8 @@ def _prepare_persistence_test(monkeypatch, *, opening=False):
     from app.graph.confirmation_lifecycle import ConfirmationMaintenanceScheduler
 
     runtime = get_campaign_runtime()
-    if opening:
-        config, record = _opening_initialization(experience_mode="player")
-        pending = PendingOpening(
-            turn_id="opening-save", group_id="opening-group", version_index=1,
-            initialization_fingerprint=record.fingerprint, config=config,
-            experience_mode="player", current_state=_state(),
-            scene_result=SceneWriterResult(scene_text="开场正文"),
-        )
-        runtime.pending_openings.add(pending)
+    if opening_pending is not None:
+        pending = opening_pending
     else:
         with runtime.uow() as uow:
             uow.core_memory.save(CoreMemory(items=[]))
@@ -204,12 +197,12 @@ def _prepare_persistence_test(monkeypatch, *, opening=False):
 
     def computed_wave(_graph, state):
         # Replay computed domain outputs; persistence and finalization run unchanged.
-        state["updated_state"] = _state().model_copy(update={
+        state["updated_state"] = pending.current_state if opening_pending else _state().model_copy(update={
             "scene": _state().scene.model_copy(update={"location": "北门"}),
         })
         state["state_change_set"] = StateChangeSet(decision="记录最终场景")
         state["turn_summary"] = SceneSummary(
-            content="抵达北门", level=1, scene_ids=["scene_001"],
+            content="确认开场" if opening_pending else "抵达北门", level=1, scene_ids=["scene_001"],
             turn_start=state["pipeline_input"].turn_index,
             turn_end=state["pipeline_input"].turn_index,
         )
@@ -314,22 +307,30 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
 def test_saved_opening_survives_followup_failure_and_restart(campaign_runtime, monkeypatch, tmp_path):
     from app.runtime.session import CampaignRuntime
     from app.runtime.player_state import load_confirmation_outcome
-    from app.runtime.paths import CampaignPaths
+    from app.runtime.saves import SaveManager
 
-    get_campaign_runtime().reconfigure("pytest", CampaignPaths.from_data_dir(tmp_path / "user#%20name"))
+    manager = SaveManager(tmp_path / "user#%20name", runtime=campaign_runtime)
+    save = manager.create("", preset_id="fantasy")
+    manager.switch(save.save_id)
     entries = set(tmp_path.iterdir())
-    runtime, pending = _prepare_persistence_test(monkeypatch, opening=True)
+    runtime, pending = _prepare_persistence_test(
+        monkeypatch, opening_pending=campaign_runtime.pending_openings.values()[0],
+    )
+    original_core = runtime.stores.core_memory.load()
+    final_text = pending.scene_result.scene_text + "\n\n你暂且留在集市。"
 
     def fail_cleanup(*_):
         raise RuntimeError("undo publication failed")
 
     monkeypatch.setattr(runtime, "complete_confirmation", fail_cleanup)
     with pytest.raises(RuntimeError, match="undo publication failed"):
-        list(confirmation_graph.confirm_stream(pending.turn_id))
+        list(confirmation_graph.confirm_stream(pending.turn_id, scene_text=final_text))
     assert load_confirmation_outcome(runtime.campaign_id, pending.turn_id)["outcome"] == "confirmed"
     assert runtime.initialization.load().phase == "completed"
     assert not runtime.pending_openings.values()
     assert runtime.history.status()["can_undo"] is True
+    assert runtime.history.get_transaction(pending.turn_id)["scene_text"] == final_text
+    assert runtime.stores.core_memory.load() == original_core
     runtime.close()
     reopened = CampaignRuntime("reopened", paths=runtime.paths)
     try:

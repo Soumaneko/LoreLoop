@@ -27,6 +27,7 @@ def collect_data_tree(source, destination):
 
 prompt_root = project_root / "app" / "prompts"
 player_static_root = project_root / "app" / "player_static"
+opening_presets_root = project_root / "app" / "opening_presets"
 models_dev_snapshot = project_root / "app" / "runtime" / "models_dev_snapshot.json"
 models_dev_license = project_root / "app" / "runtime" / "models_dev_LICENSE.txt"
 
@@ -37,6 +38,7 @@ analysis = Analysis(
     datas=(
         collect_data_tree(prompt_root, "app/prompts")
         + collect_data_tree(player_static_root, "app/player_static")
+        + collect_data_tree(opening_presets_root, "app/opening_presets")
         + copy_metadata("pydantic-ai-slim")
         + copy_metadata("genai-prices")
         + [

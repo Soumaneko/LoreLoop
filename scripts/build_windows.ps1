@@ -141,6 +141,11 @@ if (-not (Test-Path (Join-Path $PackageDir "_internal\app\prompts"))) {
 if (-not (Test-Path (Join-Path $PackageDir "_internal\app\player_static"))) {
     throw "Player frontend resources are missing from the frozen bundle."
 }
+foreach ($PresetFile in @("catalog.json", "fantasy.zip", "wuxia.zip", "xianxia.zip")) {
+    if (-not (Test-Path (Join-Path $PackageDir "_internal\app\opening_presets\$PresetFile"))) {
+        throw "Opening preset resource is missing from the frozen bundle: $PresetFile"
+    }
+}
 if (-not (Test-Path (Join-Path $PackageDir "_internal\app\runtime\models_dev_snapshot.json"))) {
     throw "models.dev snapshot is missing from the frozen bundle."
 }

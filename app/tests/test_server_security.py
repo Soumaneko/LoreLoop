@@ -243,3 +243,30 @@ def test_malformed_json_is_explained_as_request_error(body):
     assert handler.recorded_status == 400
     assert _body(handler)["error"]["code"] == "validation_error"
     assert "JSON" in _body(handler)["error"]["message"]
+
+
+def test_opening_preset_routes_return_public_catalog_and_created_identity(
+    campaign_runtime, tmp_path, monkeypatch,
+):
+    from app.runtime import saves
+    manager = saves.SaveManager(tmp_path / "saves", runtime=campaign_runtime)
+    monkeypatch.setattr(saves, "_get_save_manager", lambda: manager)
+    original = manager.active_id
+    handler = _make_handler(handler_class=PlayerHandler, path="/api/player/opening-presets")
+    handler.do_GET()
+    assert handler.recorded_status == 200
+    catalog = _body(handler)["data"]["presets"]
+    assert [item["genre"] for item in catalog] == ["传统西幻", "武侠", "仙侠"]
+    assert all(set(item) == {"id", "name", "genre", "world", "character", "experience", "opening"}
+               for item in catalog)
+    handler = _make_handler(handler_class=PlayerHandler, path="/api/player/saves/create")
+    body = json.dumps({"name": "", "preset_id": "fantasy"}).encode()
+    handler.headers["Content-Length"] = str(len(body))
+    handler.rfile = io.BytesIO(body)
+    handler.do_POST()
+    assert handler.recorded_status == 200
+    result = _body(handler)["data"]
+    assert result["active"] == original
+    assert result["save"]["save_id"] != original
+    assert result["save"]["name"] == catalog[0]["name"]
+    assert "root" not in result["save"]

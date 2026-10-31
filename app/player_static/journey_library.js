@@ -8,6 +8,7 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
   const dialog = $("renameJourneyDialog");
   let activeId = null, loaded = false, busy = false, error = "", task = null;
   let menuSave = null, renameSave = null, entryRetry = null, listRetry = false;
+  let openingPresets = null;
   const node = (tag, className = "", text) => {
     const el = document.createElement(tag); el.className = className;
     if (text !== undefined) el.textContent = text;
@@ -158,7 +159,7 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
       status.hidden = !status.textContent;
     }
     if (dialog.open) for (const el of dialog.querySelectorAll("input,button")) el.disabled = busy;
-    if (task && entryRetry) for (const el of content.querySelectorAll("input, button[type='submit']")) el.disabled = true;
+    if (task && entryRetry) for (const el of content.querySelectorAll("input, [data-journey-create], #journeyPresetToggle, .journey-preset-option")) el.disabled = true;
     const modelMark = $("libraryModelMark");
     modelMark.textContent = state.modelConfig?.configured ? "已配置" : "未配置";
     modelMark.dataset.configured = String(Boolean(state.modelConfig?.configured));
@@ -181,19 +182,89 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     if (busy || !canManage()) return;
     task = { kind, file }; error = ""; closeMenu(); content.replaceChildren();
     const title = node("h1", "", kind === "new" ? "新建旅程" : "导入旅程"); title.id = "journeyLibraryTitle"; title.tabIndex = -1;
-    const form = node("form", "journey-task-form");
+    const form = node("form", `journey-task-form${kind === "new" ? " journey-task-form-new" : ""}`);
     if (file) form.append(node("p", "journey-file", file.name));
     const label = node("label", "", "旅程名称"); const input = node("input"); input.id = "journeyTaskName"; input.required = true; input.maxLength = 80; input.autocomplete = "off"; input.placeholder = "为这段旅程起一个名字";
     input.value = file ? file.name.replace(/\.zip$/i, "") : ""; label.append(input);
     const help = node("p", "journey-help", kind === "new" ? "接下来填写世界与主角，名称之后也可以修改。" : "导入后进入这段旅程，已有存档不会被覆盖。");
     const alert = node("p", "journey-form-error"); alert.id = "journeyTaskError"; alert.hidden = true; alert.setAttribute("role", "alert");
-    const actions = node("div", "journey-task-actions"); const submit = node("button", "primary-action", kind === "new" ? "创建并继续" : "导入并进入"); submit.type = "submit"; actions.append(button("取消", "journey-secondary", home), submit);
+    const actions = node("div", "journey-task-actions"); const submit = node("button", "primary-action", kind === "new" ? "自行创建" : "导入并进入"); submit.type = "submit"; submit.dataset.journeyCreate = ""; actions.append(button("取消", "journey-secondary", home), submit);
     form.append(label, help, alert, actions); content.append(title, form);
+    if (kind === "new") {
+      const section = node("section", "journey-presets");
+      const toggle = button("", "journey-preset-toggle", async () => {
+        const expanded = toggle.getAttribute("aria-expanded") !== "true";
+        toggle.setAttribute("aria-expanded", String(expanded)); panel.hidden = !expanded;
+        triangle.textContent = expanded ? "▼" : "▶";
+        submit.className = expanded ? "journey-secondary" : "primary-action";
+        if (expanded && !openingPresets) await loadPresets();
+      });
+      toggle.id = "journeyPresetToggle"; toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-controls", "journeyPresetPanel");
+      const triangle = node("span", "journey-preset-triangle", "▶"); triangle.setAttribute("aria-hidden", "true");
+      toggle.append(triangle, node("span", "", "从预设开始"), node("small", "", "选一个准备好的故事开局"));
+      const panel = node("div"); panel.id = "journeyPresetPanel"; panel.hidden = true;
+      section.append(toggle, panel); form.append(section);
+      if (openingPresets) renderPresets(panel, openingPresets[0]);
+      input.oninput = updatePresetName;
+    }
     form.onsubmit = event => {
       event.preventDefault(); const name = input.value.trim(); if (!name || busy || entryRetry) return;
       mutate(() => kind === "new" ? post("create", { name, activate: true }) : importSaveArchive(file, name), kind === "new" ? "旅程已创建" : "旅程已导入", true);
     };
     input.focus(); refreshControls();
+  }
+  async function loadPresets() {
+    if (busy || !task) return;
+    const current = task, panel = $("journeyPresetPanel");
+    panel.replaceChildren(node("p", "journey-help", "正在读取故事开局……"));
+    setBusy(true);
+    try {
+      const payload = await request("/api/player/opening-presets");
+      if (current !== task) return;
+      openingPresets = payload.presets;
+      renderPresets(panel, openingPresets[0]);
+    } catch (cause) {
+      reportError(cause);
+      if (current === task) {
+        const message = node("p", "journey-form-error", cause.message || "暂时无法读取故事开局，请重试。"); message.setAttribute("role", "alert");
+        panel.replaceChildren(message, button("重新读取", "journey-secondary", loadPresets));
+      }
+    } finally { setBusy(false); }
+  }
+  function updatePresetName() {
+    const note = $("journeyPresetName");
+    if (!note) return;
+    const name = $("journeyTaskName").value.trim();
+    note.textContent = name ? `将以“${name}”创建旅程。开始后可阅读并确认开场。`
+      : `留空名称将使用“${note.dataset.defaultName}”。开始后可阅读并确认开场。`;
+  }
+  function renderPresets(panel, selected) {
+    panel.replaceChildren();
+    if (!selected) { panel.append(node("p", "journey-help", "目前没有可用的故事开局，你仍可自行创建。")); return; }
+    const layout = node("div", "journey-preset-layout"), list = node("div", "journey-preset-list");
+    list.setAttribute("role", "group"); list.setAttribute("aria-label", "选择故事开局");
+    for (const preset of openingPresets) {
+      const option = button("", "journey-preset-option", () => {
+        renderPresets(panel, preset); panel.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
+      });
+      option.setAttribute("aria-pressed", String(preset.id === selected.id));
+      option.append(node("span", "", preset.genre), node("strong", "", preset.name)); list.append(option);
+    }
+    const detail = node("article", "journey-preset-detail");
+    detail.append(node("h2", "", selected.name), node("p", "", selected.world));
+    const character = node("dl", "journey-preset-character"); character.append(node("dt", "", "你的角色"), node("dd", "", selected.character));
+    detail.append(character, node("p", "journey-preset-experience", selected.experience));
+    const opening = node("details", "journey-preset-opening"); opening.append(node("summary", "", "开场试读"));
+    for (const paragraph of selected.opening.split(/\n\s*\n/)) opening.append(node("p", "", paragraph));
+    detail.append(opening);
+    const footer = node("div", "journey-preset-footer"), note = node("p"); note.id = "journeyPresetName"; note.dataset.defaultName = selected.name;
+    const start = button("开始旅程", "primary-action", () => {
+      if (entryRetry) return;
+      mutate(() => post("create", { name: $("journeyTaskName").value.trim(), preset_id: selected.id }), "旅程已创建", true);
+    });
+    start.id = "journeyPresetStart"; start.dataset.journeyCreate = "";
+    footer.append(note, start); detail.append(footer); layout.append(list, detail); panel.append(layout);
+    updatePresetName(); refreshControls();
   }
   async function enterJourney(save) {
     if (busy) return;

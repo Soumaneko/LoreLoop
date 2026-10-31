@@ -201,6 +201,21 @@ def test_frozen_bundle_collects_models_dev_snapshot_and_license():
     assert (ROOT / "app" / "runtime" / "models_dev_LICENSE.txt").exists()
 
 
+def test_frozen_bundle_collects_all_opening_preset_resources():
+    import json
+    from app.runtime.opening_presets import PRESETS_DIR
+
+    spec = (ROOT / "packaging" / "loreloop.spec").read_text(encoding="utf-8")
+    assert 'collect_data_tree(opening_presets_root, "app/opening_presets")' in spec
+    build_script = (ROOT / "scripts" / "build_windows.ps1").read_text(encoding="utf-8")
+    assert r"_internal\app\opening_presets\$PresetFile" in build_script
+    catalog = json.loads((PRESETS_DIR / "catalog.json").read_text(encoding="utf-8"))
+    for preset in catalog:
+        filename = f"{preset['id']}.zip"
+        assert filename in build_script
+        assert (PRESETS_DIR / filename).is_file()
+
+
 def test_windows_build_lock_requires_hashes():
     build_lock = (
         ROOT / "requirements-build-windows.lock"
