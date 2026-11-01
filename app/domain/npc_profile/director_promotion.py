@@ -34,6 +34,7 @@ def npc_profile_from_director_draft(
         conflict_style=draft.conflict_style,
         social_style=draft.social_style,
         source_director_npc_id=draft.draft_id,
+        source_setting_ids=list(draft.source_setting_ids),
         created_turn=draft.created_turn,
         introduced_turn=draft.introduced_turn,
         disclosure_level=disclosure_level or "remote",
@@ -67,6 +68,9 @@ def merge_director_draft_into_npc_profile(
     merged.conflict_style = draft.conflict_style
     merged.social_style = draft.social_style
     merged.source_director_npc_id = merged.source_director_npc_id or draft.draft_id
+    merged.source_setting_ids = list(dict.fromkeys([
+        *merged.source_setting_ids, *draft.source_setting_ids,
+    ]))
     merged.created_turn = merged.created_turn or draft.created_turn
     merged.introduced_turn = draft.introduced_turn
     if disclosure_level is not None:

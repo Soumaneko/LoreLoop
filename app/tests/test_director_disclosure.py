@@ -95,7 +95,9 @@ def test_promote_staged_director_npc_profile_writes_disclosure_level(tmp_path):
     from app.graph.confirmation_helpers import promote_staged_director_npc_profile
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    draft = make_director_npc()
+    draft = make_director_npc().model_copy(
+        update={"source_setting_ids": ["setting-town"]}
+    )
     with stores.director_npc as store:
         store.save(draft)
 
@@ -122,6 +124,7 @@ def test_promote_staged_director_npc_profile_writes_disclosure_level(tmp_path):
     with stores.npc_profile as store:
         profile = store.get_by_id(confirmations[0].npc_id)
         assert profile.disclosure_level == "face_to_face"
+        assert profile.source_setting_ids == ["setting-town"]
 
 
 def test_promote_staged_director_npc_profile_promotes_all_introduced_drafts(
@@ -185,6 +188,7 @@ def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
         name="林澈",
         role="社区医生",
         disclosure_level="intimate",
+        source_setting_ids=["setting-old", "setting-shared"],
     )
     draft = DirectorNPCDraft(
         name="林澈",
@@ -197,6 +201,7 @@ def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
         conflict_style="先协商后行动。",
         social_style="克制而友善。",
         created_turn=2,
+        source_setting_ids=["setting-shared", "setting-new"],
     )
 
     merged = merge_director_draft_into_npc_profile(
@@ -206,3 +211,5 @@ def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
     )
 
     assert merged.disclosure_level == "intimate"
+    assert merged.source_setting_ids == ["setting-old", "setting-shared", "setting-new"]
+    assert existing.source_setting_ids == ["setting-old", "setting-shared"]
