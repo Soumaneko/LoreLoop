@@ -102,6 +102,7 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
 def _extract_staged_npc_materials(
     pending,
     npc_store,
+    director_npc_store,
 ) -> list[dict[str, Any]]:
     """Identity clues for the NPCs the Director arranged into this turn.
 
@@ -123,7 +124,7 @@ def _extract_staged_npc_materials(
             "guidance": entry.guidance or "",
             "source": entry.source,
         }
-        for entry in collect_scheduled_npcs(stage.materials, npc_store)
+        for entry in collect_scheduled_npcs(stage.materials, npc_store, director_npc_store)
     ]
 
 
@@ -134,7 +135,9 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     core_memory = state["core_memory"]
     pending = state.get("pending") or getattr(pipeline_input, "pending", None)
     with state["runtime_services"].stores.npc_profile as npc_store:
-        staged_npcs = _extract_staged_npc_materials(pending, npc_store)
+        staged_npcs = _extract_staged_npc_materials(
+            pending, npc_store, state["runtime_services"].stores.director_npc,
+        )
     scene_paragraphs = [
         SceneParagraphInput(
             document_id=document.document_id,

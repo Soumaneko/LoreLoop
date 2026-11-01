@@ -590,13 +590,13 @@ def compose_narrative_node(state: GenerationState) -> GenerationState:
     if director_stage is not None and director_stage.materials:
         with state["runtime_services"].stores.npc_profile as npc_store:
             scheduled_npcs = collect_scheduled_npcs(
-                director_stage.materials, npc_store
+                director_stage.materials, npc_store,
+                state["runtime_services"].stores.director_npc,
             )
             scheduled_profiles = [
-                profile
+                entry.profile
                 for entry in scheduled_npcs
-                if entry.npc_id
-                and (profile := npc_store.get_by_id(entry.npc_id)) is not None
+                if entry.profile is not None
             ]
     composer_profiles = merge_profile_selections(
         state.get("action_npc_profiles", []),

@@ -299,14 +299,17 @@ The Director-arranged participant list is folded by one programmatic helper
 (`collect_scheduled_npcs`) over every admitted `DirectorStageResult.material`,
 treating all skills uniformly: `intrude_engaged_event` and `present_event`
 contribute their actors, `introduce_npc` contributes its draft/spontaneous
-card, and `upgrade_disclosure` contributes the promoted profile. Composer uses
-the entries that already resolve to profiles to obtain prior-appearance anchors
-(role, appearance, `last_scene_summary`), so a re-introduced NPC stays
-identifiable without a fresh retrieval and without forcing a true-name reveal
-in prose.
+card, and `upgrade_disclosure` contributes the promoted profile. Event actors
+resolve to their formal profiles first, including links from old Director draft
+IDs. An actor with only a prepared draft receives a read-only profile projection
+at face-to-face disclosure; an explicit draft reference takes precedence over
+an unrelated same-name profile. Introduced or retired drafts are not used as
+unpromoted fallbacks. Composer consumes these profiles directly, and the same
+fold supplies confirmation identity clues. Reading a draft does not promote it
+or add a CurrentState participant.
 
 Every non-Director consumer receives `NPCProfile.disclosure_view()`, so fields
-above the profile's persistent disclosure level are physically absent.
+above the selected profile's disclosure level are physically absent.
 
 The generation graph always includes the Director generation stage. Experience
 mode never removes or downgrades Director execution: `player` and `creator` are

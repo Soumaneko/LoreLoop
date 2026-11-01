@@ -169,7 +169,7 @@ def test_present_event_carries_optional_actors_into_material(tmp_path):
     from app.domain.director.scheduled import collect_scheduled_npcs
 
     with stores.npc_profile as npc_store:
-        scheduled = collect_scheduled_npcs(stage.materials, npc_store)
+        scheduled = collect_scheduled_npcs(stage.materials, npc_store, stores.director_npc)
     assert [entry.name for entry in scheduled] == ["林澈", "顾晚棠"]
     assert {entry.source for entry in scheduled} == {"present_event"}
 
@@ -251,7 +251,7 @@ def test_intrude_engaged_event_selects_subset_of_cast(tmp_path):
         actor["name"] for actor in stage.materials[0].payload["actors"]
     ] == ["萨缪尔·灰潮"]
     with stores.npc_profile as npc_store:
-        scheduled = collect_scheduled_npcs(stage.materials, npc_store)
+        scheduled = collect_scheduled_npcs(stage.materials, npc_store, stores.director_npc)
     assert [entry.name for entry in scheduled] == ["萨缪尔·灰潮"]
 
     # Event actors are not this turn's participants: the selection is required,
@@ -268,7 +268,7 @@ def test_intrude_engaged_event_selects_subset_of_cast(tmp_path):
     assert stage.materials[0].resource_id == event.event_id
     assert stage.materials[0].payload["actors"] == []
     with stores.npc_profile as npc_store:
-        assert collect_scheduled_npcs(stage.materials, npc_store) == []
+        assert collect_scheduled_npcs(stage.materials, npc_store, stores.director_npc) == []
 
     # Reject the whole request even when only part of the selection is invalid;
     # otherwise guidance can still introduce an actor missing from the payload.
@@ -441,3 +441,76 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
     assert "旧码头" in hidden_input
     assert "player_contacts" not in hidden_input
     assert "last_presented_turn" not in hidden_input
+
+
+@pytest.mark.parametrize("scenario,reverse", [
+    ("promoted", False), ("promoted", True),
+    ("renamed", False), ("prepared-name-collision", False),
+])
+def test_scheduled_event_actor_uses_referenced_identity_and_latest_profile(
+    tmp_path, scenario, reverse,
+):
+    from app.domain.director import DirectorStageMaterial
+    from app.domain.director.scheduled import collect_scheduled_npcs
+    from app.domain.npc_profile.schemas import NPCProfile
+    from app.tests.factories.director import make_director_npc
+
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    draft = make_director_npc().model_copy(update={
+        "role": "旧职务", "appearance": "旧外貌",
+        "status": "prepared" if scenario == "prepared-name-collision" else "introduced",
+    })
+    stores.director_npc.save(draft)
+    formal = NPCProfile(
+        name="林医生" if scenario == "renamed" else draft.name,
+        role="新职务", appearance="新外貌",
+        source_director_npc_id=(
+            None if scenario == "prepared-name-collision" else draft.draft_id
+        ),
+    )
+    stores.npc_profile.upsert(formal)
+    materials = [DirectorStageMaterial(
+        kind="engaged_event", resource_id="event-selected",
+        guidance="安排所引用的人物出场。",
+        payload={"actors": [{"name": draft.name, "ref": {
+            "kind": "npc", "resource_id": draft.draft_id,
+        }}]},
+    )]
+    if scenario != "prepared-name-collision":
+        materials.append(DirectorStageMaterial(
+            kind="event", resource_id="event-hook", guidance="呈现此人的动静。",
+            payload={"actors": [formal.name]},
+        ))
+    if reverse:
+        materials.reverse()
+
+    scheduled = collect_scheduled_npcs(materials, stores.npc_profile, stores.director_npc)
+
+    expected = draft if scenario == "prepared-name-collision" else formal
+    assert [(p.name, p.role, p.appearance) for p in scheduled] == [
+        (expected.name, expected.role, expected.appearance),
+    ]
+
+
+@pytest.mark.parametrize("kind", ["event", "engaged_event"])
+@pytest.mark.parametrize("status", ["introduced", "retired"])
+def test_event_actor_draft_fallback_only_uses_prepared_records(tmp_path, kind, status):
+    from app.domain.director import DirectorStageMaterial
+    from app.domain.director.scheduled import collect_scheduled_npcs
+    from app.tests.factories.director import make_director_npc
+
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    draft = make_director_npc().model_copy(update={"status": status})
+    stores.director_npc.save(draft)
+    actor = draft.name if kind == "event" else {
+        "name": draft.name, "ref": {"kind": "npc", "resource_id": draft.draft_id},
+    }
+    material = DirectorStageMaterial(
+        kind=kind, resource_id="event-selected", guidance="安排人物出场。",
+        payload={"actors": [actor]},
+    )
+
+    scheduled = collect_scheduled_npcs([material], stores.npc_profile, stores.director_npc)
+
+    # present_event can retain an unresolved name, but not obsolete draft data.
+    assert all(p.role is None and p.appearance is None for p in scheduled)

@@ -300,9 +300,11 @@ def test_composer_npc_profiles_respect_disclosure_levels(
     assert by_name["顾晚棠"].hidden_secret == "暗中资助商会。"
 
 
+@pytest.mark.parametrize("actor_storage", ["profiles", "prepared-drafts"])
 def test_composer_receives_engaged_event_actor_profiles(
     tmp_path,
     monkeypatch,
+    actor_storage,
 ):
     from app.domain.context_facts.schemas import ContextFactSet
     from app.domain.core_memory.schemas import CoreMemory
@@ -338,9 +340,26 @@ def test_composer_receives_engaged_event_actor_profiles(
         last_scene_summary="在客栈门口被催促离场。",
         last_scene_turn=6,
     )
-    with stores.npc_profile as store:
-        store.upsert(samuel)
-        store.upsert(trevor)
+    from app.tests.factories.director import make_director_npc
+
+    if actor_storage == "profiles":
+        with stores.npc_profile as store:
+            store.upsert(samuel)
+            store.upsert(trevor)
+        actor_id = samuel.npc_id
+    else:
+        with stores.director_npc as store:
+            for profile in (samuel, trevor):
+                draft = make_director_npc().model_copy(update={
+                    "name": profile.name, "role": profile.role,
+                    "appearance": profile.appearance,
+                })
+                store.save(draft)
+                if profile is samuel:
+                    actor_id = draft.draft_id
+            store.save(make_director_npc().model_copy(update={"name": "未选中的巡夜人"}))
+    before_profiles = [p.model_dump() for p in stores.npc_profile.list_all()]
+    before_drafts = [d.model_dump() for d in stores.director_npc.list_all()]
     event = DirectorEvent(
         title="走私暗流",
         subject="走私网络退潮",
@@ -355,7 +374,7 @@ def test_composer_receives_engaged_event_actor_profiles(
             DirectorActorRef(
                 name=samuel.name,
                 ref=DirectorResourceRef(
-                    kind="npc", resource_id=samuel.npc_id
+                    kind="npc", resource_id=actor_id
                 ),
             )
         ],
@@ -430,16 +449,29 @@ def test_composer_receives_engaged_event_actor_profiles(
         ),
     }
 
+    before_state = state["current_state"].model_dump()
     generation_nodes.compose_narrative_node(state)
 
     by_name = {
         profile.name: profile
         for profile in captured["context"].npc_profiles
     }
-    assert by_name["萨缪尔·灰潮"].last_scene_summary == "在马车旁取走油布包裹。"
-    assert by_name["萨缪尔·灰潮"].last_scene_turn == 2
-    assert by_name["特雷弗·石巷"].last_scene_summary == "在客栈门口被催促离场。"
-    assert by_name["特雷弗·石巷"].last_scene_turn == 6
+    assert set(by_name) == {samuel.name, trevor.name}
+    if actor_storage == "profiles":
+        assert by_name[samuel.name].last_scene_summary == samuel.last_scene_summary
+        assert by_name[samuel.name].last_scene_turn == 2
+        assert by_name[trevor.name].last_scene_summary == trevor.last_scene_summary
+        assert by_name[trevor.name].last_scene_turn == 6
+    else:
+        for original in (samuel, trevor):
+            received = by_name[original.name]
+            assert received.role == original.role
+            assert received.appearance == original.appearance
+            assert received.hidden_secret is None
+            assert received.core_motivation is None
+    assert [p.model_dump() for p in stores.npc_profile.list_all()] == before_profiles
+    assert [d.model_dump() for d in stores.director_npc.list_all()] == before_drafts
+    assert state["current_state"].model_dump() == before_state
 
 
 def test_feedback_rewrite_falls_back_to_strategy_unavailable(

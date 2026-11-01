@@ -356,7 +356,8 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         assert [profile.name for profile in store.list_all()] == ["林澈"]
 
 
-def test_staged_npc_materials_fold_every_director_skill(tmp_path):
+@pytest.mark.parametrize("actor_storage", ["profiles", "prepared-drafts"])
+def test_staged_npc_materials_fold_every_director_skill(tmp_path, actor_storage):
     from app.domain.director import DirectorStageMaterial, DirectorStageResult
     from app.domain.director_event.schemas import (
         DirectorActorRef,
@@ -378,10 +379,24 @@ def test_staged_npc_materials_fold_every_director_skill(tmp_path):
     )
     trevor = NPCProfile(name="特雷弗·石巷", role="跑腿小贼", appearance="瘦高。")
     edgar = NPCProfile(name="埃德加·莫尔顿", role="药草师", appearance="深灰短袍。")
+    from app.tests.factories.director import make_director_npc
+
     with stores.npc_profile as store:
-        store.upsert(samuel)
-        store.upsert(trevor)
         store.upsert(edgar)
+        if actor_storage == "profiles":
+            store.upsert(samuel)
+            store.upsert(trevor)
+    actor_id = samuel.npc_id
+    if actor_storage == "prepared-drafts":
+        with stores.director_npc as store:
+            for profile in (samuel, trevor):
+                draft = make_director_npc().model_copy(update={
+                    "name": profile.name, "role": profile.role,
+                    "appearance": profile.appearance,
+                })
+                store.save(draft)
+                if profile is samuel:
+                    actor_id = draft.draft_id
     event = DirectorEvent(
         title="走私暗流",
         subject="走私网络退潮",
@@ -396,7 +411,7 @@ def test_staged_npc_materials_fold_every_director_skill(tmp_path):
             DirectorActorRef(
                 name=samuel.name,
                 ref=DirectorResourceRef(
-                    kind="npc", resource_id=samuel.npc_id
+                    kind="npc", resource_id=actor_id
                 ),
             )
         ],
@@ -466,7 +481,7 @@ def test_staged_npc_materials_fold_every_director_skill(tmp_path):
     )
 
     with stores.npc_profile as npc_store:
-        clues = _extract_staged_npc_materials(pending, npc_store)
+        clues = _extract_staged_npc_materials(pending, npc_store, stores.director_npc)
 
     by_name = {clue["name"]: clue for clue in clues}
     assert set(by_name) == {
@@ -476,11 +491,13 @@ def test_staged_npc_materials_fold_every_director_skill(tmp_path):
     assert by_name["萨缪尔·灰潮"]["appearance"] == "深灰色旧风衣，袖口褪色铜徽章。"
     assert by_name["萨缪尔·灰潮"]["guidance"] == "以萨缪尔推动事件。"
     assert by_name["特雷弗·石巷"]["source"] == "present_event"
+    assert by_name[trevor.name]["role"] == trevor.role
+    assert by_name[trevor.name]["appearance"] == trevor.appearance
     assert by_name["柯岚·铁印"]["source"] == "director_npc"
     assert by_name["柯岚·铁印"]["role"] == "文书吏"
     assert by_name["埃德加·莫尔顿"]["source"] == "upgrade_disclosure"
 
     with stores.npc_profile as npc_store:
         assert _extract_staged_npc_materials(
-            SimpleNamespace(director_stage=None), npc_store
+            SimpleNamespace(director_stage=None), npc_store, stores.director_npc
         ) == []
