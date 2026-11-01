@@ -42,10 +42,8 @@ class _MockGateway:
                     ev_ids = ["turn_1_p001"]
                 updates.append({
                     "npc_id": char["npc_id"],
-                    "scene_summary": {
-                        "summary": "在百草堂为萧欢抓药并告知坊市近况，持续二十字以上有效摘要。",
-                        "evidence_ids": ev_ids,
-                    },
+                    "scene_summary": "在百草堂为萧欢抓药并告知坊市近况，持续二十字以上有效摘要。",
+                    "evidence_ids": ev_ids,
                 })
             result = output_schema.model_validate({"updates": updates})
         else:

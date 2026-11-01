@@ -111,7 +111,7 @@ class NPCSceneSummaryDraft(BaseModel):
 
 
 class NPCSceneSummaryDraftHard(BaseModel):
-    """prompt 展示 / 第一轮硬校验用的 scene_summary（summary 硬上限 160）。"""
+    """解析后第一轮硬校验用的 scene_summary（summary 硬上限 160）。"""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -144,7 +144,7 @@ NPCStableChangeHard = Annotated[
 
 
 class NPCBatchUpdateEntry(BaseModel):
-    """NPC batch field updater 的单个既有 NPC 条目（admission 输入 / display 形状）。
+    """NPC batch field updater 的单个既有 NPC 条目（已解析的 admission 输入）。
 
     ``npc_id`` 由确定性身份解析层给定；LLM 只输出字段变化，不再判断
     mention/alias/new/ignore，也不再生成新 NPC 完整档案。
@@ -187,7 +187,11 @@ class NPCBatchUpdateDisplayEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     npc_id: str = Field(min_length=1)
-    scene_summary: NPCSceneSummaryDraftHard
+    scene_summary: str = Field(min_length=20, max_length=NPC_SCENE_SUMMARY_HARD_LIMIT)
+    evidence_ids: list[str] = Field(
+        min_length=1, max_length=NPC_SCENE_SUMMARY_EVIDENCE_MAX,
+        description="仅支持本条 scene_summary 的正文段落 ID",
+    )
     stable_changes: list[NPCStableChangeHard] = Field(default_factory=list, max_length=8)
 
 

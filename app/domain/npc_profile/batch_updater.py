@@ -220,10 +220,8 @@ def _accept_length_errors(updates: list[Any]) -> list[str]:
             continue
         npc_id = str(raw.get("npc_id") or f"#{index}")
         raw_summary = raw.get("scene_summary")
-        if isinstance(raw_summary, dict) and isinstance(
-            raw_summary.get("summary"), str
-        ):
-            clean = str(raw_summary["summary"]).strip()
+        if isinstance(raw_summary, str):
+            clean = raw_summary.strip()
             if len(clean) > NPC_SCENE_SUMMARY_ACCEPT_LIMIT:
                 errors.append(
                     f"{npc_id} scene_summary length {len(clean)} exceeds "
@@ -266,25 +264,19 @@ def _soft_truncate_updates(
         raw = dict(raw)
         npc_id = str(raw.get("npc_id") or "")
         raw_summary = raw.get("scene_summary")
-        if isinstance(raw_summary, dict):
-            summary = raw_summary.get("summary")
-            if isinstance(summary, str):
-                clean = summary.strip()
-                if len(clean) > NPC_SCENE_SUMMARY_SOFT_LIMIT:
-                    raw_summary = {
-                        **raw_summary,
-                        "summary": clean[:NPC_SCENE_SUMMARY_SOFT_LIMIT],
-                    }
-                    raw["scene_summary"] = raw_summary
-                    warnings.append(NPCChangeAdmissionWarning(
-                        npc_name=npc_id,
-                        field_name="last_scene_summary",
-                        code="scene_summary_truncated",
-                        message=(
-                            f"scene_summary exceeded soft limit "
-                            f"{NPC_SCENE_SUMMARY_SOFT_LIMIT} and was truncated."
-                        ),
-                    ))
+        if isinstance(raw_summary, str):
+            clean = raw_summary.strip()
+            if len(clean) > NPC_SCENE_SUMMARY_SOFT_LIMIT:
+                raw["scene_summary"] = clean[:NPC_SCENE_SUMMARY_SOFT_LIMIT]
+                warnings.append(NPCChangeAdmissionWarning(
+                    npc_name=npc_id,
+                    field_name="last_scene_summary",
+                    code="scene_summary_truncated",
+                    message=(
+                        f"scene_summary exceeded soft limit "
+                        f"{NPC_SCENE_SUMMARY_SOFT_LIMIT} and was truncated."
+                    ),
+                ))
         raw_changes = raw.get("stable_changes")
         if isinstance(raw_changes, list):
             truncated_changes: list[Any] = []
@@ -391,7 +383,7 @@ def parse_batch_updates(
     """逐字段 salvage 宽松 wire envelope（宁漏勿错）。
 
     - 非对象元素 / 缺或非 str ``npc_id`` → 丢整条（无法归因）；
-    - ``scene_summary`` 非对象 / 摘要空、超长 / evidence 非法 → 丢该槽位
+    - ``scene_summary`` 非字符串 / 摘要空、超长 / evidence 非法 → 丢该槽位
       （``invalid_scene_summary``）；其余字段照常存活；
     - ``stable_changes`` 非列表 → 丢整字段；逐条解析，失败只丢该 change
       （``invalid_stable_change``，带 index）；
@@ -435,7 +427,7 @@ def parse_batch_updates(
         raw_summary = raw.get("scene_summary")
         if raw_summary is not None:
             raw_summary = _prepare_scene_summary_evidence(
-                raw_summary,
+                {"summary": raw_summary, "evidence_ids": raw.get("evidence_ids")},
                 npc_id=npc_id,
                 warnings=warnings,
             )

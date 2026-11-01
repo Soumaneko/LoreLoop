@@ -151,7 +151,7 @@ POLICY_ENTRIES = [
      "soft_text", SUBJECT_HARD_LIMIT, SUBJECT_ACCEPT_LIMIT, SUBJECT_SOFT_LIMIT,
      ContinuityItemDraft, ("subject",)),
     ("npc_batch_update.summary", lambda: schema_json(NPCBatchUpdateDisplay),
-     ("updates", "scene_summary", "summary"),
+     ("updates", "scene_summary"),
      "soft_text", NPC_SCENE_SUMMARY_HARD_LIMIT,
      NPC_SCENE_SUMMARY_ACCEPT_LIMIT, NPC_SCENE_SUMMARY_SOFT_LIMIT,
      NPCSceneSummaryDraft, ("summary",)),

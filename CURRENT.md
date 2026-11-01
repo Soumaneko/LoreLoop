@@ -1048,7 +1048,9 @@ The batch updater splits existing-profile changes into two channels:
 
 `last_scene_summary` is a dedicated program + evidence record written for each
 appeared NPC on every confirmed turn (see Ticket 12). The updater emits an
-independent per-turn summary draft in the `scene_summary` slot, and admission
+independent per-turn summary string in `scene_summary`, with sibling
+`evidence_ids` supporting only that summary. Each stable change retains its own
+evidence ids. Parsing assembles the internal summary draft, and admission
 writes `last_scene_summary` together with the program-derived `last_scene_turn`
 in one atomic step; mentioned-only NPCs never receive the pair. The updater
 never projects the previous summary back into the LLM input, and it never
@@ -2630,7 +2632,7 @@ paths do not override it, so they run at most two model calls per task.
 - Provider/parse/output-validation failures at the LLM boundary return an
   empty batch with `npc_batch_fallback`; deterministic alias acceptance,
   CurrentState→NPC sync, mention hits, and new NPC candidates still run.
-- Soft truncation: `scene_summary.summary` hard 160 / soft 240,
+- Soft truncation: `scene_summary` hard 160 / soft 240,
   `change_basis` hard 80 / soft 120. First attempt enforces hard limits;
   second attempt keeps up to soft limits and truncates only above them.
 - Persistent limits for `last_scene_summary` and `change_basis` were raised to

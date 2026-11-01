@@ -357,14 +357,12 @@ def test_parse_scene_summary_dedupes_evidence_without_truncating():
 
     entries, warnings = parse_batch_updates([{
         "npc_id": "npc_001",
-        "scene_summary": {
-            "summary": "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。",
-            "evidence_ids": [
-                "turn_3_p001", "turn_3_p001",
-                "turn_3_p002", "turn_3_p003", "turn_3_p004",
-                "turn_3_p005", "turn_3_p006", "turn_3_p007",
-            ],
-        },
+        "scene_summary": "沈孤鸿让沈二关上醉花楼大门，随后在大堂来回踱步。",
+        "evidence_ids": [
+            "turn_3_p001", "turn_3_p001",
+            "turn_3_p002", "turn_3_p003", "turn_3_p004",
+            "turn_3_p005", "turn_3_p006", "turn_3_p007",
+        ],
     }], soft_limits=True)
 
     assert entries[0].scene_summary is not None
