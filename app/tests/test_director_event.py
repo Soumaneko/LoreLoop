@@ -211,32 +211,15 @@ def test_reconsuming_a_hook_preserves_original_consumed_turn():
     store.close()
 
 
-def test_selection_actor_roles_require_unique_keys_and_event_uses_bound_actors():
-    from pydantic import ValidationError
-
-    selection = DirectorEventSelectionResult(
-        current_story_direction="港口失踪案仍在扩大。",
-        conception="这是独立的长期世界活动。",
-        title="无灯船",
-        duration_phases=7,
-        actor_roles=[],
-        subject="陷空山脚猎户",
-        intent="查明灵气异动",
-        method="组队搜山",
-        macro_intent="猎户为了生存不择手段。",
-        hook_pool=[
-            EventHook(
-                hook_id="hook_sound",
-                kind="auditory",
-                content="深夜水面传来无人摇橹声。",
-                trigger_anchors=["旧码头"],
-            )
-        ],
-        world_impact=WorldImpact(
-            description="猎户带走了码头封存的一批物资，外围变为凡人活动区。",
-        ),
-    )
-
+@pytest.mark.parametrize(("actor_keys", "additional_keys"), [
+    (["actor_1", "actor_1"], []),
+    ([], ["extra_1", "extra_1"]),
+    (["actor_1"], ["actor_1"]),
+])
+def test_selection_actor_roles_require_unique_keys_and_event_uses_bound_actors(
+    actor_keys, additional_keys,
+):
+    selection = _event_selection()
     event = selection.to_event(
         turn_index=3,
         current_clock=WorldClock(),
@@ -244,32 +227,15 @@ def test_selection_actor_roles_require_unique_keys_and_event_uses_bound_actors()
     )
     assert [actor.name for actor in event.actors] == ["林澈", "港务署"]
 
-    with pytest.raises(ValidationError):
-        DirectorEventSelectionResult(
-            current_story_direction="港口失踪案仍在扩大。",
-            conception="这是独立的长期世界活动。",
-            title="无灯船",
-            duration_phases=7,
-            actor_roles=[
-                DirectorEventActorRole(actor_key="actor_1", role_in_event="调查"),
-                DirectorEventActorRole(actor_key="actor_1", role_in_event="掩护"),
-            ],
-            subject="陷空山脚猎户",
-            intent="查明灵气异动",
-            method="组队搜山",
-            macro_intent="猎户为了生存不择手段。",
-            hook_pool=[
-                EventHook(
-                    hook_id="hook_sound",
-                    kind="auditory",
-                    content="深夜水面传来无人摇橹声。",
-                    trigger_anchors=["旧码头"],
-                )
-            ],
-            world_impact=WorldImpact(
-                description="猎户带走了码头封存的一批物资，外围变为凡人活动区。",
-            ),
-        )
+    payload = selection.model_dump(mode="json")
+    payload["actor_roles"] = [
+        {"actor_key": key, "role_in_event": "调查"} for key in actor_keys
+    ]
+    payload["additional_npcs"] = [
+        {"actor_key": key, "role_in_event": "掩护"} for key in additional_keys
+    ]
+    with pytest.raises(ValidationError, match="duplicate actor_key"):
+        DirectorEventSelectionResult.model_validate(payload)
 
 
 def test_selection_rejects_duration_beyond_world_clock_limit():

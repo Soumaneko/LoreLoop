@@ -1356,7 +1356,16 @@ Setting itself (not the NPC or event), and either an existing `matched_setting_i
 (resolved against the turn-start Settings snapshot) or `matched_setting_id` left
 `null` when no adequate Setting exists yet.
 
-Confirmation executes Director requests in two waves. Wave A resolves the one
+Before either creation wave, a batch containing `create_event` absorbs all
+same-batch `create_npc` requests as additional `source=new` event actors. Only
+their forwarded `name: purpose` guidance is used; `description` remains a
+discarded honeypot. The standalone NPC requests and their Setting requirements
+are removed from execution. Converted actors use the event's Setting and the
+existing event-first, NPC-second creation flow. Without `create_event`, NPC
+requests execute independently as before. This conversion is internal to the
+executor; neither Agent needs a different decision protocol.
+
+Confirmation then executes Director requests in two waves. Wave A resolves the one
 Setting requirement attached to each dependent request. A valid turn-start
 `matched_setting_id` is reused; `null`, an unknown ID, or a kind mismatch causes
 Setting creation. Missing requirements with the same `(kind,
@@ -1365,11 +1374,23 @@ independently with at most three workers. Each call receives the same compact
 turn-start Setting catalog for deduplication. Generated Settings remain in memory
 while their IDs are injected back into every originating request.
 
-Wave B then executes all Director requests concurrently with at most three workers.
+Wave B executes the remaining requests with at most three workers. The event
+receives its original actors plus converted new-actor requests. The original
+Director input limits still apply before conversion; the event output can hold
+eleven actor roles: six requested actors plus five converted NPC requests.
+The Selector returns `actor_roles` for exactly its supplied actors, followed by
+`additional_npcs` for up to three characters it needs to complete the event.
+Both lists use `actor_key` and `role_in_event`; keys must be unique across both
+lists. The LLM output must explicitly provide `additional_npcs`, including an
+empty list when none are needed. Anonymous extras and existing Setting facts
+remain available. After event selection, the original new actors are created
+first, then the additional NPCs, using the same NPC Creator and event Setting.
+Every creation receives the event and both actor lists; all resulting IDs are
+bound to the event and committed together. The additional requests are creation
+metadata, not a new persisted Event field.
 `create_npc` and `create_event` receive their resolved Setting,
 including facts, in the same confirmation turn. Request ordering is preserved in
-the execution result. Semantic conflict prevention belongs to the upstream
-Director contract. Handlers read through the confirmation's operation-level
+the execution result. Handlers read through the confirmation's operation-level
 stores and shared SQLite connection, but no Wave worker writes to a store. After
 all requests succeed, the accumulated Settings, NPC drafts, Events, profile
 updates, and actor bindings are committed in deterministic order inside the

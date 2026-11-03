@@ -1,7 +1,6 @@
 import pytest
 
 import json
-import threading
 from pydantic import ValidationError
 from app.domain.director import DirectorSkillRequest
 from app.domain.director import DirectorSkillService
@@ -163,16 +162,13 @@ def test_create_event_requires_at_least_one_real_actor():
     assert [actor.source for actor in mixed.actors] == ["existing", "new"]
 
 
+@pytest.mark.parametrize("actor_case", ["existing", "full_actor_list"])
 def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
-    tmp_path,
+    tmp_path, actor_case,
 ):
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    setting_barrier = threading.Barrier(2)
-    setting_worker_ids: set[int] = set()
 
     def setting_output(data):
-        setting_worker_ids.add(threading.get_ident())
-        setting_barrier.wait(timeout=2)
         if data["kind"] == "faction":
             return {
                 "name": "北陆商盟",
@@ -191,9 +187,17 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
     with stores.npc_profile as store:
         store.upsert(existing_actor)
 
+    actors = [{"source": "existing", "npc_id": existing_actor.npc_id}]
+    if actor_case == "full_actor_list":
+        for index in range(5):
+            profile = NPCProfile(name=f"驿站伙计{index}", role="伙计")
+            with stores.npc_profile as store:
+                store.upsert(profile)
+            actors.append({"source": "existing", "npc_id": profile.npc_id})
+    expected_count = 7 if actor_case == "full_actor_list" else 2
     gateway = ScriptedDirectorGateway(
         decision={
-            "reasoning": "两个技能各自缺少一个 Setting，补齐后都应执行。",
+            "reasoning": "为事件准备一名新演员与所需的 Setting。",
             "requests": [
                 {
                     "request_id": "npc_1",
@@ -204,7 +208,11 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
                             "setting_description": "agent 需要的北境势力。",
                         }],
                     },
-                    "guidance": "凭空补建北境势力。",
+                    "guidance": {
+                        "name": "沈栖舟",
+                        "purpose": "负责货路交涉。",
+                        "description": "不应传递的人物背景。",
+                    },
                 },
                 {
                     "request_id": "event_1",
@@ -214,13 +222,7 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
                             "kind": "location",
                             "setting_description": "agent 需要的交通节点。",
                         }],
-                        "actors": [
-                            {
-                                "source": "existing",
-                                "npc_id": existing_actor.npc_id,
-                                "guidance": "由既有驿站主管充当演员。",
-                            },
-                        ],
+                        "actors": actors,
                     },
                         "guidance": "建立独立环境事件。",
                 },
@@ -247,11 +249,14 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
             },
         },
         event_selection_output=make_event_selection_output([
-            {"actor_key": "actor_1", "role_in_event": "处置驿站往来"},
+            {"actor_key": f"actor_{index}", "role_in_event": "处置驿站往来"}
+            for index in range(1, expected_count + 1)
         ]),
     )
 
-    _, executions = DirectorConfirmationExecutor(
+    # The Director may list the event before the NPC it needs.
+    gateway.decision["requests"].reverse()
+    decision, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
         core_memory=CoreMemory(items=[]),
@@ -264,19 +269,37 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
         trace_id="confirmation-director",
     ).run()
 
-    assert [execution.skill for execution in executions.executions] == [
-        "create_npc", "create_event"
-    ]
-    assert len(setting_worker_ids) == 2
-    assert executions.executions[0].output["name"] == "沈栖舟"
-    assert executions.executions[1].output["event_id"].startswith("director_event_")
+    assert [request.skill for request in decision.requests] == ["create_event"]
+    assert [execution.skill for execution in executions.executions] == ["create_event"]
+    assert executions.executions[0].output["event_id"].startswith("director_event_")
     with stores.world_setting as store:
         settings = store.list_all()
-    assert {setting.name for setting in settings} == {"北陆商盟", "寒川驿"}
+    assert {setting.name for setting in settings} == {"寒川驿"}
     with stores.director_npc as store:
-        assert [npc.name for npc in store.list_all()] == ["沈栖舟"]
+        drafts = store.list_all()
+    assert [npc.name for npc in drafts] == ["沈栖舟"]
+    draft = drafts[0]
     with stores.director_event as store:
-        assert len(store.list_all()) == 1
+        events = store.list_all()
+    assert len(events) == 1
+    assert len(events[0].actors) == expected_count
+    assert [actor.ref.resource_id for actor in events[0].actors].count(draft.draft_id) == 1
+    assert draft.source_setting_ids == events[0].source_setting_ids
+    assert gateway.tasks.index("director_event_select") < gateway.tasks.index("director_npc_create")
+    selector_input = gateway.input_data[gateway.tasks.index("director_event_select")]
+    required = json.loads(selector_input["required_actors_json"])
+    assert required[-1] == {
+        "actor_key": f"actor_{expected_count}", "source": "new",
+        "guidance": "沈栖舟: 负责货路交涉。",
+    }
+    assert "不应传递的人物背景" not in json.dumps(selector_input, ensure_ascii=False)
+    assert executions.executions[0].output["new_npc_ids"] == [draft.draft_id]
+    npc_input = gateway.input_data[gateway.tasks.index("director_npc_create")]
+    assert "寒川驿" in npc_input["settings_json"]
+    assert "不应传递的人物背景" not in json.dumps(npc_input, ensure_ascii=False)
+    assert "沈栖舟: 负责货路交涉。" in npc_input["director_guidance"]
+    assert events[0].title in npc_input["batch_recent_creations_json"]
+    assert "寒川驿" in selector_input["settings_json"]
 
 
 def test_skill_guidance_flows_through_to_execution_handler():

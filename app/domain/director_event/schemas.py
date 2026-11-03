@@ -125,7 +125,10 @@ class DirectorEventSelectionResult(BaseModel):
     subject: str = Field(min_length=1)
     actor_roles: list[DirectorEventActorRole] = Field(
         default_factory=list,
-        max_length=6,
+        max_length=11,  # Six requested actors plus five same-batch create_npc requests.
+    )
+    additional_npcs: list[DirectorEventActorRole] = Field(
+        default_factory=list, max_length=3,
     )
     selected_setting_fact_ids: list[str] = Field(
         default_factory=list,
@@ -150,6 +153,13 @@ class DirectorEventSelectionResult(BaseModel):
         if len(keys) != len(set(keys)):
             raise ValueError("actor_roles has duplicate actor_key")
         return value
+
+    @model_validator(mode="after")
+    def _unique_additional_actor_keys(self):
+        keys = [actor.actor_key for actor in [*self.actor_roles, *self.additional_npcs]]
+        if len(keys) != len(set(keys)):
+            raise ValueError("additional_npcs has duplicate actor_key across actor lists")
+        return self
 
     @field_validator("selected_setting_fact_ids")
     @classmethod
@@ -193,6 +203,8 @@ class DirectorEventSelectionOutput(DirectorEventSelectionResult):
     """LLM boundary: an instantiated Event must name its Setting facts."""
 
     model_config = ConfigDict(extra="forbid", validate_default=True)
+
+    additional_npcs: list[DirectorEventActorRole] = Field(max_length=3)
 
     selected_setting_fact_ids: list[str] = Field(
         default_factory=list, min_length=1, max_length=8

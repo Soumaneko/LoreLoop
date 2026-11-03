@@ -1,4 +1,5 @@
 import pytest
+from copy import deepcopy
 
 import json
 from pydantic import ValidationError
@@ -14,7 +15,8 @@ from app.tests.factories.director import make_event_selection_output
 from app.tests.factories.director import make_intrude_event
 
 
-def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
+@pytest.mark.parametrize("with_additional", [False, True])
+def test_confirmation_agent_can_create_event_with_new_actors(tmp_path, with_additional):
     from app.domain.world_setting import WorldSetting
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
@@ -78,6 +80,21 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         },
     )
 
+    expected_count = 3 if with_additional else 2
+    additional_role = "老周，码头船工，负责接收账册并安排转运。"
+    gateway.event_selection_output["additional_npcs"] = ([{
+        "actor_key": "extra_1", "role_in_event": additional_role,
+    }] if with_additional else [])
+    names = iter(["沈二爷", "钱先生", "老周"])
+    template = gateway.npc_output
+
+    def npc_output(_):
+        output = deepcopy(template)
+        output["shell"]["name"] = next(names)
+        return output
+
+    gateway.npc_output = npc_output
+
     decision, executions = DirectorConfirmationExecutor(
         gateway=gateway,
         stores=stores,
@@ -93,14 +110,14 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
 
     assert executions.executions[0].skill == "create_event"
     output = executions.executions[0].output
-    assert len(output["new_npc_ids"]) == 2
-    assert len(output["actor_names"]) == 2
+    assert len(output["new_npc_ids"]) == expected_count
+    assert len(output["actor_names"]) == expected_count
     assert gateway.tasks == [
         "director_agent_decide_confirmation",
         "director_event_select",
         "director_npc_create",
         "director_npc_create",
-    ]
+    ] + (["director_npc_create"] if with_additional else [])
 
     with stores.director_event as store:
         events = store.list_all()
@@ -121,7 +138,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
         for entry, task in zip(gateway.input_data, gateway.tasks)
         if task == "director_npc_create"
     ]
-    assert len(create_calls) == 2
+    assert len(create_calls) == expected_count
     first = create_calls[0]["batch_recent_creations_json"]
     assert first.count("沉船账本") == 1
     assert "沈二爷" not in first
@@ -135,6 +152,12 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path):
     assert "控制码头货路" in create_calls[0]["director_guidance"]
     assert "账房先生，暗中替世家管账。" in create_calls[1]["director_guidance"]
     assert "管理隐秘账目" in create_calls[1]["director_guidance"]
+    if with_additional:
+        assert create_calls[2]["director_guidance"] == additional_role
+        context = json.loads(create_calls[2]["batch_recent_creations_json"])
+        assert context[0]["additional_npcs"] == gateway.event_selection_output["additional_npcs"]
+        assert "钱先生" in create_calls[2]["batch_recent_creations_json"]
+        assert output["actor_names"][-1] == "老周"
 
     selector_input = [
         entry
@@ -185,7 +208,10 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
                 },
             ],
         },
-        event_selection_output=make_event_selection_output(),
+        event_selection_output=make_event_selection_output([
+            {"actor_key": "actor_1", "role_in_event": "码头巡夜"},
+            {"actor_key": "actor_2", "role_in_event": "追查失踪货物"},
+        ]),
         setting_output={
             "name": "寒川驿",
             "summary": "连接北境山道和河运的交通节点。",
@@ -213,8 +239,18 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
         },
     )
 
+    original_create = DirectorNPCCreator.create
+    created_drafts = []
+    gateway.event_selection_output["additional_npcs"] = [{
+        "actor_key": "extra_1", "role_in_event": "码头船工，负责运走货物。",
+    }]
+
     def flaky_create(self, **kwargs):
-        raise TimeoutError("LLM 超时")
+        if len(created_drafts) == 2:
+            raise TimeoutError("LLM 超时")
+        draft = original_create(self, **kwargs)
+        created_drafts.append(draft)
+        return draft
 
     monkeypatch.setattr(DirectorNPCCreator, "create", flaky_create)
 
@@ -232,6 +268,8 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
             trace_id="confirmation-director",
         ).run()
 
+    assert len(created_drafts) == 2
+    assert gateway.tasks.index("director_event_select") < gateway.tasks.index("director_npc_create")
     with stores.world_setting as store:
         assert store.list_all() == []
     with stores.director_npc as store:

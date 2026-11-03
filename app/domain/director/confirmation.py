@@ -1,7 +1,7 @@
 """Confirmation-stage Director skill execution（领域层）。
 
 LangGraph 节点只调用 :class:`DirectorConfirmationExecutor`。本模块拥有技能 handler 及其参数
-validator、两波执行（Wave A 生成 Setting / Wave B 并发执行技能）以及延迟提交。
+validator、两波执行（Wave A 生成 Setting / Wave B 执行合并后的技能）以及延迟提交。
 持久化细节由 :mod:`app.runtime.director_mutation` 负责。
 
 并发与连接：Phase 2 起整个确认共享同一份操作级 Store（单一 SQLite 连接），
@@ -31,10 +31,12 @@ from app.domain.director import (
     DirectorSkillService,
 )
 from app.domain.director.agent import DirectorWarning
+from app.domain.director.skills import _guidance_text
 from app.domain.director.skill_specs import (
     BindEventActorArguments,
     CreateEventArguments,
     CreateNPCArguments,
+    NewEventActorInput,
     register_skill,
 )
 from app.domain.director_event.schemas import (
@@ -115,6 +117,7 @@ class DirectorConfirmationExecutor:
         self._npc_profile_store: Any = stores.npc_profile
         self._setting_store: Any = stores.world_setting
         self._settings_by_id: dict[str, WorldSetting] = {}
+        self._event_new_actors: list[NewEventActorInput] = []
 
     def run(self) -> tuple[object, DirectorSkillExecutionBatch]:
         self.last_warnings = []
@@ -161,6 +164,7 @@ class DirectorConfirmationExecutor:
             if not decision.requests:
                 return decision, DirectorSkillExecutionBatch()
 
+            decision = self._merge_npc_requests(decision)
             decision, created_settings = self._run_setting_creation_wave(
                 decision,
                 available_settings=available_settings,
@@ -180,9 +184,6 @@ class DirectorConfirmationExecutor:
             for setting in created_settings:
                 self._settings_by_id[setting.setting_id] = setting
 
-            # Wave B may execute every request concurrently. Handlers share the
-            # operation connection but issue only SELECTs; all writes remain in
-            # the in-memory mutation plan until the batch succeeds.
             executions = self._service.execute_batch(
                 decision,
                 phase="confirmation",
@@ -209,6 +210,19 @@ class DirectorConfirmationExecutor:
 
         apply_director_mutations(self._plan, self._stores)
         return decision, executions
+
+    def _merge_npc_requests(self, decision: DirectorDecisionBatch) -> DirectorDecisionBatch:
+        self._event_new_actors = []
+        if not any(request.skill == "create_event" for request in decision.requests):
+            return decision
+        # Derived actors are separate from the already-validated Director input quotas.
+        self._event_new_actors = [
+            NewEventActorInput(source="new", guidance=_guidance_text(request.guidance))
+            for request in decision.requests if request.skill == "create_npc"
+        ]
+        return decision.model_copy(update={"requests": [
+            request for request in decision.requests if request.skill != "create_npc"
+        ]})
 
     def _register_skills(
         self,
@@ -291,7 +305,7 @@ class DirectorConfirmationExecutor:
         setting_ids = [setting.setting_id for setting in settings]
         event_guidance = guidance or ""
         required_actors, bound_actors, actor_inputs_by_key = (
-            self._resolve_event_actors(args.actors)
+            self._resolve_event_actors([*args.actors, *self._event_new_actors])
         )
         selection = DirectorEventSelector(self._gateway).select_or_create(
             events=self._event_store.list_all(),
@@ -320,17 +334,25 @@ class DirectorConfirmationExecutor:
             role.model_dump(mode="json")
             for role in selection.actor_roles
         ]
+        additional_npcs_view = [
+            role.model_dump(mode="json")
+            for role in selection.additional_npcs
+        ]
         recent_creations: list[dict] = [{
             **event.semantic_view(),
             "actor_roles": actor_roles_view,
+            "additional_npcs": additional_npcs_view,
         }]
-        for actor_key, actor_input in actor_inputs_by_key.items():
-            if actor_input.source != "new":
-                continue
-            npc_guidance = (
+        npc_requests = [
+            (
                 f"{actor_input.guidance}\n"
                 f"在本事件中的职责：{role_by_key[actor_key]}"
             )
+            for actor_key, actor_input in actor_inputs_by_key.items()
+            if actor_input.source == "new"
+        ]
+        npc_requests.extend(role.role_in_event for role in selection.additional_npcs)
+        for npc_guidance in npc_requests:
             draft = DirectorNPCCreator(self._gateway).create(
                 core_memory=self._core_memory,
                 existing_npcs=self._npc_profile_store.list_all(),
@@ -355,6 +377,7 @@ class DirectorConfirmationExecutor:
             recent_creations[0] = {
                 **event.semantic_view(),
                 "actor_roles": actor_roles_view,
+                "additional_npcs": additional_npcs_view,
             }
             recent_creations.append(
                 {

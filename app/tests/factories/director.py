@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Callable
 
 from app.domain.core_memory import CoreMemory
 from app.domain.current_state import CurrentState, PlayerState, SceneState, WorldClock
@@ -63,6 +64,7 @@ def make_event_selection_output(actor_roles: list[dict] | None = None) -> dict:
         "duration_phases": 7,
         "selected_setting_fact_ids": ["fact_1"],
         "actor_roles": actor_roles or [],
+        "additional_npcs": [],
         "subject": "码头旧账房",
         "intent": "追回被私吞的账目",
         "method": "暗中盘查往来货船",
@@ -168,7 +170,7 @@ class ScriptedDirectorGateway:
         self,
         *,
         decision: dict,
-        npc_output: dict | None = None,
+        npc_output: dict | Callable[[dict], dict] | None = None,
         backfill_output: dict | None = None,
         event_selection_output: dict | None = None,
         event_review_output: dict | None = None,
@@ -202,7 +204,10 @@ class ScriptedDirectorGateway:
         ):
             payload = self.event_review_output
         elif task == "director_npc_create" and self.npc_output is not None:
-            payload = self.npc_output
+            payload = (
+                self.npc_output(kwargs.get("input_data") or {})
+                if callable(self.npc_output) else self.npc_output
+            )
         elif task == "npc_profile_backfill" and self.backfill_output is not None:
             payload = self.backfill_output
         elif task == "director_setting_create" and self.setting_output is not None:
