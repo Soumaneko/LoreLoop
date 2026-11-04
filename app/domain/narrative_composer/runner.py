@@ -11,7 +11,7 @@ from app.core.llm.schema import schema_json
 from app.domain.action_judgment.schemas import OutcomeBand
 from app.domain.context_facts.views import project_context_facts
 from app.domain.director_event.views import project_director_events
-from app.domain.scene_writer.schemas import NextActionDirection
+from app.domain.scene_writer.schemas import NextActionDirection, NPCUsage
 from app.domain.short_term_memory.schemas import ShortTermScene
 from app.domain.views import (
     project_current_state,
@@ -178,6 +178,7 @@ class _HardComposerResult(BaseModel):
         min_length=1,
         description="正文",
     )
+    npc_usages: list[NPCUsage] = Field(description="根据正文记录实际使用的输入人物；未使用人物时为空列表")
     closing_prompt: str = Field(
         min_length=1,
         description="结尾提示",
@@ -201,6 +202,7 @@ class _LooseComposerResult(BaseModel):
     planned_events: list[PlannedEvent] = Field(default_factory=list)
     scene_reasoning: str = Field(min_length=1)
     scene_text: str = Field(min_length=1)
+    npc_usages: list[NPCUsage]
     closing_prompt: str = Field(min_length=1)
     next_action_directions: list[NextActionDirection] = Field(
         default_factory=list,

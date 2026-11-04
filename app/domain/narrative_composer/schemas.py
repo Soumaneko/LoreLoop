@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from pydantic import BaseModel, Field
 
 from app.domain.context_facts.schemas import ContextFactSet
@@ -9,7 +11,7 @@ from app.domain.director.schemas import DirectorStageResult
 from app.domain.director_event.schemas import DirectorEvent
 from app.domain.npc_profile.schemas import NPCProfileDirectorView
 from app.domain.plot_outline.schemas import PlannedEvent, PlotOutlineResult
-from app.domain.scene_writer.schemas import NextActionDirection, SceneWriterResult
+from app.domain.scene_writer.schemas import NextActionDirection, NPCUsage, SceneWriterResult
 from app.domain.action_judgment.schemas import ActionJudgment, OutcomeBand
 
 
@@ -50,6 +52,7 @@ class NarrativeComposerResult(BaseModel):
         description="2-4 句写作前审计。确认正文将如何落实刚刚制定的规划",
     )
     scene_text: str = Field(min_length=1, description="正文")
+    npc_usages: list[NPCUsage] = Field(default_factory=list)
     closing_prompt: str = Field(min_length=1, description="结尾提示")
     next_action_directions: list[NextActionDirection] = Field(
         default_factory=list,
@@ -69,16 +72,19 @@ class NarrativeComposerResult(BaseModel):
         )
 
     def to_scene_result(self) -> SceneWriterResult:
-        return SceneWriterResult.model_validate(
+        result = SceneWriterResult.model_validate(
             self.model_dump(
                 include={
                     "scene_reasoning",
                     "scene_text",
+                    "npc_usages",
                     "closing_prompt",
                     "next_action_directions",
                 }
             )
         )
+        result.npc_usages_text_hash = hashlib.sha256(self.scene_text.encode("utf-8")).hexdigest()
+        return result
 
 
 class ActionResolution(BaseModel):

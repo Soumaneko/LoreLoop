@@ -1,4 +1,12 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+class NPCUsage(BaseModel):
+    name: str = Field(min_length=1, description="输入人物资料中的档案姓名")
+    surfaces: list[str] = Field(min_length=1, description="正文中实际指代此人的姓名、称谓或描述")
+    presence: Literal["appeared", "mentioned_only"]
 
 
 class NextActionDirection(BaseModel):
@@ -10,5 +18,7 @@ class NextActionDirection(BaseModel):
 class SceneWriterResult(BaseModel):
     scene_reasoning: str = ""
     scene_text: str
+    npc_usages: list[NPCUsage] = Field(default_factory=list)
+    npc_usages_text_hash: str | None = None
     closing_prompt: str = ""
     next_action_directions: list[NextActionDirection] = Field(default_factory=list, max_length=5)

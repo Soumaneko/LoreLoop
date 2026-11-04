@@ -11,6 +11,7 @@ from app.domain.current_state.schemas import CurrentState, PlayerState, SceneSta
 from app.domain.narrative_composer.runner import run_narrative_composition
 from app.domain.narrative_composer.schemas import NarrativeComposerContext
 from app.domain.action_judgment.schemas import ActionJudgment
+from app.domain.npc_profile.schemas import NPCProfileDirectorView
 
 
 def _context() -> NarrativeComposerContext:
@@ -60,15 +61,28 @@ def _output() -> dict:
         }],
         "scene_reasoning": "落实成功观察并保持局面开放。",
         "scene_text": "你环顾广场，人群的动静逐一落入眼中。",
+        "npc_usages": [],
         "closing_prompt": "人群仍在流动，你会怎么做？",
         "next_action_directions": [],
     }
 
 
-def test_composer_accepts_matching_program_judgment():
-    result = run_narrative_composition(_gateway(_output()), context=_context())
+@pytest.mark.parametrize("presence", ["appeared", "mentioned_only"])
+def test_composer_accepts_matching_program_judgment(presence):
+    context = _context()
+    context.npc_profiles = [NPCProfileDirectorView(name="赵七")]
+    output = _output()
+    output["scene_text"] += "中年汉子，老赵。" if presence == "appeared" else "你听说了中年汉子老赵的事。"
+    # Surplus archive names stay available for offline review without rejecting prose.
+    output["npc_usages"] = [{"name": "赵七", "surfaces": ["中年汉子", "老赵", "赵七"], "presence": presence}]
+    result = run_narrative_composition(_gateway(output), context=context)
     assert result.action_resolutions[0].outcome_band == "success"
     assert result.scene_text.startswith("你环顾广场")
+    assert result.npc_usages[0].presence == presence
+    assert result.npc_usages[0].name == "赵七"
+    assert "赵七" not in result.scene_text
+    assert "赵七" in result.npc_usages[0].surfaces
+    assert result.to_scene_result().npc_usages == result.npc_usages
 
 
 def test_composer_rejects_outcome_reversal():

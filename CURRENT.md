@@ -1603,6 +1603,16 @@ affected the plan and may be empty when the Director decision admits no
 material. An empty `DirectorStageResult` does not mean that the Director stage
 was skipped.
 
+Composer also emits `npc_usages` immediately after scene prose: input NPC archive
+names, their in-prose surfaces, and `appeared`/`mentioned_only` presence.
+Record accuracy is assessed offline; surplus names or imprecise surface mappings
+do not reject prose or trigger a semantic validation retry. Basic structured
+parsing remains in place. Records travel with `SceneWriterResult` and
+pending variants; a program-generated text hash identifies their source prose.
+Older saved results default to an empty list. This experimental field is not yet
+consumed by promotion, backfill, fact extraction, state updates, or event review;
+`director_reason` and its position remain unchanged.
+
 Rephrase reruns the entire Composer with the saved authoritative context; prior
 resolution facts, events, and prose are not frozen as an intermediate contract.
 Feedback rewrite first chooses `revise_from_source`, `recompose`, or

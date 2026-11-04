@@ -143,6 +143,7 @@ def test_rephrase_saves_new_prose_with_the_selected_action_outcome(configure_run
                 scene_stopping_point="门外的人仍在等候。",
                 planned_events=[{"event_id": "e1", "event_fact": "你观察门外。", "linked_outcome_ids": ["A1"]}],
                 scene_reasoning="依照原判定改写观察经过。", scene_text="你从门缝看到等候的人影。",
+                npc_usages=[{"name": "赵七", "surfaces": ["人影"], "presence": "appeared"}],
                 closing_prompt="人影仍未离开。",
             )
 
@@ -156,6 +157,14 @@ def test_rephrase_saves_new_prose_with_the_selected_action_outcome(configure_run
     assert revised.context.action_judgments == original.context.action_judgments
     assert revised.player_resolution == original.player_resolution
     assert original.scene_result.scene_text == source.scene_result.scene_text
+    assert original.scene_result.npc_usages == []
+    runtime._restore_pending_transactions()
+    restored = runtime.pending_turns.get(revised.turn_id)
+    assert restored.scene_result.npc_usages[0].name == "赵七"
+    import hashlib
+    assert restored.scene_result.npc_usages_text_hash == hashlib.sha256(
+        restored.scene_result.scene_text.encode("utf-8")
+    ).hexdigest()
 
 
 def test_feedback_rewrite_cancellation_after_first_event_closes_uow(
