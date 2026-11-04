@@ -1,0 +1,30 @@
+{
+  "name": "npc_usages",
+  "description": "Four curated play-trace cases and two constructed Director cases.",
+  "cases": [
+    {
+      "path": "../../cases/case_11_tavern_entry/input.json",
+      "case_id": "case_11_tavern_entry"
+    },
+    {
+      "path": "../../cases/case_12_disclosure_intrusion/input.json",
+      "case_id": "case_12_disclosure_intrusion"
+    },
+    {
+      "path": "../../cases/case_13_event_pressure/input.json",
+      "case_id": "case_13_event_pressure"
+    },
+    {
+      "path": "../../cases/case_14_spontaneous_constable/input.json",
+      "case_id": "case_14_spontaneous_constable"
+    },
+    {
+      "path": "../../cases/case_01_tavern_inquiry/input.json",
+      "case_id": "case_01_tavern_inquiry"
+    },
+    {
+      "path": "../../cases/case_02_rogue_recruitment/input.json",
+      "case_id": "case_02_rogue_recruitment"
+    }
+  ]
+}

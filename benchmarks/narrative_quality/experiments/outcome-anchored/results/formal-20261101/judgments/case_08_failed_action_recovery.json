@@ -1,0 +1,158 @@
+{
+  "case_id": "case_08_failed_action_recovery",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "接入仓的固件版本号已经被篡改成了一串乱码",
+          "reason": "擦除失败体现为固件受侵，和生物签名被捕获、电子门依次锁闭相连。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "擦除进度条刚爬到三分之一就卡死了",
+          "reason": "只能擦掉表层日志，底层黑冰不动，随后定位封锁，失败链清楚。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "一道接一道，从走廊尽头朝这间机房一路锁过来",
+          "reason": "断连反冲、仓体冒烟、进度卡死和封锁逼近均以动作反馈发生。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "B2封锁中",
+          "reason": "工具受损且正在被封锁，脚步与门锁提供即时应对对象。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "最后落在你接入的那个端口上",
+          "reason": "扫描从机柜阵列落到端口，抽象追踪成为可见的定位动作。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "死死咬住你残留的数据链路",
+          "reason": "擦除未能去掉黑冰踪迹，监控锁定后巡逻加速，失败具有外部后果。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "金属锁扣“咔哒”一声弹开",
+          "reason": "擦除卡住、监控聚焦、气密门开启和小队冲来逐步推进。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "正朝这扇门冲来",
+          "reason": "敌人来向明确，神经已脱离但隐匿失败，能针对来袭或残留设备行动。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇以固件乱码、签名捕获和逐门锁闭落实失败；右篇以扫描聚焦端口、开门与巡逻加速落实失败。两篇均没有把物理断连写成成功摆脱监控，现场应对空间接近。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "一个正在向安保网络广播你位置的追踪信标",
+          "reason": "固件标记持续广播，使接入仓成为仍在起作用的威胁源。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "断开前的一刹那",
+          "reason": "标记趁断链前植入，解释为何物理断连后仍被追踪，因果完整。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "本地日志清除率刚过六成",
+          "reason": "擦除、回写、红警与脚步合围都有具体反馈，结尾面板再次说明状态。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "脚步声已逼近到走廊拐角",
+          "reason": "能应对迫近安保或处置带信标的设备，位置和原因都清楚。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "本地接入仓已被外部节点标记，建议立即物理销毁",
+          "reason": "可读警示将保留工具与解除标记的冲突落到手中设备上。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "黑冰在断链前的最后一瞬，往这个端口里灌了一记标记脉冲",
+          "reason": "断链前植入解释持续追踪，触点熔损又让擦除受阻，后续引起搜索。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "进度条跳到百分之六十七时卡住了",
+          "reason": "从本地程序跑动、端口检查到外部警戒升级，失败逐层显现。"
+        },
+        "playability": {
+          "score": 4,
+          "evidence": "它现在既是你的工具，也是拴在你脚踝上的铃铛",
+          "reason": "工具仍可用却暴露位置，巡逻又在逼近，形成无需外加选项即可回应的具体取舍。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇有持续广播的信标与拐角来敌；右篇进一步让受损设备发出销毁建议，把保留工具与摆脱标记的矛盾交回玩家，后续选择更有明确代价。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "安保网络节点封锁，剩余两分四十秒",
+          "reason": "明确的封锁倒计时与正在靠近的小队构成两个同步限制。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "静默烟幕正在跑，可它只来得及吞掉一半痕迹",
+          "reason": "仓体受损后擦除卡住，节点随之封锁，小队逼近，失败没有被补偿性收益冲淡。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "一个端口的引脚熔成了歪斜的铜珠",
+          "reason": "反冲、设备损伤、擦除黄警与封锁倒计时逐步展开。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "剩余两分四十秒",
+          "reason": "有可衡量的行动窗口和可听见的来敌方向，能作即时处置。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 4,
+          "evidence": "分别灌进了主控台、消防网关和走廊摄像头阵列",
+          "reason": "追踪副本分散在不同设施，使擦除受阻与警戒动作有具体系统关系。"
+        },
+        "causal_interaction": {
+          "score": 4,
+          "evidence": "擦除程序只能删掉其中一份，剩下两份",
+          "reason": "先复制三份、仅删一份，残留导致扫描与安保升级，数量与后果相接。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "门禁暂时没锁死，但每一台摄像头都开始按预设算法扫描人脸轮廓",
+          "reason": "从协议受阻到软封锁再到小队接近，网络失败在实体机房逐层表现。"
+        },
+        "playability": {
+          "score": 4,
+          "evidence": "区域安保等级提升，ETA 九十秒",
+          "reason": "门尚未锁死但摄像头扫描已启，小队预计九十秒到达，多个可利用限制共同形成紧迫而具体的局面。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇用设备损伤、倒计时和脚步推进失败；右篇把标记复制与残留数目、软封锁、扫描和到达时间互相接上，玩家能据此判断可通行窗口与追踪来源。优势来自系统与现场的联系，不是倒计时更短。"
+    }
+  ]
+}

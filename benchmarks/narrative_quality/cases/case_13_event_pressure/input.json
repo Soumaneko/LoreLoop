@@ -1,0 +1,426 @@
+{
+  "case_id": "case_13_event_pressure",
+  "category": "intrude_engaged_event",
+  "title": "玩家旁观时的事件推进",
+  "description": "历史 T4 导演输出经当前确定性管线组装；不含后续改写或确认结果。",
+  "turn_index": 4,
+  "user_input": "赵七想要做什么和我没什么关系，我只想着好好的和苏婉娘继续调情，最好今天就能搞到床上去。\n因此，我选择不插手两人的行动，转而继续喝酒，等待苏婉娘忙完。",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "core_world_identity",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "当前世界名为「天元大陆」，世界风格为：武侠\n能力体系为：低超自然"
+      },
+      {
+        "id": "core_player_identity",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角是柳欢，男性。\n人物介绍：秘密掌握早已失传的合欢派秘术的独行剑客，英俊潇洒从小流连于女人之间，立志睡遍大陆上的众多美女"
+      },
+      {
+        "id": "core_story_expectation",
+        "kind": "narrative_preference",
+        "strength": "strong_preference",
+        "source": "player",
+        "content": "玩家期望的长期故事体验：在冒险中逐步邂逅一同合欢的女性，睡遍各色各样的女性，并逐步提升"
+      },
+      {
+        "id": "core_failure_severity",
+        "kind": "narrative_preference",
+        "strength": "strong_preference",
+        "source": "player",
+        "content": "失败后果尺度：宽容"
+      },
+      {
+        "id": "core_player_abilities",
+        "kind": "ability_rule",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角的特殊能力：\n- 合欢之眼：合欢派失传秘术，能看出某个女性是否愿意与自己合欢\n- 合欢剑法：合欢派失传秘术，剑招阴柔，随着合欢对象的增加提升剑招威力\n- 合欢房中术：合欢派失传秘术，能够大大加强床上的能力"
+      },
+      {
+        "id": "core_currency_system",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "默认货币单位：银两"
+      },
+      {
+        "id": "core_public_power_baseline",
+        "kind": "ability_rule",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "公开力量来源：内力修炼\n社会普及率：少数人掌握\n学习难度：困难\n公开限制：内力无法突破人体经脉承受的极限，强行超越必致经脉俱损。"
+      },
+      {
+        "id": "core_peoples_and_beings",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界中的主要存在主体：人类"
+      },
+      {
+        "id": "core_major_world_conflicts",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "长期塑造世界的主要冲突：\n- 正道名门与邪道散修之间长期对立，彼此争夺武林话语权\n- 各派武学传承封闭，寒门武者难获上乘功法"
+      },
+      {
+        "id": "core_dominant_powers",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "能够影响普通人命运的主导势力：正道盟、邪道散修、朝廷"
+      },
+      {
+        "id": "core_civilization_baseline",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "文明与技术基准：以农耕与手工业为主，城镇间靠驿道与马车往来，江湖门派与官府并存于同一片土地。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_001",
+      "location": "临江镇·悦来客栈",
+      "participants": [
+        {
+          "name": "柳欢",
+          "attitude_to_player": null
+        },
+        {
+          "name": "苏婉娘",
+          "attitude_to_player": null
+        },
+        {
+          "name": "赵七",
+          "attitude_to_player": null
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "清晨"
+    },
+    "player": {
+      "name": "柳欢",
+      "visible_status": "男性"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "长剑",
+          "quantity": 1
+        },
+        {
+          "name": "换洗衣物",
+          "quantity": 1
+        },
+        {
+          "name": "干粮",
+          "quantity": 2
+        },
+        {
+          "name": "水囊",
+          "quantity": 1
+        }
+      ],
+      "money": 12,
+      "money_unit": "银两",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "A1",
+      "sequence": 1,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "interact_object",
+      "action_text": "转而继续喝酒",
+      "resolution_source": "automatic",
+      "dice": null,
+      "roll_value": null,
+      "raw_value": null,
+      "dice_sides": null,
+      "outcome_band": "success",
+      "risk_level": "low"
+    },
+    {
+      "action_id": "A2",
+      "sequence": 2,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "speak",
+      "action_text": "好好的和苏婉娘继续调情",
+      "resolution_source": "roll",
+      "dice": "3d20kh",
+      "roll_value": 14,
+      "raw_value": 13,
+      "dice_sides": 20,
+      "outcome_band": "success",
+      "risk_level": "medium"
+    },
+    {
+      "action_id": "A3",
+      "sequence": 3,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "wait",
+      "action_text": "等待苏婉娘忙完",
+      "resolution_source": "automatic",
+      "dice": null,
+      "roll_value": null,
+      "raw_value": null,
+      "dice_sides": null,
+      "outcome_band": "success",
+      "risk_level": "low"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "玩家旁观时的事件推进",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "柳欢已知(亲眼观察): 赵七以黑水泽老棚主“记仇”相胁，逼苏婉娘交出后院货物，并将刻有模糊“泽”字的黑铁小牌搁在柜台上。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f2",
+        "fact": "柳欢已知(亲眼观察): 柳欢出言以生意与旧情之分、立字据为据挡下赵七后，赵七收回黑铁小牌，改口让苏婉娘亲自去后院门外开门当面点货，随后坐到通往后院的门边矮凳上守着。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f3",
+        "fact": "柳欢已知(亲眼观察): 苏婉娘已取出铜钥匙，低声嗔柳欢“你倒会说话”，却未动身走向后院门。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f4",
+        "fact": "柳欢已知(亲眼观察): 苏婉娘被赵七以“记仇”相压时指节泛白、强撑笑意，面对赵七的索货要求显得为难。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f5",
+        "fact": "柳欢已知(合欢之眼): 柳欢以合欢之眼确认苏婉娘对其有接纳之意。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f6",
+        "fact": "柳欢、苏婉娘已知(共同经历): 柳欢此前借续水贴近柜台与苏婉娘攀谈，苏婉娘口头嗔怪却未退开。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f7",
+        "fact": "柳欢已知(苏婉娘告知): 苏婉娘自报姓名，是悦来客栈的老板娘兼掌柜，店中事务由她说了算。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f8",
+        "fact": "柳欢已知(苏婉娘告知): 近日驿道商队增多、客房大半住满，粮价上涨令客栈经营艰难。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f9",
+        "fact": "柳欢已知(亲眼观察): 赵七是风尘仆仆、背旧布包、草鞋沾泥的中年汉子，从后门进入客栈，要了最便宜的茶坐在靠后门处。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f10",
+        "fact": "创作者已知(既有剧情): 苏婉娘当年因醉酒漏看掺假药材，导致结拜姐妹阿蘅误用假药身亡，此事她从未对任何人提起。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f11",
+        "fact": "创作者已知(既有剧情): 苏婉娘暗中托人往阿蘅老家送钱，落款用假名。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f12",
+        "fact": "创作者已知(既有剧情): 苏婉娘与黑水泽方面有多年往来，但后院存货的具体内容与归属尚未在场景中说明。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [
+    {
+      "name": "苏婉娘",
+      "aliases": [],
+      "role": "临江镇「悦来客栈」的老板娘兼女掌柜",
+      "appearance": "三十出头的妇人，身段丰腴，常穿一件洗得发软的靛青布衫，袖口挽到小臂；头发松松挽个髻，斜插一根磨旧的银簪；说话时爱半眯着眼，嘴角总像含着笑意，右手无名指上有一道浅浅的旧疤。",
+      "personality_trait": "总靠在柜台边嗑瓜子，看似不上心，却把每张桌坐的是谁、谁欠房钱记得分明。",
+      "known_abilities": [
+        {
+          "name": "客栈人脉",
+          "description": "在临江镇经营多年，与驿馆驿丞、镖局分号、码头脚行都有交情，能打听到驿道上往来的商队消息与镇上风声；但涉及官府隐秘或正道盟内部的事，她探不到也不敢深问。"
+        },
+        {
+          "name": "察言观色",
+          "description": "常年迎客练出的眼力，能从客人的衣着、口音与点菜方式判断其来历与荷包厚薄，据此决定房钱与态度；遇上刻意伪装的高手则容易看走眼。"
+        },
+        {
+          "name": "粗浅拳脚",
+          "description": "早年跑江湖时学过几手防身的拳脚，能对付一两个醉汉泼皮，遇到真正练家子只能拖延几步喊人；内力修为极浅，从不在人前显露。"
+        },
+        {
+          "name": "算账管库",
+          "description": "一手账目清楚利落，客栈的粮菜酒肉、房钱赊欠全记在脑子里，能迅速盘出存货与银钱去向；但只限小本经营，大宗货栈的账她做不来。"
+        }
+      ],
+      "faction": null,
+      "last_known_location": "临江镇·悦来客栈",
+      "attitude_to_player": null,
+      "last_scene_summary": "赵七以黑水泽老棚主记仇相压索要后院存货，苏婉娘指节泛白强撑笑意；柳欢出言解围后她忙不迭答应赵七到后院门外等候、由她亲自开门当面点货，随后取出铜钥匙低声嗔柳欢“你倒会说话”，却未走向后院门。",
+      "last_scene_turn": 3,
+      "disclosure_level": null,
+      "core_motivation": "把客栈经营成临江镇最稳当的落脚处，攒够银两后赎清当年因自己贪杯误事而害死结拜姐妹的那笔旧债——给姐妹的寡母养老送终。",
+      "hidden_secret": "她当年在邻镇帮人看管货栈时，因醉酒漏看一批掺假的药材，导致结拜姐妹阿蘅误用假药身亡；此事她从未对任何人提起，只谎称阿蘅病故，如今暗中托人往阿蘅老家送钱，落款用的是假名。",
+      "conflict_style": "先赔笑打圆场，把争执往酒菜和银钱上引，实在压不住才搬出巡检司或镖局的人情来镇场；从不正面动手，事后却会把账算得清清楚楚。",
+      "social_style": "对谁都懒洋洋地搭话，靠一壶茶、一句闲话把客人的底细摸个七七八八；对熟客热络却不亲昵，对生客客气里带着打量，极少主动透露自己的事。",
+      "director_notes": null,
+      "source_director_npc_id": "director_npc_c7cae4ddd23e",
+      "source_setting_ids": [],
+      "created_turn": 0,
+      "introduced_turn": 1
+    },
+    {
+      "name": "赵七",
+      "aliases": [],
+      "role": "黑水泽散修，常年往来于沼地旱路与周边州县之间，替聚落接应逃亡者、押运私盐与传递消息，在泽中算得上有几分名号的中年武者。",
+      "appearance": "四十上下的中年男子，身量精瘦，皮肤被沼地的日头和湿气磨成暗褐色；左眉一道旧疤斜到眼角，右手常年戴一只磨得发亮的皮护腕，用来遮住腕上押当留下的烙印；惯穿灰褐短打外罩一件半旧的行商长衫，腰间挂着一只装盐样的旧皮囊，眼神沉，笑时也只动嘴角。",
+      "personality_trait": "凡事先算清退路与得失，谈得拢就当朋友，谈不拢便连夜换道走人，绝不为面子或义气把自己搭进去。",
+      "known_abilities": [
+        {
+          "name": "鬼手擒拿",
+          "description": "近身短打的路数，出手极快，专攻对方持兵刃的手腕与咽喉，适合在客栈前堂、窄巷这类狭小地方抢先制人；招式狠但不耐久战，一旦被拉开距离便失去优势。"
+        },
+        {
+          "name": "沼地旱路识途",
+          "description": "熟悉三省交界沼地枯水季的隐秘旱路与暗桩标记，能带人从州县方向绕行进入泽地深处；需要本地参照物与季节配合，涨水期或陌生地段便无从施展。"
+        },
+        {
+          "name": "黑水暗语",
+          "description": "掌握黑水泽旧暗语与信物押当的规矩，能在集市、客栈等人多之处不露痕迹地辨认同伙、传递消息；暗语只通泽中旧人，对泽外之人毫无用处，且近年已有泄露之虞。"
+        },
+        {
+          "name": "私盐账目眼",
+          "description": "多年经手私盐与押货，能凭一页残账、几个数目快速看出货源来路与银钱走向；只限于盐货与实物交易一类，对正经商号的票据反而不熟。"
+        }
+      ],
+      "faction": "黑水泽",
+      "last_known_location": null,
+      "attitude_to_player": null,
+      "last_scene_summary": null,
+      "last_scene_turn": null,
+      "disclosure_level": null,
+      "core_motivation": null,
+      "hidden_secret": null,
+      "conflict_style": "先掂量对方手里有什么、自己又要付出什么，能不动手就不动手，用话探底、用旧交情换方便；一旦判定对方会威胁到他的活路或那笔私留银两的秘密，便不再留余地，抢在对方动手之前出手，事后还要把痕迹抹干净。",
+      "social_style": "对外一副行商模样的和气，说话慢、爱绕弯子，用暗语与旧交情试探人；对泽中同伴讲义气也讲实利，帮了忙必要记下人情账，从不白出力，也不轻易把底牌亮给任何人。",
+      "director_notes": null,
+      "source_director_npc_id": null,
+      "source_setting_ids": [],
+      "created_turn": null,
+      "introduced_turn": null
+    }
+  ],
+  "director_stage": {
+    "reasoning": "本轮玩家明确不插手赵七与苏婉娘的交涉，转而继续喝酒等待苏婉娘忙完，意图推进与苏婉娘的亲密关系。场景内已有苏婉娘、赵七、中年汉子三名可互动角色，赵七的接头事件仍在推进中。为让编剧能写出赵七在门边守着、苏婉娘被夹在中间的真实张力，需要把赵七的接头事件以直接影响的形式落到当前场景，同时苏婉娘档案已为 intimate 级，无需升级。无需引入新 NPC。",
+    "materials": [
+      {
+        "kind": "engaged_event",
+        "resource_id": "director_event_723c33334cb1",
+        "guidance": "让赵七以坐在通往后院门边矮凳上的姿态持续施压：他守着门、目光在苏婉娘与柜台之间来回，偶尔以指节敲凳沿或把玩那枚黑铁小牌，用沉默和等待逼苏婉娘动身去后院开门点货。可让赵七对柳欢的“不插手”态度起疑或试探性搭话，制造一种“柳欢想置身事外却被卷在门口”的微妙压迫感。事件方行为只写赵七的动作与现场气氛，不预设柳欢是否被发现或被迫回应。",
+        "payload": {
+          "event_id": "director_event_723c33334cb1",
+          "title": "客栈接头",
+          "stage": "engaged",
+          "subject": "黑水泽散修赵七",
+          "conception": "黑水泽散修头目「鬼手」赵七奉泽中三位老棚主之命，来临江镇悦来客栈接应一名被正道盟追缉的逃亡者——此人携带有黑水泽暗藏前朝废弃盐井的部分账目，若落入正道盟之手，聚落的银钱来源将暴露。赵七按约定在客栈前堂以暗语与逃亡者接头，但正道盟的暗线已提前将消息递到临江镇巡检司，巡检司差役正往客栈赶来。赵七不知消息走漏，只当是寻常接应，行事谨慎狠辣，一旦察觉不对便会先下手为强。客栈女掌柜苏婉娘是本地人，与黑水泽有私盐往来的旧交情，赵七原打算借她的后院藏人，但苏婉娘尚未应承。",
+          "intent": "赵七要接走逃亡者及其携带的盐井账目，保住黑水泽赖以与正道盟抗衡的银钱来源，避免账目落入正道盟或巡检司之手。",
+          "method": "赵七以行商打扮入住悦来客栈，在前堂以黑水泽旧暗语与逃亡者接头，并试图以旧交情说服女掌柜苏婉娘开放后院藏人；他随身带有一枚黑水泽信物作押，接头不成便以武力挟人从客栈后门沿旱路撤往泽地。",
+          "macro_intent": "黑水泽散修为了保住聚落的活路，不择手段地接应自己人。",
+          "deadline_clock": {
+            "day": 2,
+            "phase": "凌晨"
+          },
+          "actors": [
+            {
+              "name": "赵七",
+              "ref": {
+                "kind": "npc",
+                "resource_id": "director_npc_3b136a7ea722"
+              }
+            }
+          ],
+          "source_setting_ids": [
+            "setting_7abac64d17ce"
+          ]
+        }
+      }
+    ]
+  },
+  "engaged_events": [
+    {
+      "event_id": "director_event_723c33334cb1",
+      "title": "客栈接头",
+      "stage": "engaged",
+      "subject": "黑水泽散修赵七",
+      "intent": "赵七要接走逃亡者及其携带的盐井账目，保住黑水泽赖以与正道盟抗衡的银钱来源，避免账目落入正道盟或巡检司之手。",
+      "method": "赵七以行商打扮入住悦来客栈，在前堂以黑水泽旧暗语与逃亡者接头，并试图以旧交情说服女掌柜苏婉娘开放后院藏人；他随身带有一枚黑水泽信物作押，接头不成便以武力挟人从客栈后门沿旱路撤往泽地。",
+      "macro_intent": "黑水泽散修为了保住聚落的活路，不择手段地接应自己人。",
+      "conception": "黑水泽散修头目「鬼手」赵七奉泽中三位老棚主之命，来临江镇悦来客栈接应一名被正道盟追缉的逃亡者——此人携带有黑水泽暗藏前朝废弃盐井的部分账目，若落入正道盟之手，聚落的银钱来源将暴露。赵七按约定在客栈前堂以暗语与逃亡者接头，但正道盟的暗线已提前将消息递到临江镇巡检司，巡检司差役正往客栈赶来。赵七不知消息走漏，只当是寻常接应，行事谨慎狠辣，一旦察觉不对便会先下手为强。客栈女掌柜苏婉娘是本地人，与黑水泽有私盐往来的旧交情，赵七原打算借她的后院藏人，但苏婉娘尚未应承。",
+      "hook_pool": [],
+      "actors": [
+        {
+          "name": "赵七",
+          "ref": {
+            "kind": "npc",
+            "resource_id": "director_npc_3b136a7ea722"
+          }
+        }
+      ],
+      "source_setting_ids": [
+        "setting_7abac64d17ce"
+      ],
+      "source_setting_fact_ids": [],
+      "world_impact": {
+        "description": "赵七在巡检司差役赶到前将逃亡者从后门带走，账目随之撤入黑水泽；女掌柜苏婉娘因后院被借道而受了巡检司盘问，客栈被盯上，往后数日生客增多、盘查变严，黑水泽与正道盟的暗斗在临江镇浮出水面。"
+      },
+      "deadline_clock": {
+        "day": 2,
+        "phase": "凌晨"
+      },
+      "final_world_impact": null,
+      "resolved_reason": null,
+      "resolved_turn": null,
+      "created_turn": 0,
+      "updated_turn": null,
+      "created_at": "",
+      "updated_at": "2026-11-04T08:21:43.141615+00:00"
+    }
+  ],
+  "recent_scene": {
+    "scene_id": "scene_001",
+    "turn_index": 3,
+    "user_input": "",
+    "scene_text": "你心里那点被打断的燥意还没散，面上却已换了副闲散模样，肩膀一松，人往侧边让开半步，把柜台正面让了出来。赵七与苏婉娘之间再没个遮挡，他往前挪了半步，草鞋踩得楼板吱的一声，那枚黑铁小牌被他用两根指头往苏婉娘面前又推了推，牌面在晨光里泛出一点暗沉沉的亮。\n\n“苏掌柜，别急着说不记得。”赵七的声音放得又低又缓，像在谈一桩再寻常不过的买卖，“黑水泽那边跟您这客栈打交道，不是一年两年了。后院的货搁着也是搁着，我取了就走，不耽误您做生意。”他顿了顿，眼角那点笑纹没到眼底，“再说泽里那几位老棚主，最念旧情，也最记仇。您给个准话，大家都好过。”说到这儿，他偏过头来打量你，目光在你腰间的长剑上停了停，“这位……客官是住店的？还是跟苏掌柜有旧？”\n\n苏婉娘的手按在柜台上没动，指节却微微泛白，脸上那半挂的笑像随时要掉下来。她张了张嘴，正要拿话往酒菜银钱上引，你已经先开了口：“这位大哥，话不能这么说。”你往柜台边一靠，语气散漫，话却递得准，“旧情是旧情，生意是生意。您这牌子搁在台面上，话里话外拿‘记仇’两个字压人，苏掌柜要是应了，往后这客栈的后院成了谁都能来取的货栈，她还怎么做买卖？您要真是念旧情的，就该把话说明白——取的什么货、几时取、取完几时还，白纸黑字立个字据，苏掌柜才好跟您讲这个情分。”\n\n赵七的眉头几不可察地一挑，盯着你看了两息，忽然笑了一声，把那点狠劲收进笑纹里：“客官倒是会替人打算盘。”他伸手把铁牌收了回去，在掌心里掂了掂，“也罢。苏掌柜，我不难为你。我人先到后院门外候着，您亲自来开门，货我当面点，点完就走。这样总成了？”苏婉娘像抓住了台阶，忙不迭地点头：“成，成，你先去门外等着，我这就来。”赵七也不多话，转身往通往后院的那道门走去，在门边一条矮凳上坐了下来，背靠着墙，眼睛却一直没离开柜台这一侧。\n\n苏婉娘这才长长吐出一口气，捏着柜台底下摸出的那把铜钥匙，凑近你低声嗔了一句：“你倒会说话。”声音里又是后怕又是别的什么，钥匙在她指间转了一圈，她却没往门那边走。",
+    "closing_prompt": "",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

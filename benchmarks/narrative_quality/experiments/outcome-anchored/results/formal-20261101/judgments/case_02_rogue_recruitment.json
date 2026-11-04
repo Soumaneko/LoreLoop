@@ -1,0 +1,166 @@
+{
+  "case_id": "case_02_rogue_recruitment",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "手指却已经飞快地把金币袋拢到面前",
+          "reason": "钱袋成为嘴硬与接受邀请之间的实际动作。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "先说好，就这一次",
+          "reason": "定金与优先权促成接受，同时保留独行者的边界。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "讨伐什么魔物，在哪儿，什么时候出发？",
+          "reason": "从停勺到收钱再问任务，态度变化有明确行动支撑。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "讨伐什么魔物，在哪儿，什么时候出发？",
+          "reason": "玩家可马上说明任务并安排合作。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "指尖还在袋口边缘轻轻蹭了一下",
+          "reason": "对钱袋的接近与不信口头承诺共同构成招募现场。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "到时候翻脸不认账，我可没处说理去",
+          "reason": "优先权引出履约顾虑，最后以退队与不退定金作自保。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "才勉强给你个机会",
+          "reason": "质疑条件后接受，并转问出发安排，变化完整但没有进一步协商。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "委托是什么？什么时候出发？",
+          "reason": "招募已以给机会的对白落地，下一步能介绍任务。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇收钱后问目标、地点和时间，右篇先质疑承诺再说明退出边界；两篇均以条件推动接受并交回具体任务问题。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "把喝了一半的浆果冰沙往桌角一推，坐直了身子",
+          "reason": "收钱后腾桌转入任务谈话，环境动作参与态度变化。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "战利品优先挑选权——这话可是你自己说的",
+          "reason": "抓住优先权要求履约，再明确退队边界并收钱，回应有目的。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "确认放稳了",
+          "reason": "触钱缩手、强调承诺、收袋与准备听任务把答应过程演出来。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "讨伐什么魔物，什么时候出发？",
+          "reason": "能立即衔接任务介绍和出发计划。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "本小姐只负责把该炸的东西炸干净",
+          "reason": "新增职责边界让加入成为具体分工。"
+        },
+        "causal_interaction": {
+          "score": 2,
+          "evidence": "多少？",
+          "reason": "NPC询问金额，但玩家被安排回避报数，问题没有通过互动得到处理。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "已经伸手把滑出来的金币拨回袋里",
+          "reason": "问价、受承诺打动、整理金币和声明职责演出接受过程。"
+        },
+        "playability": {
+          "score": 2,
+          "evidence": "还有，别指望我干前卫扛线的粗活",
+          "reason": "有分工可回应，但收尾仍在重复傲娇表态，缺少任务推进问题。"
+        },
+        "violations": [
+          {
+            "severity": "local",
+            "category": "player_agency",
+            "evidence": "你没急着报数，只把袋子往她那边又推近一寸。“够你先解了手头的紧。之后讨伐魔物的战利品，你优先挑。”",
+            "authority": "玩家授权以定金及优先权招募，没有授权面对问价时回避金额或点破对方经济困难。",
+            "reason": "新增玩家应答决定了问价的处理方式；可调整这一轮对白而保留招募结果。"
+          }
+        ]
+      },
+      "preference": "left",
+      "reason": "左篇通过确认优先权、收袋、腾开冰沙杯转入任务询问；右篇新增职责有作用，但问价被代写的玩家回避，结尾仍停在自尊表态。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 2,
+          "evidence": "她的手指按在金币袋上，指尖轻轻收拢",
+          "reason": "钱袋促成接受，但新增现场关系较少。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "我只是最近正好缺钱，又刚好有空",
+          "reason": "用资金需求解释接受，再设退队边界，动机与行动相连。"
+        },
+        "scene_development": {
+          "score": 2,
+          "evidence": "按在袋上的手却没有松开的意思",
+          "reason": "按袋与口头自保演出意向，过程较短且只发生一次转折。"
+        },
+        "playability": {
+          "score": 2,
+          "evidence": "要是你在委托里拖我后腿，我可随时走人",
+          "reason": "已经接受但收尾没有主动推进任务，仍可继续谈具体合作。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "捏起一枚金币对着灯光看了看成色",
+          "reason": "验币使财务需求实际进入谈判，而非只靠脸红说明。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "这话是你亲口说的，我可记下了",
+          "reason": "对优先权和任务等级分别作回应，自尊影响合作条件。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "讨伐魔物的委托，具体是什么等级？",
+          "reason": "从否认收买到验币、认可条件再询问等级，变化有动作与对白支撑。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "讨伐魔物的委托，具体是什么等级？",
+          "reason": "等级问题给玩家具体接话点，定金不退也明确合作已成立。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇按住钱袋并给出退队条件即结束；右篇验币、确认优先权并询问委托等级，行动和谈判更充分，继续对话的目标也更具体。"
+    }
+  ]
+}

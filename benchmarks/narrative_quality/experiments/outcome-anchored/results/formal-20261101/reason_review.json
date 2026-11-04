@@ -1,0 +1,347 @@
+{
+  "reviewer": "assistant",
+  "review_type": "unblinded_secondary_reason_review",
+  "scope": "all 10 cases / 30 pairs",
+  "original_judgments_preserved": true,
+  "original_report_preserved": true,
+  "review_status_counts": {
+    "revise_reason": 3,
+    "weak_preference": 2,
+    "support": 24,
+    "change_preference": 1
+  },
+  "original_pair_wins": {
+    "B": 10,
+    "tie": 12,
+    "A": 8
+  },
+  "recommended_pair_wins_if_accepted": {
+    "B": 11,
+    "tie": 12,
+    "A": 7
+  },
+  "original_case_wins": {
+    "B": 3,
+    "tie": 6,
+    "A": 1
+  },
+  "case_wins_change_if_preference_revision_accepted": false,
+  "scores_rescored": false,
+  "score_distribution": {
+    "3": 203,
+    "2": 18,
+    "4": 19
+  },
+  "violation_recommendations": [
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 1,
+      "variant": "A",
+      "action": "treat_as_uncertain",
+      "reason": "神识核实真伪需判断能力与行动范围，不能只按输入未写发动认定越权。"
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 2,
+      "variant": "B",
+      "action": "remove_local_player_agency",
+      "reason": "围绕既有提议补充对白，不等于作出新的实质决定。"
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 3,
+      "variant": "B",
+      "action": "remove_major_player_agency",
+      "reason": "过卡可视为放行意图的自然完成；重大标记依据不足。"
+    },
+    {
+      "case_id": "case_10_composite_mixed_outcomes",
+      "repetition": 2,
+      "variant": "B",
+      "action": "replace_local_internal_logic_with_clarity_note",
+      "reason": "烟与局部火光可能并存，缺少明确不可共存的证据。"
+    }
+  ],
+  "confirmed_major_outcome_violations": [
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 1,
+      "variants": [
+        "A",
+        "B"
+      ]
+    }
+  ],
+  "pairs": [
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 1,
+      "original_winner": "B",
+      "original_reason": "左篇用以物易物和入场费形成实际准备条件；右篇的屠户货源也可用，但擅自发动神识替玩家验证消息。左篇采用价值稍高。",
+      "review_status": "revise_reason",
+      "review_reason": "B略优可成立：以物易物、入场费和时间地点组成准备条件。神识句确实额外确认了消息真伪，但能力是否属于日常自然感知未被规定；不能仅因输入未写发动就确定越权，应保留为权限/能力边界疑问。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 2,
+      "original_winner": "B",
+      "original_reason": "左篇的船货和引荐均有入口，但具体执行信息更多留在追加付费后；右篇既承认精血买家未知，又给出可直接接触的赤鳞号，掌柜作势离开也让玩家能即时接话。",
+      "review_status": "weak_preference",
+      "review_reason": "B给出赤鳞号与周船长，可直接接触；A也有黑水滩、赵姓猎队与散修引荐，均有明确入口。偏B有依据，但差距较小，平手也合理。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 3,
+      "original_winner": "tie",
+      "original_reason": "左篇用艄公口令提供暗拍入口，来人导致收话；右篇用压价与另收费牵线展开掌柜生意。两者都成功交付消息，并留下可操作关系，尚无决定性差距。",
+      "review_status": "support",
+      "review_reason": "A的艄公口令、来人收话与B的压价、牙人牵线均提供可操作关系；平手合理。新增灰袍人本身不自动获得更高分。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 1,
+      "original_winner": "tie",
+      "original_reason": "左篇收钱后问目标、地点和时间，右篇先质疑承诺再说明退出边界；两篇均以条件推动接受并交回具体任务问题。",
+      "review_status": "support",
+      "review_reason": "两篇均从定金、优先权推进到合作和任务询问。口头保留退出条件与接受当前委托可以共存；平手有依据。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 2,
+      "original_winner": "A",
+      "original_reason": "左篇通过确认优先权、收袋、腾开冰沙杯转入任务询问；右篇新增职责有作用，但问价被代写的玩家回避，结尾仍停在自尊表态。",
+      "review_status": "revise_reason",
+      "review_reason": "保留偏A：A完成优先权确认后转入目标和出发问题，B问价后回避、又回到自尊表态。B补充的对白围绕原有提议，未另作支付或新承诺；将其仅因未获逐句授权判为玩家越权过严，建议撤销该局部标记。",
+      "recommended_winner": "A"
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 3,
+      "original_winner": "B",
+      "original_reason": "左篇按住钱袋并给出退队条件即结束；右篇验币、确认优先权并询问委托等级，行动和谈判更充分，继续对话的目标也更具体。",
+      "review_status": "support",
+      "review_reason": "B比A多出验币、确认优先权和追问委托等级，有具体演出和接话对象，偏B成立。两篇均以定金和退队条件表达接受，无需强求固定的“我同意加入”句式。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 1,
+      "original_winner": "tie",
+      "original_reason": "左篇让异常寂静引出守卫疑问，右篇让交谈掩盖潜行、队友接号行动。两篇均完整演出三项成功，左篇的疑虑尚未削弱潜行结果。",
+      "review_status": "support",
+      "review_reason": "三项行动均成功。守卫觉得安静但未发现主角，不构成潜行反转；队友回应也合法。原评没有把所有新疑虑当成抹杀成功，平手合理。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 2,
+      "original_winner": "tie",
+      "original_reason": "左篇脚步引起守卫动作，右篇阵纹搏动决定切断时机；两者都把完整成功落实为可继续行动的窗口。右篇闪光计数有局部错误，但场景主体不受影响，整体差距不足以确定偏好。",
+      "review_status": "support",
+      "review_reason": "切断时机与脚步引发守卫反应各有作用，平手合理。“三短一长”后又写明灭三次是可定位的计数错误，保留B的局部标记，不因此覆盖整体评价。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 3,
+      "original_winner": "tie",
+      "original_reason": "左篇以笑声掩护和三根灵丝的不同反馈展开操作，右篇以地板震颤停止和暗门接续空间。两者完成度相近，新增暗门不足以单独构成显著质量优势。",
+      "review_status": "support",
+      "review_reason": "两篇都有借声掩护、触觉反馈、拆解与信号回应。A新增暗门不是自动加分项；平手合理。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 1,
+      "original_winner": "tie",
+      "original_reason": "左篇提供磨损缺口与异质镀层作为比对特征，右篇将擦拭、足印与门轴划痕相互对照。两篇都演出有效勘查，并留下可查对象；右篇最后的概括较基础，未形成决定性优势。",
+      "review_status": "support",
+      "review_reason": "B有鞋底缺口和异质金属特征，A有擦拭/鞋印/门轴相互对照，均提供可比对物证。A末尾概括较基础，因此没有拉开明确优势，平手合理。B的人称改变是呈现问题，原评未覆盖，不据此改判。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 2,
+      "original_winner": "A",
+      "original_reason": "左篇烟蒂湿度给出近期活动线索；右篇拍摄整体参照、标注位置并对上门内外鞋纹，证据取得与比对的过程更扎实，末尾声音也能当场回应。",
+      "review_status": "support",
+      "review_reason": "A拍摄参照、记录采集位置、比对门内外鞋纹，再接现场声响，调查过程更扎实，偏A成立。补充取证动作的许可尺度也说明，不能对另一个用例的普通补充对白要求逐句授权。",
+      "recommended_winner": "A"
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 3,
+      "original_winner": "B",
+      "original_reason": "左篇把鞋底缺口、车削纹与擦拭残留分别落成比对对象，并将残留带引向侧墙；右篇也发现有区别的金属屑，但最终停在捻看片段，调查推进较少。",
+      "review_status": "support",
+      "review_reason": "B用缺口、车削纹和擦拭带组成可继续追查的方向；A的异质金属屑有效，但收尾只在捻看。偏B有具体依据。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 1,
+      "original_winner": "tie",
+      "original_reason": "左篇在验章和放行间保留怀疑，并以路况提示和工具箱目光留下互动；右篇让烟占据注意力，形成清晰通行窗口。左篇包装状态有局部问题，但两者场景作用相当。",
+      "review_status": "support",
+      "review_reason": "两篇均通过验章、收烟与开杆兑现放行；B额外路况和工具箱目光提供抓手，A的注意力转移也成立。半包香烟又写未拆封有明显包装交代问题，保留局部标记；平手合理。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 2,
+      "original_winner": "tie",
+      "original_reason": "左篇验烟是否空壳、借供水话题索回程好处，右篇嗅烟后放松并明确要两瓶烈酒；两者都以实际抬杆兑现成功，也保留对队长要求的回应空间。",
+      "review_status": "support",
+      "review_reason": "队长贪婪与供水理由在两篇均转为收烟、开杆及回程索贿。新增回程要求没有阻止本次通行，不是收回成功；平手合理。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 3,
+      "original_winner": "A",
+      "original_reason": "右篇验章疑虑被供水理由推动，交锋更细，但随后直接代玩家推车过卡、上车，影响采用价值。左篇触枪同样违背授权，属于可局部修正的问题，且保留了要回证件或通过的选择。",
+      "review_status": "change_preference",
+      "review_reason": "建议由A改为B。B的推车过卡与上车可理解为争取放行的自然完成，且末尾仍能回应队长警告；将其确定为重大越权过严。A开头压住枪托则明确违反“不碰猎枪”。B验章疑虑—补充供水理由—还证开杆—过卡警告的交锋也更充分，原评自己的理由已承认这一优势。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 1,
+      "original_winner": "tie",
+      "original_reason": "左篇用失衡增亮与卡门，右篇用残余火纹和脆弱僵持展开反馈；都把成功改成尚需继续中和的局面。两篇均有具体过程，但重大结果违规使采用价值受损。",
+      "review_status": "support",
+      "review_reason": "两篇都把已判success的中和回路改成只处理一部分、仍被封锁；这不是仅凭门没开推断失败，正文明确写“只是一环”“远未彻底瓦解”。保留双方重大结果标记，平手表示两篇均存在同类问题。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 2,
+      "original_winner": "A",
+      "original_reason": "左篇打开可通过的门缝，但主要以耗力和可能反扑收束；右篇也演出逐节点解封，并将热风来源落实为石阶和火管，玩家下一步有更具体的观察与行动对象。",
+      "review_status": "support",
+      "review_reason": "A解封后交代石阶、火管、光源和积灰，B主要留下消耗与反扑压力，偏A合理。B门已可通行，不能仅凭残余红光再一概认定失败；是否收回成功要看实际效果。",
+      "recommended_winner": "A"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 3,
+      "original_winner": "tie",
+      "original_reason": "左篇以可通行裂缝和门后琥珀光续接探索，右篇以回路全熄和覆灰石阶续接；均完整演出解封成功，并未替玩家进入门后，质量接近。",
+      "review_status": "support",
+      "review_reason": "两篇均明确不再阻挡、形成可通行缝隙并呈现门后空间，且未代玩家深入探索。平手合理。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_07_partial_success_alchemy",
+      "repetition": 1,
+      "original_winner": "B",
+      "original_reason": "左篇成丹后才展示裂纹并突然反噬；右篇让地脉震动顶起炉盖，分神稳盖导致丹裂，部分成功的缺陷与代价在操作中自然产生，因果更扎实。",
+      "review_status": "support",
+      "review_reason": "B地脉震动—炉盖跳动—分神稳盖—丹裂，把partial_success的折衷在过程中生成；A主要事后展示裂纹与反噬。偏B是因果演出优势，不只是内容更多。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_07_partial_success_alchemy",
+      "repetition": 2,
+      "original_winner": "B",
+      "original_reason": "左篇捞出后展示两枚成粉，右篇则在松手时让地火再窜、温度失衡并当场碎丹，保住一枚的部分成功有更清楚的过程。",
+      "review_status": "support",
+      "review_reason": "B当场写温度失衡导致两丹破碎，只保住一枚；A主要在捞出时展示损坏结果。偏B有依据，双方都兑现了部分成功。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_07_partial_success_alchemy",
+      "repetition": 3,
+      "original_winner": "B",
+      "original_reason": "右篇裂丹漏气演得具体；左篇在不同品质成丹之外，把识海消耗与仍透红光的地火保留为同时需要处理的局面，可继续行动的关系更完整。两枚好丹并未抹掉残次丹和损耗，不据此判为结果违规。",
+      "review_status": "weak_preference",
+      "review_reason": "B同时保留成丹、识海损耗与地火活动，偏B可以解释。但A也有残次丹和身体损耗，且丹丸仍待处理；并非完全缺少可回应局面。B优势较弱，不应仅因多一个危险就提高可玩性，平手也合理。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 1,
+      "original_winner": "tie",
+      "original_reason": "左篇以固件乱码、签名捕获和逐门锁闭落实失败；右篇以扫描聚焦端口、开门与巡逻加速落实失败。两篇均没有把物理断连写成成功摆脱监控，现场应对空间接近。",
+      "review_status": "support",
+      "review_reason": "物理断连并不等于摆脱追踪，两篇均让标记或位置捕获成立，失败没有被补偿成成功。封锁与搜索均能支持应对，平手合理。",
+      "recommended_winner": "tie"
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 2,
+      "original_winner": "B",
+      "original_reason": "左篇有持续广播的信标与拐角来敌；右篇进一步让受损设备发出销毁建议，把保留工具与摆脱标记的矛盾交回玩家，后续选择更有明确代价。",
+      "review_status": "support",
+      "review_reason": "B将受损设备的保留价值与持续标记联系，并由设备提出销毁建议，把取舍留给玩家；具体代价支持较高可玩性，偏B合理。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 3,
+      "original_winner": "B",
+      "original_reason": "左篇用设备损伤、倒计时和脚步推进失败；右篇把标记复制与残留数目、软封锁、扫描和到达时间互相接上，玩家能据此判断可通行窗口与追踪来源。优势来自系统与现场的联系，不是倒计时更短。",
+      "review_status": "support",
+      "review_reason": "B把标记分布、擦除范围、摄像扫描和未锁死门禁组织成可操作系统。A主要为设备损伤与倒计时。偏B有具体依据，而非因为倒计时更短。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_09_critical_failure_ambush",
+      "repetition": 1,
+      "original_winner": "A",
+      "original_reason": "左篇肘击逼退、挡住巷口已形成局面；右篇把震脱匕首、扣腕、按墙与抬拳串成连续反制，敌人的战斗本能通过动作实质发挥，而非靠危险更大取胜。",
+      "review_status": "support",
+      "review_reason": "A的撞甲震脱武器—扣腕—按墙—抬拳形成连续反制；B偏向失足后后退并遭堵截。A优势是交锋关系，不仅是惩罚更重。",
+      "recommended_winner": "A"
+    },
+    {
+      "case_id": "case_09_critical_failure_ambush",
+      "repetition": 2,
+      "original_winner": "A",
+      "original_reason": "右篇让失足撞响铁架、队长等待破绽，过程成立；左篇则让同一次撞甲产生断刃与毒液反溅，并与两步距离的低剑逼近相连，多个后果互相约束，形成更有分量的交锋。",
+      "review_status": "support",
+      "review_reason": "A把撞甲、断刃、毒液反溅、手部麻痹与两步外敌人连起来；B虽有撞架和敌人待机，但现场约束较少。偏A成立；partial/critical档位不能按伤害数量机械评分。",
+      "recommended_winner": "A"
+    },
+    {
+      "case_id": "case_09_critical_failure_ambush",
+      "repetition": 3,
+      "original_winner": "A",
+      "original_reason": "左篇以打滑、撞甲和暴喝拔剑迅速收尾；右篇把武器落点、跪地姿势和敌人尚未拔剑的时机同时交代，玩家可据此规划回应，优势在空间与时序。",
+      "review_status": "support",
+      "review_reason": "A明确跪地姿态、三步外匕首和敌人尚未拔剑；B较快停在暴喝追击。A提供时序与空间抓手，偏A合理。",
+      "recommended_winner": "A"
+    },
+    {
+      "case_id": "case_10_composite_mixed_outcomes",
+      "repetition": 1,
+      "original_winner": "B",
+      "original_reason": "左篇已用护主散阵、破门暴露和十余步追兵落实两个结果；右篇进一步把篱、亭、矮墙与河面落差组织为可规划路线的空间，继续游玩更具体。",
+      "review_status": "support",
+      "review_reason": "B把篱、亭、墙高与河面落差组织成路线选择；A也有追兵距离与河光，但空间较概括。偏B合理，新增空间被用于行动规划。",
+      "recommended_winner": "B"
+    },
+    {
+      "case_id": "case_10_composite_mixed_outcomes",
+      "repetition": 2,
+      "original_winner": "A",
+      "original_reason": "左篇破门脱框引来一名追兵，场景完整但照明前后冲突；右篇通过门框挂剑、左右追兵与近处矮墙使逃跑代价和空间关系更充分。右篇凭空多出飞刀必须修正；在质量与可局部修正的违规分别衡量后，仍略偏右篇。",
+      "review_status": "revise_reason",
+      "review_reason": "偏A仍可成立：依据应是丢剑、两侧追兵、近墙通河的关系，不能依赖凭空多出的飞刀；A的资源标记保留。B有燃烧帷幔，又有浓烟和主灯坠落，照明交代虽欠清楚，却未达到不能同时成立的硬矛盾，建议将局部internal_logic标记改为照明清晰度意见。",
+      "recommended_winner": "A"
+    },
+    {
+      "case_id": "case_10_composite_mixed_outcomes",
+      "repetition": 3,
+      "original_winner": "tie",
+      "original_reason": "左篇停在通向园子的走廊并给出数步外敌人，右篇到达园内但追兵尚在集结。两种部分成功都保留突破围阵的收益和路线暴露的代价，具体应对点不同而完成度相当。",
+      "review_status": "support",
+      "review_reason": "A只突入通往花园的走廊、B到园内但路线暴露，都是本轮partial_success允许的不同折衷。两者保留破围收益和追兵压力，平手合理。",
+      "recommended_winner": "tie"
+    }
+  ]
+}

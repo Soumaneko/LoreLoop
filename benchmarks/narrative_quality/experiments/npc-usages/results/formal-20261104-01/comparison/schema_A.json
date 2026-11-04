@@ -1,0 +1,149 @@
+{
+  "$defs": {
+    "NextActionDirection": {
+      "properties": {
+        "direction": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "anchors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "direction",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "PlannedEvent": {
+      "properties": {
+        "event_id": {
+          "type": "string"
+        },
+        "event_fact": {
+          "type": "string"
+        },
+        "linked_outcome_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "involved_entities": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_fact"
+      ],
+      "type": "object"
+    },
+    "_HardActionResolution": {
+      "properties": {
+        "action_id": {
+          "description": "对应玩家输入的 action_id (A1, A2...)",
+          "type": "string"
+        },
+        "outcome_band": {
+          "description": "严格继承检定档位 (critical_success / success / partial_success / failure / critical_failure)",
+          "enum": [
+            "critical_failure",
+            "failure",
+            "partial_success",
+            "success",
+            "critical_success"
+          ],
+          "type": "string"
+        },
+        "resolved_fact": {
+          "description": "一句话锁定直接客观事实结论（目标约 80 字）",
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "action_id",
+        "outcome_band",
+        "resolved_fact"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "director_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "说明采用或不采用 Director Agent 舞台材料的理由"
+    },
+    "action_resolutions": {
+      "description": "逐项锁定每个 action 的成败事实，按顺序 100% 一一对应覆盖所有 action_id",
+      "items": {
+        "$ref": "#/$defs/_HardActionResolution"
+      },
+      "type": "array"
+    },
+    "scene_stopping_point": {
+      "description": "在本回合全部确定结果落实后停留的唯一可交互状态。必须是具体事实快照",
+      "minLength": 1,
+      "type": "string"
+    },
+    "planned_events": {
+      "description": "用 1-4 个按发生顺序排列的确定事件，把语义骨架具体演出来",
+      "items": {
+        "$ref": "#/$defs/PlannedEvent"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "type": "array"
+    },
+    "scene_reasoning": {
+      "description": "2-4 句写作前审计。确认正文将如何落实刚刚制定的规划",
+      "minLength": 1,
+      "type": "string"
+    },
+    "scene_text": {
+      "description": "正文",
+      "minLength": 1,
+      "type": "string"
+    },
+    "closing_prompt": {
+      "description": "结尾提示",
+      "minLength": 1,
+      "type": "string"
+    },
+    "next_action_directions": {
+      "items": {
+        "$ref": "#/$defs/NextActionDirection"
+      },
+      "maxItems": 5,
+      "type": "array"
+    }
+  },
+  "required": [
+    "scene_stopping_point",
+    "scene_reasoning",
+    "scene_text",
+    "closing_prompt"
+  ],
+  "type": "object"
+}

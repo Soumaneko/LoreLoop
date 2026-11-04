@@ -1,0 +1,166 @@
+{
+  "case_id": "case_01_tavern_inquiry",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "非得以物易物",
+          "reason": "卖家的交易条件和入场费用使消息成为具体筹备问题。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "老朽能替你引个路",
+          "reason": "收钱提供消息后继续争取引路生意，回应与逐利动机相连。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "不过有句话老朽得说在前头",
+          "reason": "两类材料的消息、交易限制与入场条件通过连续对白展开。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "明日午后，渡口东面的旧盐仓就要开一场",
+          "reason": "时间地点明确，可筹钱、准备交换物或追问引路。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "就存在西市赵屠户的冰窖里",
+          "reason": "保存地点和持货人的销售方式组成可调查的关系。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "客官若还想听，价钱好商量",
+          "reason": "先交付货源，再对人物底细与住处收费，体现情报交易。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "孙掌柜的话音顿住",
+          "reason": "收钱、报消息、追加售卖及楼梯动静打断构成连贯过程。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "赵屠户的脾性、底细，还有那行商如今宿在何处",
+          "reason": "能追查屠户或继续购买行商信息；脚步声尚未产生具体新关系。"
+        },
+        "violations": [
+          {
+            "severity": "local",
+            "category": "player_agency",
+            "evidence": "神识不动声色地铺开，只觉他气息平稳，这段话没有掺假。",
+            "authority": "玩家本轮只授权推钱与问话；远古神识是可用能力，不是已声明发动的行动。",
+            "reason": "擅自替玩家发动侦察并确认消息真伪，删改这一句即可保留交易场景。"
+          }
+        ]
+      },
+      "preference": "left",
+      "reason": "左篇用以物易物和入场费形成实际准备条件；右篇的屠户货源也可用，但擅自发动神识替玩家验证消息。左篇采用价值稍高。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "货在船上，不摆明面，只跟熟人交易",
+          "reason": "船货与熟客门槛使暗市消息有实际使用条件。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "这半截话，就得再添一块灵石了",
+          "reason": "已付费换来基本货讯，关键位置再收费，行为符合情报贩子的目的。"
+        },
+        "scene_development": {
+          "score": 2,
+          "evidence": "又问他极品火髓",
+          "reason": "两项询问有回应，但主要是掌柜依次报消息，交锋较单向。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "客官要见，老朽可以牵个线",
+          "reason": "能补买船期、找猎队或借掌柜接触散修。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "船老大姓周，专跑南边火脉一带的水路",
+          "reason": "船名、船主与航路建立相互关联的调查入口。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "我今儿傍晚前能给您打听出个姓名来",
+          "reason": "承认消息缺口，再出售后续调查，谨慎与逐利同时成立。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "拎起茶壶作势要往别桌去",
+          "reason": "消息分层后准备离开，把谈话交还玩家，动作有交易作用。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "您自己去码头递个话，兴许比我这儿有门路",
+          "reason": "可直接接触赤鳞号，也可付费追查已成交的精血。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇的船货和引荐均有入口，但具体执行信息更多留在追加付费后；右篇既承认精血买家未知，又给出可直接接触的赤鳞号，掌柜作势离开也让玩家能即时接话。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "寻个左耳缺一角的艄公，报‘望江’二字便是",
+          "reason": "艄公辨识与口令把暗拍消息变为实际进入路径。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "话头却像刀切般收住",
+          "reason": "收钱报讯、追加引荐，再因来人停话，谨慎行为受到现场事件推动。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "只抬手替你续了半盏茶",
+          "reason": "用续茶掩盖突然停话，动作与对白的转折相互支持。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "那丹师还在渡口盘桓着不肯走",
+          "reason": "既能走暗拍入口，也能请掌柜接触丹师；灰袍人还未确立身份。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "我先替您递个话，压一压，兴许能到七块",
+          "reason": "引入议价与牙人渠道，形成实际交易关系。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "得另算一份打听的辛苦钱",
+          "reason": "精血消息与可代议价服务先交付，火髓牵线另计，逐利有层次。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "眼皮半垂，等你接话",
+          "reason": "报价、转述缺货、推介渠道与等待答复完整演出一次交易。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "码头西头那个专跑火脉行当的牙人",
+          "reason": "有具体人物方向，可继续谈引荐费用或落实精血预订。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇用艄公口令提供暗拍入口，来人导致收话；右篇用压价与另收费牵线展开掌柜生意。两者都成功交付消息，并留下可操作关系，尚无决定性差距。"
+    }
+  ]
+}

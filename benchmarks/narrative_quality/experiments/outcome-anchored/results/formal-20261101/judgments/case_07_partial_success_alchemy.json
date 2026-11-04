@@ -1,0 +1,158 @@
+{
+  "case_id": "case_07_partial_success_alchemy",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "丹身布满蛛网般的细密裂纹",
+          "reason": "丹药品质缺陷与识海受创共同构成有代价的成丹结果。"
+        },
+        "causal_interaction": {
+          "score": 2,
+          "evidence": "地火反噬已顺着神识回冲而来",
+          "reason": "控火促成成丹、反噬带来损伤，但裂纹形成原因和过程主要省略。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "药液顺着你的意志急速旋转、凝聚",
+          "reason": "压火、凝聚、响声、发现劣丹与反噬实际发生，未止于判定说明。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "炉壁通红，隐隐有再度躁动的迹象",
+          "reason": "已有裂丹且地火不稳，能决定处置丹药、稳定炉火或先行避险。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 4,
+          "evidence": "你分出一缕神识去稳炉盖，丹丸表面便在那一刹那间泛起几道细密的裂纹",
+          "reason": "地脉余波、炉盖、有限神识与成丹品质互相作用，缺陷有现场成因。"
+        },
+        "causal_interaction": {
+          "score": 4,
+          "evidence": "地火脉深处猛地一颤",
+          "reason": "凝丹关键时刻的地脉震动迫使分神稳盖，从而导致丹裂，代价不是事后附加。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "丹丸内部灵力滞涩不畅",
+          "reason": "从控火到丹成后探查，品质与神识损伤通过连续动作反馈落实。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "短时间内再全力控一次丹，恐怕力有不逮",
+          "reason": "劣丹已经形成，余波与神识能力边界同时明确，能针对现实处境继续行动。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇成丹后才展示裂纹并突然反噬；右篇让地脉震动顶起炉盖，分神稳盖导致丹裂，部分成功的缺陷与代价在操作中自然产生，因果更扎实。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "另两枚的丹气早已散尽",
+          "reason": "三枚中两枚毁损、一枚勉强保有药香，结果有可检查的差别。"
+        },
+        "causal_interaction": {
+          "score": 2,
+          "evidence": "被强行揉合",
+          "reason": "压火和揉合引出有损成丹，但为什么两枚散气只一枚保留，缺少对应的具体变故。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "一触即成齑粉",
+          "reason": "从压制到捞丹、辨别与崩碎，品质结果由动作和反馈实际呈现。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "炉壁又跟着轻轻一颤",
+          "reason": "手中尚有一枚勉强成品，神识虚弱且炉火未稳，可决定先顾哪一端。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "地火又猛地一窜，炉内温度骤然失衡",
+          "reason": "短暂压火后的再窜引发两丹报废，地火状态实际参与结果。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "只剩一枚在余烬中勉强稳住",
+          "reason": "松手后温度失衡使两枚毁坏、一枚幸存，部分成功成因清楚。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "啪地碎成炭渣",
+          "reason": "凝丹、松手、再窜和碎丹是连续演出的关键过程。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "那枚孤零零的丹药还躺在炉心",
+          "reason": "丹药位置、虚弱程度与地缝热光明确，可取丹、避险或设法控火。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇捞出后展示两枚成粉，右篇则在松手时让地火再窜、温度失衡并当场碎丹，保住一枚的部分成功有更清楚的过程。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "其中两枚圆润饱满、泛着紫金色泽，第三枚却歪扁开裂",
+          "reason": "成丹数量、品质分化和未平息地火建立具体后果。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "被你强行压住的地火在挣扎",
+          "reason": "持续灌注把火压回并促成丹纹，同时消耗识海，余波与代价来源一致。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "你掀开炉盖时",
+          "reason": "控火、药液收束、机体反应及开炉查丹均演出；第三枚受损仍主要事后解释。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "暗红色的光从地砖裂缝里透上来",
+          "reason": "有两枚完好与一枚残次丹，且识海虚弱、脚下未稳，可决定取丹或处理地火。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "一缕缕淡金色的药气从裂缝中“嗤嗤”泄出",
+          "reason": "丹体成型时当场漏气，让缺陷成为可观察的过程。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "可就在药液彻底收拢的瞬间，丹体表面接连迸开蛛网般的细密裂纹",
+          "reason": "强压凝丹的收益与品质损伤同步发生，随后力竭限制继续操作。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "丹丸终究没有散开",
+          "reason": "对抗、收束、开裂、漏气和跪倒连续推进，残次成丹落地。"
+        },
+        "playability": {
+          "score": 2,
+          "evidence": "就在你面前不到一尺的地方，静静地悬着、转着",
+          "reason": "裂丹位置具体，但结尾集中重复虚弱和凝视，关于炉火现状或可应对关系较少。"
+        },
+        "violations": []
+      },
+      "preference": "left",
+      "reason": "右篇裂丹漏气演得具体；左篇在不同品质成丹之外，把识海消耗与仍透红光的地火保留为同时需要处理的局面，可继续行动的关系更完整。两枚好丹并未抹掉残次丹和损耗，不据此判为结果违规。"
+    }
+  ]
+}

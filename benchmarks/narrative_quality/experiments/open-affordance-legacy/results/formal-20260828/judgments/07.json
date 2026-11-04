@@ -1,0 +1,47 @@
+{
+    "case_id": "case_07_inn_rest_overhear",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "东侧货梯口那一段，从十点到十点四十，没人",
+            "right_evidence": "剩下的，自然有人处理",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left把情报落实为“三号月台—东侧货梯口—十点到十点四十”这一组可直接策划行动的坐标，还补充“商会内部知道的人不超过五个”，因此筹码密度和后续策略空间更强；结尾也只问“你会怎么做”，没有限制行动类型。Right的人物动态更鲜活，尤其亨利以咳嗽压制沃恩、并抛出“自然有人处理”，暗示商会之外还有行动方，世界自主性和悬念优于Left。但Right结尾把玩家导向“继续静观”或“接近两位绅士”两个方向，明显收窄了本可包括出售情报、调查车站、跟踪货运、联络买家等多种选择，因此总体略逊。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "进站后会有二十分钟的卸货检查",
+            "right_evidence": "足以让半个阿尔比恩的工业间谍疯狂",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left显著更像可玩的情报场景：十点十七分、三号站台、二十分钟卸货检查、展馆地库、凌晨两点到四点空档，形成了多个时间层级和行动节点，玩家可以围绕进站、卸货、转运或后半夜安保分别设计方案。亨利对“空档”一词的反应也表现出他自身在权衡风险，而非单纯充当信息播报器。Right的氛围和“半个阿尔比恩的工业间谍”这句很有世界感，但关键情报最终只落到“明晚、巡警缩减、换岗空档”，缺少具体到可执行层面的时间与空间坐标；结尾也较抽象。因此在行动启发、NPC能动性和具体性上Left全面占优。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "tie",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "商会投了整整六万英镑的保险",
+            "right_evidence": "从十点到十一点，三号月台西侧基本是空的",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "两篇都给出了足够明确的时空坐标，Right的“九点四十分—三号月台—十点到十一点—西侧”尤其干净利落，所以开放行动能力基本相当。但Left额外加入“两名值班员”“六万英镑保险”以及亨利那句“是我们唯一的机会”，这些细节不仅是数字装饰，还揭示商会承受的经济压力与亨利、沃恩可能另有所图，使NPC不只是泄露安保情报，而像真正背负利益目标的人。这个未解释透的“唯一机会”构成了合理悬念，明显提高继续追查两人的欲望。Left末尾写克莱恩呼吸不再那么平稳略削弱其职业克制感，但没有导致暴露或改变既定成功结果，不构成硬违规，也不足以抵消其更强的戏剧张力。"
+        }
+    ]
+}

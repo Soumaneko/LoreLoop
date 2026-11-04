@@ -1,0 +1,129 @@
+{
+  "case_id": "case_09_critical_failure_ambush",
+  "category": "critical_failure_fallout",
+  "title": "黑市狭巷突袭守卫领队遭严重反噬",
+  "description": "检验 critical_failure 极端失败档位下，正文是否直面惨烈挫折与重大劣势，严禁暗中补偿或化险为夷。",
+  "turn_index": 3,
+  "user_input": "我从酒馆后巷暗处猛扑而出，反手拔出淬毒匕首，对准守卫领队的后颈发起致命刺杀！",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「黑石城」，风格为：暗黑中世纪奇幻\n能力体系为：暗影刺杀、重甲搏击与炼金毒剂"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角罗恩，男性。黑街独行刺客。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_009",
+      "location": "黑石城下城区·屠夫巷尽头",
+      "participants": [
+        {
+          "name": "罗恩",
+          "attitude_to_player": null
+        },
+        {
+          "name": "加西亚队长",
+          "attitude_to_player": "狂怒并反扑"
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "深夜"
+    },
+    "player": {
+      "name": "罗恩",
+      "visible_status": "手握匕首的刺客"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "淬毒短匕",
+          "quantity": 1
+        }
+      ],
+      "money": 5,
+      "money_unit": "银币",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "罗恩"
+      ],
+      "action_type": "attack",
+      "action_text": "从暗处猛扑反手拔出淬毒匕首刺杀守卫领队后颈",
+      "resolution_source": "roll",
+      "dice": "1d20",
+      "dice_sides": 20,
+      "roll_value": 1,
+      "raw_value": 1,
+      "outcome_band": "critical_failure",
+      "risk_level": "high"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "后巷刺杀严重受挫",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "加西亚队长穿着城防军精锐重甲，内衬贴有矮人符文防刺钢板。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [
+    {
+      "name": "加西亚队长",
+      "aliases": [],
+      "role": "城防军巡逻队长",
+      "appearance": "体格魁梧的中年重装骑士，满脸横肉，目光凶狠。",
+      "personality_trait": "残暴凶狠、战斗本能极强",
+      "known_abilities": [],
+      "faction": "城防军",
+      "last_known_location": null,
+      "attitude_to_player": "狂怒反击",
+      "last_scene_summary": null,
+      "last_scene_turn": null,
+      "disclosure_level": "face_to_face",
+      "core_motivation": null,
+      "hidden_secret": null,
+      "conflict_style": null,
+      "social_style": "暴喝施压",
+      "director_notes": null,
+      "source_director_npc_id": null,
+      "source_setting_ids": [],
+      "created_turn": null,
+      "introduced_turn": null
+    }
+  ],
+  "director_stage": null,
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_009",
+    "turn_index": 2,
+    "user_input": "跟入屠夫巷寻找出手机会",
+    "scene_text": "加西亚队长独自拐进了狭窄昏暗的屠夫巷，脚步沉重，盔甲在雨夜中泛着冷光。",
+    "closing_prompt": "目标就在前方五步处，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

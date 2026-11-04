@@ -1,0 +1,108 @@
+{
+  "case_id": "case_08_failed_action_recovery",
+  "category": "failed_action_recovery",
+  "title": "网络潜入失败触发局部警报",
+  "description": "检验行动明确失败、警报拉响时，正文如何合理承接挫折并展开撤退或应变的多维策略空间。",
+  "turn_index": 4,
+  "user_input": "我立刻切断与主机的数据直连，启动‘静默烟幕’擦除协议，尝试在机房监控系统全面锁定前脱离神经接入！",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「新夜城」，风格为：赛博朋克\n能力体系为：神经直连黑客技术、赛博义体与企业安保网络"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角 V，网络边缘人兼佣兵，接取了潜入荒坂子机房窃取科研名单的地下委托。"
+      },
+      {
+        "id": "c3",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "货币单位为欧金（E$）。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_008",
+      "location": "荒坂科技大厦·地下B2服务器机房",
+      "participants": [
+        {
+          "name": "V",
+          "attitude_to_player": null
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "深夜"
+    },
+    "player": {
+      "name": "V",
+      "visible_status": "眼部闪烁着数据蓝光的黑客潜入者"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "便携式网络接入仓",
+          "quantity": 1
+        }
+      ],
+      "money": 200,
+      "money_unit": "E$",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "V"
+      ],
+      "action_type": "interact_object",
+      "action_text": "切断神经直连并启动静默烟幕擦除协议脱离机房网络",
+      "resolution_source": "roll",
+      "dice": "1d20",
+      "dice_sides": 20,
+      "roll_value": 6,
+      "raw_value": 6,
+      "outcome_band": "failure",
+      "risk_level": "high"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "服务器机房潜入受挫",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "荒坂地下机房的巡逻安保小队每隔五分钟在走廊完成一次巡回打卡。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [],
+  "director_stage": null,
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_008",
+    "turn_index": 3,
+    "user_input": "入侵主机数据端口",
+    "scene_text": "你将接口接入核心端口，但解密进度刚过半，一阵刺耳的电子蜂鸣在视网膜界面炸开，黑冰防卫程序如暗影般顺着数据流反噬而来！",
+    "closing_prompt": "黑冰警报瞬间被触发，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

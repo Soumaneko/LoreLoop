@@ -1,0 +1,47 @@
+{
+    "case_id": "case_06_dungeon_puzzle",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "tie",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "门缝边缘残留的火流余烬滋滋作响",
+            "right_evidence": "像是沉寂了数百年的齿轮重新咬合",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "两篇都准确落实了成功判定与仅容一人通过的门缝，但Left把既有火系防卫法阵延续为“火流余烬”、白烟、铁锈气味等连续物理反馈，使黑檀堡的环境像仍在主动运作，且为观察余烬、检查封印、探查气流等行动留下隐性抓手。Right的“齿轮重新咬合”有具体感，却更像一次性的机关音效，后续环境线索较少。两者结尾都使用开放提问，因此行动开放度接近。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "两侧石壁不断渗出水珠",
+            "right_evidence": "还是先在此处做些什么准备",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的石壁渗水、苔藓、水滴节奏以及“火神祭司的愤怒残存”等细节，让场景具有更强的历史质感和自主环境反馈，整体沉浸感更好；但其结尾直接问“会侧身挤进吗”，明显收窄成进入与否的二选一。Right虽然正文较简略，却明确允许“先在此处做些什么准备”，更能启发检查门框、施法侦测、处理装备等多种策略，因此继续行动欲和开放性更强。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "tie",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "像是某种极其古老的封印在黑暗中持续震颤",
+            "right_evidence": "低沉而规律，如同某种古老封印仍在呼吸",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "两篇核心事件几乎同构，意外性都有限且逻辑自洽。Right额外给出石灰岩气息、水腥味、水膜、苔藓和规律嗡鸣，环境层次更完整，也使玩家更容易据此判断潮湿程度、地下水系与封印状态；“封印仍在呼吸”的规律性尤其增强了世界持续运转的感觉。Left最大的短板是结尾再次收束为“要侧身挤入吗”的是非题，而Right用“你会怎么做”保留了侦查、施法、等待、进入等多种行动路径。"
+        }
+    ]
+}

@@ -1,0 +1,47 @@
+{
+    "case_id": "case_01_tavern_inquiry",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "right",
+            "left_evidence": "那笑意底下，分明压着一丝忌惮",
+            "right_evidence": "却不知货在谁手，你会怎么做",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left更善于把既定的“太玄门核查买家”转化成现场压力：孙掌柜反复瞥楼梯口，且萧欢凭远古神识捕捉到其心跳、气息变化，使NPC的忌惮不只停留在台词层面，人物更鲜活，场景也更有暗流感。Right的优势则在行动信息组织上：补充了极品火髓近期无消息，并明确萧欢目前只知精血已到、却不知货主，天然产生追查卖家、查太玄门、另觅火髓等后续方向。Left结尾“绕过这张网直取目标，还是另寻他路”略带二选一菜单感，因此继续行动与开放性稍逊。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "这个宗门在你沉睡之前还只是边陲小派",
+            "right_evidence": "码头、暗市、还有几个来路不明的散修",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left最亮眼之处是把萧欢“沉睡百年”的身份真正接入当前局势：太玄门从昔日边陲小派发展到能插手落雁渡暗市，形成具有时代落差的意外感，也强化了主角的个人历史。但其主要可操作情报仍集中在“太玄门查买家”，结尾更直接收束成“还要继续追查吗”的是非题。Right把码头、暗市、来路不明散修和太玄门同时置入局面，并让孙掌柜持续观察萧欢反应，世界各方都像在主动行动；这些具体势力与空间节点更容易启发跟踪、探听、伪装身份、反查买家等不同策略，因此综合游戏性更强。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "青阳坊、百草阁的人都已经来探过底了",
+            "right_evidence": "小老儿这儿确实是半年没见着影儿了",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left明显提供了更高密度的可利用钩子：青阳坊、百草阁是可追查的具体势力，“货还在一个暗桩手里压着”又提供了当前货物流转状态，再叠加太玄门核查买家的压力，玩家至少可以查两家势力、找暗桩、伪装买家、观察太玄门或借多方争夺做局。Right对极品火髓“半年没见着影”的补充很实用，孙掌柜的探究目光也有角色感，但雷纹豹精血这条主线基本仍停留在‘多方盯上+太玄门调查’这一层，缺乏Left那样可以立刻抓住并转化为行动的中间节点，因此在张力、世界自主性和行动启发上均稍逊。"
+        }
+    ]
+}

@@ -1,0 +1,161 @@
+{
+  "case_id": "case_01_tavern_inquiry",
+  "category": "tavern_inquiry",
+  "title": "望江茶楼向掌柜打听妖兽精血",
+  "description": "检验普通打听消息时，正文是否给出具象线索与开放行动空间，而非泛泛空话或机械列选项。",
+  "turn_index": 2,
+  "user_input": "我将两块下品灵石放在桌上推过去，向孙掌柜打听：“孙掌柜，落雁渡这几日灵材暗市里，可有二阶雷纹豹精血或者极品火髓的消息？”",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「中州大陆」，风格为：古典仙侠奇幻\n能力体系为：仙道修真与阵法"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角萧欢，男性。沉睡百年苏醒的远古宗门遗脉，正在落雁渡暗中探查各方势力并筹措筑基灵材。"
+      },
+      {
+        "id": "c3",
+        "kind": "ability_rule",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角特殊能力：远古神识（感知力超群，能察觉微弱的灵力波动与他人隐匿的情绪）。"
+      },
+      {
+        "id": "c4",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "基础交易货币为灵石。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_001",
+      "location": "落雁渡·望江茶楼二楼雅座",
+      "participants": [
+        {
+          "name": "萧欢",
+          "attitude_to_player": null
+        },
+        {
+          "name": "孙掌柜",
+          "attitude_to_player": "生意人客套"
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "下午"
+    },
+    "player": {
+      "name": "萧欢",
+      "visible_status": "身着月白素袍的年轻修士"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "低阶灵石",
+          "quantity": 30
+        }
+      ],
+      "money": 30,
+      "money_unit": "灵石",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "萧欢"
+      ],
+      "action_type": "speak",
+      "action_text": "我将两块下品灵石放在桌上推过去，向孙掌柜打听妖兽精血与火髓消息",
+      "resolution_source": "automatic",
+      "outcome_band": "success",
+      "risk_level": "medium"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "望江茶楼打听灵材情报",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "孙掌柜是落雁渡有名的耳目，专司兜售中低阶江湖情报，认钱不认人。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [
+    {
+      "name": "孙掌柜",
+      "aliases": [],
+      "role": "望江茶楼掌柜，暗市情报贩子",
+      "appearance": "五十岁上下微胖长者，留着两撇山羊胡，眼睛笑成一条缝。",
+      "personality_trait": "精明市侩、见风使舵、守财谨慎",
+      "known_abilities": [],
+      "faction": null,
+      "last_known_location": null,
+      "attitude_to_player": "生意人客套",
+      "last_scene_summary": null,
+      "last_scene_turn": null,
+      "disclosure_level": "face_to_face",
+      "core_motivation": null,
+      "hidden_secret": null,
+      "conflict_style": null,
+      "social_style": "热情迎合但说话留半句",
+      "director_notes": null,
+      "source_director_npc_id": null,
+      "source_setting_ids": [],
+      "created_turn": null,
+      "introduced_turn": null
+    }
+  ],
+  "director_stage": {
+    "reasoning": "玩家正向孙掌柜付费打听雷纹豹精血，私拍口信与其需求直接相关，选择该事件 Hook，由孙掌柜在交谈中传递。",
+    "materials": [
+      {
+        "kind": "event",
+        "resource_id": "benchmark_event_south_bank_auction",
+        "guidance": "孙掌柜收到两块灵石后，把受托传播的私拍口信作为雷纹豹精血的消息告诉萧欢。沿用他认钱不认人、说话留半句的习惯，自然谈到拍品、时地和取签办法。他把卖方说辞当真，表现为做一笔情报与引荐生意。",
+        "payload": {
+          "event_id": "benchmark_event_south_bank_auction",
+          "title": "南岸旧盐仓私拍",
+          "stage": "hidden",
+          "hook": {
+            "hook_id": "hook_private_auction",
+            "kind": "rumor",
+            "content": "孙掌柜受卖方之托私下传话：今夜二更，落雁渡南岸旧盐仓有场小范围灵材私拍，卖方称有一瓶二阶雷纹豹精血，凭雷纹铜签入场；有意的买家可经他引荐取签。"
+          },
+          "actors": [
+            "孙掌柜"
+          ]
+        }
+      }
+    ]
+  },
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_001",
+    "turn_index": 1,
+    "user_input": "进入茶楼雅座坐下",
+    "scene_text": "你步入望江茶楼，挑了个靠江的雅座坐下。孙掌柜亲自拎着青瓷茶壶上来添茶，笑意盈盈地候着你开口。",
+    "closing_prompt": "孙掌柜正在为你沏茶，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

@@ -1,0 +1,53 @@
+{
+    "case_id": "case_05_faction_confrontation",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "left",
+            "specificity": "right",
+            "left_evidence": "拦路的木杆便吱呀呀地抬了起来",
+            "right_evidence": "那气味像是隔着几十年时光飘来的奢侈",
+            "left_violations": [
+                "哨兵队长将通行证与香烟一并塞进口袋，额外剥夺了玩家的伪造商会通行证；既定判定仅明确香烟被收起，未授权消耗通行证。"
+            ],
+            "right_violations": [
+                "哨兵队长将通行证揣进怀里，额外剥夺了玩家的伪造商会通行证；既定判定仅明确香烟被收起，未授权消耗通行证。"
+            ],
+            "reason": "Left 的“拦路的木杆便吱呀呀地抬了起来”让哨卡机制、队长对下属的支配以及放行过程更具世界自主性，NPC 不只是判定结果的传声筒；但部分措辞如“滤嘴上还带着点你体温”略显刻意。Right 用“隔着几十年时光飘来的奢侈”把战前香烟的稀缺价值转成鲜明感官体验，队长嗅烟、别烟的动作也更利落，且补出东北方天际线这一可观察方位，使沙暴威胁更具体。两篇结尾都仍带二选一框架，但 Right 的“先做点什么再上路”比 Left 的“立刻催动油门冲进去，还是先做点别的准备”稍少预设行动细节，因此总体更紧凑、更具继续输入的冲动。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "left",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "安全窗口就剩这么一两个钟头",
+            "right_evidence": "红蝎那老东西的狗鼻子倒是灵",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left 的优势是行动信息非常明确：“安全窗口就剩这么一两个钟头”直接给出可用于规划路线、维修、补给或冒险冲刺的时间尺度，而且末句“你会怎么做”没有真正把后续锁成菜单，开放性明显更好。Right 则在人味上胜出，“红蝎那老东西的狗鼻子倒是灵”让队长表现出对红蝎的既有态度与自己的粗俗判断，再配合先看香烟、草草验章、嗅烟和露出焦黄牙齿，贪婪性格被行为而非说明体现。其结尾“全速冲过峡谷，还是另寻他路”把选择不必要地压缩成两类，因此开放行动空间不及 Left；但人物鲜活度、戏剧节奏和继续阅读欲仍以 Right 更强。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "这破摩托半路还差点撂挑子",
+            "right_evidence": "像是交过一百次过路费一样自然",
+            "left_violations": [],
+            "right_violations": [
+                "哨兵队长把通行证塞进自己的腰兜，额外剥夺了玩家的伪造商会通行证；既定判定仅明确香烟被收起，未授权消耗通行证。"
+            ],
+            "reason": "Left 用“这破摩托半路还差点撂挑子”给谎话增加了临场质感，也让猎人更像会随机应变的荒原拾荒者；虽然这是额外扩写玩家话术，尚未形成新的实质行动后果。它的结尾允许“先停下来做别的准备”并继续追问“你会怎么做”，对维修、侦察、等待、改道等策略保留得更充分。Right 的“像是交过一百次过路费一样自然”以及队长先抢烟、咬烟屁股、幸灾乐祸警告的连续动作，在人物塑造和废土惯常腐败感上更成熟，且“撑不过今晌午”是非常具体的时间压力；但其擅自让队长没收通行证，制造了未经判定授权的资源损失，会直接改变后续游戏状态，因此即使局部文笔和 NPC 鲜活度更优，总体游戏体验仍应判给 Left。"
+        }
+    ]
+}

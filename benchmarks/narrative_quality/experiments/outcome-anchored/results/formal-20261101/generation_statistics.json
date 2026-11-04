@@ -1,0 +1,4650 @@
+{
+  "total_calls": 60,
+  "failed_calls": 0,
+  "retries": 0,
+  "scorable_pairs": 30,
+  "excluded_pairs": [],
+  "overall": {
+    "A": {
+      "calls": 30,
+      "failures": 0,
+      "metrics": {
+        "body_chars": {
+          "n": 30,
+          "mean": 470.3,
+          "median": 457.0,
+          "min": 365,
+          "max": 663
+        },
+        "body_raw_chars": {
+          "n": 30,
+          "mean": 478.76666666666665,
+          "median": 466.0,
+          "min": 375,
+          "max": 677
+        },
+        "structure_chars": {
+          "n": 30,
+          "mean": 1463.5333333333333,
+          "median": 1471.0,
+          "min": 1142,
+          "max": 1736
+        },
+        "body_char_share": {
+          "n": 30,
+          "mean": 0.24310257923820985,
+          "median": 0.24118019300743554,
+          "min": 0.19443155452436195,
+          "max": 0.2953229398663697
+        },
+        "latency_ms": {
+          "n": 30,
+          "mean": 11779.057920699901,
+          "median": 11823.242736500106,
+          "min": 10014.720202998433,
+          "max": 13872.30781299877
+        },
+        "accepted_ttft_ms": {
+          "n": 30,
+          "mean": 7062.01824853318,
+          "median": 7023.498626000219,
+          "min": 6136.949535997701,
+          "max": 8064.63522699778
+        },
+        "retries": {
+          "n": 30,
+          "mean": 0,
+          "median": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "token_usage.input_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.output_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.total_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.cached_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        }
+      },
+      "body_lengths": [
+        551,
+        435,
+        465,
+        506,
+        583,
+        397,
+        542,
+        518,
+        663,
+        541,
+        612,
+        456,
+        400,
+        434,
+        426,
+        492,
+        516,
+        409,
+        439,
+        415,
+        458,
+        436,
+        403,
+        393,
+        365,
+        411,
+        465,
+        488,
+        471,
+        419
+      ],
+      "field_chars": {
+        "action_resolutions": {
+          "n": 30,
+          "mean": 160.76666666666668,
+          "median": 136.5,
+          "min": 107,
+          "max": 329
+        },
+        "closing_prompt": {
+          "n": 30,
+          "mean": 35.13333333333333,
+          "median": 34.0,
+          "min": 23,
+          "max": 46
+        },
+        "director_reason": {
+          "n": 30,
+          "mean": 4,
+          "median": 4.0,
+          "min": 4,
+          "max": 4
+        },
+        "next_action_directions": {
+          "n": 30,
+          "mean": 446.1333333333333,
+          "median": 453.0,
+          "min": 310,
+          "max": 570
+        },
+        "planned_events": {
+          "n": 30,
+          "mean": 444.1333333333333,
+          "median": 449.5,
+          "min": 285,
+          "max": 571
+        },
+        "scene_reasoning": {
+          "n": 30,
+          "mean": 133.5,
+          "median": 133.5,
+          "min": 96,
+          "max": 181
+        },
+        "scene_stopping_point": {
+          "n": 30,
+          "mean": 70.86666666666666,
+          "median": 71.0,
+          "min": 50,
+          "max": 89
+        }
+      },
+      "finish_reason_reported": 0,
+      "truncation_reported": 0
+    },
+    "B": {
+      "calls": 30,
+      "failures": 0,
+      "metrics": {
+        "body_chars": {
+          "n": 30,
+          "mean": 487.53333333333336,
+          "median": 474.0,
+          "min": 263,
+          "max": 657
+        },
+        "body_raw_chars": {
+          "n": 30,
+          "mean": 495.46666666666664,
+          "median": 481.5,
+          "min": 267,
+          "max": 671
+        },
+        "structure_chars": {
+          "n": 30,
+          "mean": 738.4666666666667,
+          "median": 728.5,
+          "min": 582,
+          "max": 950
+        },
+        "body_char_share": {
+          "n": 30,
+          "mean": 0.3953261333911143,
+          "median": 0.3908847725641619,
+          "min": 0.3022988505747126,
+          "max": 0.5181388012618297
+        },
+        "latency_ms": {
+          "n": 30,
+          "mean": 9611.645682233697,
+          "median": 9662.54546500204,
+          "min": 7711.272180000378,
+          "max": 11286.678859003587
+        },
+        "accepted_ttft_ms": {
+          "n": 30,
+          "mean": 4508.744521832948,
+          "median": 4468.383599996741,
+          "min": 4049.195088999113,
+          "max": 5147.663053001452
+        },
+        "retries": {
+          "n": 30,
+          "mean": 0,
+          "median": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "token_usage.input_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.output_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.total_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.cached_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null,
+          "min": null,
+          "max": null
+        }
+      },
+      "body_lengths": [
+        641,
+        649,
+        474,
+        479,
+        504,
+        599,
+        455,
+        566,
+        471,
+        629,
+        524,
+        514,
+        620,
+        656,
+        657,
+        463,
+        460,
+        343,
+        489,
+        380,
+        420,
+        397,
+        584,
+        474,
+        377,
+        376,
+        263,
+        424,
+        349,
+        389
+      ],
+      "field_chars": {
+        "action_resolutions": {
+          "n": 30,
+          "mean": 153.03333333333333,
+          "median": 128.0,
+          "min": 107,
+          "max": 323
+        },
+        "closing_prompt": {
+          "n": 30,
+          "mean": 39.13333333333333,
+          "median": 38.0,
+          "min": 22,
+          "max": 66
+        },
+        "involved_entities": {
+          "n": 30,
+          "mean": 15.8,
+          "median": 10.5,
+          "min": 6,
+          "max": 47
+        },
+        "next_action_directions": {
+          "n": 30,
+          "mean": 424.5,
+          "median": 431.0,
+          "min": 301,
+          "max": 581
+        }
+      },
+      "finish_reason_reported": 0,
+      "truncation_reported": 0
+    },
+    "B_minus_A": {
+      "body_chars": {
+        "difference": 17.23333333333335,
+        "relative": 0.03664327734070454
+      },
+      "body_raw_chars": {
+        "difference": 16.69999999999999,
+        "relative": 0.034881292209148484
+      },
+      "structure_chars": {
+        "difference": -725.0666666666666,
+        "relative": -0.49542203799025186
+      },
+      "body_char_share": {
+        "difference": 0.15222355415290442,
+        "relative": 0.6261700498197699
+      },
+      "latency_ms": {
+        "difference": -2167.412238466204,
+        "relative": -0.1840055675978388
+      },
+      "accepted_ttft_ms": {
+        "difference": -2553.273726700232,
+        "relative": -0.36155014570099153
+      },
+      "retries": {
+        "difference": 0,
+        "relative": null
+      },
+      "token_usage.input_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "token_usage.output_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "token_usage.total_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "token_usage.cached_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "token_usage.cache_creation_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "accepted_token_usage.input_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "accepted_token_usage.output_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "accepted_token_usage.total_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "accepted_token_usage.cached_tokens": {
+        "difference": null,
+        "relative": null
+      },
+      "accepted_token_usage.cache_creation_tokens": {
+        "difference": null,
+        "relative": null
+      }
+    }
+  },
+  "cases": {
+    "case_01_tavern_inquiry": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 483.6666666666667,
+            "median": 465,
+            "min": 435,
+            "max": 551
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 495,
+            "median": 473,
+            "min": 445,
+            "max": 567
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1435,
+            "median": 1466,
+            "min": 1371,
+            "max": 1468
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.25152634627852855,
+            "median": 0.24086378737541528,
+            "min": 0.24080787156913516,
+            "max": 0.27290737989103514
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 12772.526214997924,
+            "median": 12513.184897994506,
+            "min": 12422.666393998952,
+            "max": 13381.727353000315
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 7946.758500666571,
+            "median": 7933.539509002003,
+            "min": 7842.10076599993,
+            "max": 8064.63522699778
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          551,
+          435,
+          465
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 131.66666666666666,
+            "median": 129,
+            "min": 129,
+            "max": 137
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 29,
+            "median": 28,
+            "min": 27,
+            "max": 32
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 433.3333333333333,
+            "median": 451,
+            "min": 382,
+            "max": 467
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 462.3333333333333,
+            "median": 468,
+            "min": 442,
+            "max": 477
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 134.33333333333334,
+            "median": 134,
+            "min": 120,
+            "max": 149
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 71.33333333333333,
+            "median": 72,
+            "min": 67,
+            "max": 75
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 588,
+            "median": 641,
+            "min": 474,
+            "max": 649
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 599.3333333333334,
+            "median": 655,
+            "min": 482,
+            "max": 661
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 744.6666666666666,
+            "median": 762,
+            "min": 648,
+            "max": 824
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.43997847719894667,
+            "median": 0.44059742023082143,
+            "min": 0.42245989304812837,
+            "max": 0.4568781183178902
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 10528.351528999337,
+            "median": 10763.191095997172,
+            "min": 9535.184631997254,
+            "max": 11286.678859003587
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4461.214375999892,
+            "median": 4436.520527000539,
+            "min": 4423.726907996752,
+            "max": 4523.395693002385
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          641,
+          649,
+          474
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 123.33333333333333,
+            "median": 123,
+            "min": 116,
+            "max": 131
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 49,
+            "median": 46,
+            "min": 39,
+            "max": 62
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 11.333333333333334,
+            "median": 7,
+            "min": 7,
+            "max": 20
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 455,
+            "median": 487,
+            "min": 360,
+            "max": 518
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": 104.33333333333331,
+          "relative": 0.21571330117160575
+        },
+        "body_raw_chars": {
+          "difference": 104.33333333333337,
+          "relative": 0.21077441077441086
+        },
+        "structure_chars": {
+          "difference": -690.3333333333334,
+          "relative": -0.48106852497096403
+        },
+        "body_char_share": {
+          "difference": 0.18845213092041813,
+          "relative": 0.7492341605906168
+        },
+        "latency_ms": {
+          "difference": -2244.174685998587,
+          "relative": -0.17570327500000762
+        },
+        "accepted_ttft_ms": {
+          "difference": -3485.5441246666796,
+          "relative": -0.4386120610528574
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_02_rogue_recruitment": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 495.3333333333333,
+            "median": 506,
+            "min": 397,
+            "max": 583
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 505.3333333333333,
+            "median": 518,
+            "min": 403,
+            "max": 595
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1356,
+            "median": 1345,
+            "min": 1187,
+            "max": 1536
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.2663756131909228,
+            "median": 0.27336574824419235,
+            "min": 0.25063131313131315,
+            "max": 0.27512977819726286
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 10851.99145633184,
+            "median": 11242.294529998617,
+            "min": 10014.720202998433,
+            "max": 11298.959635998472
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 6830.915990998619,
+            "median": 6886.837824000395,
+            "min": 6431.235791998915,
+            "max": 7174.674356996547
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          506,
+          583,
+          397
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 127.66666666666667,
+            "median": 127,
+            "min": 125,
+            "max": 131
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 36.333333333333336,
+            "median": 38,
+            "min": 29,
+            "max": 42
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 374,
+            "median": 357,
+            "min": 325,
+            "max": 440
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 442,
+            "median": 472,
+            "min": 285,
+            "max": 569
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 136,
+            "median": 141,
+            "min": 126,
+            "max": 141
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 67,
+            "median": 65,
+            "min": 53,
+            "max": 83
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 527.3333333333334,
+            "median": 504,
+            "min": 479,
+            "max": 599
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 537.3333333333334,
+            "median": 514,
+            "min": 487,
+            "max": 611
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 666,
+            "median": 623,
+            "min": 592,
+            "max": 783
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.44301132974474655,
+            "median": 0.44724556489262374,
+            "min": 0.3916083916083916,
+            "max": 0.49018003273322425
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 8983.587807667695,
+            "median": 9139.022879004187,
+            "min": 8129.606964001141,
+            "max": 9682.133579997753
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4256.310191999849,
+            "median": 4213.182302002679,
+            "min": 4175.640198998735,
+            "max": 4380.108074998134
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          479,
+          504,
+          599
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 112.66666666666667,
+            "median": 112,
+            "min": 107,
+            "max": 119
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 32,
+            "median": 31,
+            "min": 28,
+            "max": 37
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 7,
+            "median": 7,
+            "min": 7,
+            "max": 7
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 408.3333333333333,
+            "median": 370,
+            "min": 341,
+            "max": 514
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": 32.00000000000006,
+          "relative": 0.06460296096904453
+        },
+        "body_raw_chars": {
+          "difference": 32.00000000000006,
+          "relative": 0.06332453825857531
+        },
+        "structure_chars": {
+          "difference": -690,
+          "relative": -0.5088495575221239
+        },
+        "body_char_share": {
+          "difference": 0.17663571655382376,
+          "relative": 0.6631076863151936
+        },
+        "latency_ms": {
+          "difference": -1868.4036486641453,
+          "relative": -0.1721715001511527
+        },
+        "accepted_ttft_ms": {
+          "difference": -2574.6057989987703,
+          "relative": -0.3769049132490335
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_03_composite_infiltrate_and_disarm": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 574.3333333333334,
+            "median": 542,
+            "min": 518,
+            "max": 663
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 583,
+            "median": 548,
+            "min": 524,
+            "max": 677
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1664.6666666666667,
+            "median": 1682,
+            "min": 1582,
+            "max": 1730
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.2564850073669793,
+            "median": 0.24370503597122303,
+            "min": 0.2304270462633452,
+            "max": 0.2953229398663697
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 12243.225822669046,
+            "median": 12314.34613300371,
+            "min": 11494.909184002609,
+            "max": 12920.422151000821
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 7046.551834001245,
+            "median": 7075.954571002512,
+            "min": 6911.061437000171,
+            "max": 7152.6394940010505
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          542,
+          518,
+          663
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 324,
+            "median": 323,
+            "min": 320,
+            "max": 329
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 38.333333333333336,
+            "median": 42,
+            "min": 27,
+            "max": 46
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 460,
+            "median": 464,
+            "min": 442,
+            "max": 474
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 494.3333333333333,
+            "median": 484,
+            "min": 433,
+            "max": 566
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 107,
+            "median": 106,
+            "min": 96,
+            "max": 119
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 68,
+            "median": 67,
+            "min": 66,
+            "max": 71
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 497.3333333333333,
+            "median": 471,
+            "min": 455,
+            "max": 566
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 503.3333333333333,
+            "median": 475,
+            "min": 459,
+            "max": 576
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 915,
+            "median": 904,
+            "min": 891,
+            "max": 950
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.3513236350451979,
+            "median": 0.3458149779735683,
+            "min": 0.33480500367917587,
+            "max": 0.3733509234828496
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 10080.859926669897,
+            "median": 9894.40351400117,
+            "min": 9642.957350006327,
+            "max": 10705.218916002195
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4994.028003335795,
+            "median": 4994.333667003957,
+            "min": 4980.197830998804,
+            "max": 5007.552512004622
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          455,
+          566,
+          471
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 311,
+            "median": 315,
+            "min": 295,
+            "max": 323
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 31,
+            "median": 33,
+            "min": 22,
+            "max": 38
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 31,
+            "median": 32,
+            "min": 24,
+            "max": 37
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 436,
+            "median": 444,
+            "min": 413,
+            "max": 451
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": -77.00000000000006,
+          "relative": -0.13406848520023223
+        },
+        "body_raw_chars": {
+          "difference": -79.66666666666669,
+          "relative": -0.1366495140080046
+        },
+        "structure_chars": {
+          "difference": -749.6666666666667,
+          "relative": -0.45034040849018825
+        },
+        "body_char_share": {
+          "difference": 0.0948386276782186,
+          "relative": 0.3697628514501172
+        },
+        "latency_ms": {
+          "difference": -2162.36589599915,
+          "relative": -0.1766173333171233
+        },
+        "accepted_ttft_ms": {
+          "difference": -2052.52383066545,
+          "relative": -0.2912805978040986
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_04_secret_investigation": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 536.3333333333334,
+            "median": 541,
+            "min": 456,
+            "max": 612
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 547,
+            "median": 553,
+            "min": 466,
+            "max": 622
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1487.6666666666667,
+            "median": 1529,
+            "min": 1342,
+            "max": 1592
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.264214911974309,
+            "median": 0.2613526570048309,
+            "min": 0.25361512791991103,
+            "max": 0.2776769509981851
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 12670.196427330666,
+            "median": 12328.879677996156,
+            "min": 11809.401790997072,
+            "max": 13872.30781299877
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 7169.217759997991,
+            "median": 7150.71770799841,
+            "min": 6971.042680997925,
+            "max": 7385.8928909976385
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          541,
+          612,
+          456
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 142,
+            "median": 141,
+            "min": 139,
+            "max": 146
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 41.333333333333336,
+            "median": 45,
+            "min": 34,
+            "max": 45
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 491.3333333333333,
+            "median": 483,
+            "min": 422,
+            "max": 569
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 419.3333333333333,
+            "median": 436,
+            "min": 348,
+            "max": 474
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 145,
+            "median": 141,
+            "min": 137,
+            "max": 157
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 75.66666666666667,
+            "median": 76,
+            "min": 67,
+            "max": 84
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 555.6666666666666,
+            "median": 524,
+            "min": 514,
+            "max": 629
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 563,
+            "median": 530,
+            "min": 524,
+            "max": 635
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 727,
+            "median": 709,
+            "min": 638,
+            "max": 834
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.4336995874584714,
+            "median": 0.4299384825700615,
+            "min": 0.42497972424979724,
+            "max": 0.4461805555555556
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 9839.556745668233,
+            "median": 9570.627746004902,
+            "min": 9080.675113000325,
+            "max": 10867.367377999472
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4569.327524334464,
+            "median": 4549.654346003081,
+            "min": 4546.862909999618,
+            "max": 4611.465317000693
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          629,
+          524,
+          514
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 138.33333333333334,
+            "median": 139,
+            "min": 133,
+            "max": 143
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 47.666666666666664,
+            "median": 39,
+            "min": 38,
+            "max": 66
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 6,
+            "median": 6,
+            "min": 6,
+            "max": 6
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 429,
+            "median": 426,
+            "min": 344,
+            "max": 517
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": 19.333333333333258,
+          "relative": 0.03604723430702285
+        },
+        "body_raw_chars": {
+          "difference": 16,
+          "relative": 0.029250457038391225
+        },
+        "structure_chars": {
+          "difference": -760.6666666666667,
+          "relative": -0.5113152587945329
+        },
+        "body_char_share": {
+          "difference": 0.1694846754841624,
+          "relative": 0.6414652156371942
+        },
+        "latency_ms": {
+          "difference": -2830.639681662433,
+          "relative": -0.22340929739309393
+        },
+        "accepted_ttft_ms": {
+          "difference": -2599.890235663527,
+          "relative": -0.36264629178515223
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_05_faction_confrontation": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 420,
+            "median": 426,
+            "min": 400,
+            "max": 434
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 428.6666666666667,
+            "median": 432,
+            "min": 408,
+            "max": 446
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1271.3333333333333,
+            "median": 1334,
+            "min": 1142,
+            "max": 1338
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.24879169466848897,
+            "median": 0.24547511312217193,
+            "min": 0.24149659863945577,
+            "max": 0.2594033722438392
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 10752.901283667597,
+            "median": 10687.11040099879,
+            "min": 10479.248706004,
+            "max": 11092.344744000002
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 6431.400141666624,
+            "median": 6382.694550004089,
+            "min": 6136.949535997701,
+            "max": 6774.556338998082
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          400,
+          434,
+          426
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 112,
+            "median": 110,
+            "min": 107,
+            "max": 119
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 32.666666666666664,
+            "median": 30,
+            "min": 23,
+            "max": 45
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 382.3333333333333,
+            "median": 406,
+            "min": 329,
+            "max": 412
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 380.3333333333333,
+            "median": 404,
+            "min": 320,
+            "max": 417
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 126.66666666666667,
+            "median": 117,
+            "min": 116,
+            "max": 147
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 64.33333333333333,
+            "median": 70,
+            "min": 50,
+            "max": 73
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 644.3333333333334,
+            "median": 656,
+            "min": 620,
+            "max": 657
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 656.3333333333334,
+            "median": 668,
+            "min": 630,
+            "max": 671
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 651.3333333333334,
+            "median": 623,
+            "min": 611,
+            "max": 720
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.49790869070025157,
+            "median": 0.5129007036747459,
+            "min": 0.4626865671641791,
+            "max": 0.5181388012618297
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 10292.972389999099,
+            "median": 10221.542706996843,
+            "min": 10200.221248000162,
+            "max": 10457.15321500029
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4260.119258001699,
+            "median": 4245.8122949974495,
+            "min": 4208.241853004438,
+            "max": 4326.3036260032095
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          620,
+          656,
+          657
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 117.33333333333333,
+            "median": 116,
+            "min": 109,
+            "max": 127
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 41.333333333333336,
+            "median": 41,
+            "min": 36,
+            "max": 47
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 12,
+            "median": 13,
+            "min": 8,
+            "max": 15
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 374.6666666666667,
+            "median": 357,
+            "min": 329,
+            "max": 438
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": 224.33333333333337,
+          "relative": 0.5341269841269842
+        },
+        "body_raw_chars": {
+          "difference": 227.66666666666669,
+          "relative": 0.531104199066874
+        },
+        "structure_chars": {
+          "difference": -619.9999999999999,
+          "relative": -0.48767697954902983
+        },
+        "body_char_share": {
+          "difference": 0.2491169960317626,
+          "relative": 1.0013075250108614
+        },
+        "latency_ms": {
+          "difference": -459.92889366849886,
+          "relative": -0.042772539385912266
+        },
+        "accepted_ttft_ms": {
+          "difference": -2171.2808836649256,
+          "relative": -0.3376062499358441
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_06_dungeon_puzzle": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 472.3333333333333,
+            "median": 492,
+            "min": 409,
+            "max": 516
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 478.3333333333333,
+            "median": 498,
+            "min": 415,
+            "max": 522
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1389,
+            "median": 1411,
+            "min": 1319,
+            "max": 1437
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.2536689934525723,
+            "median": 0.2677737415672029,
+            "min": 0.22156013001083424,
+            "max": 0.27167310877967976
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 11376.605431668091,
+            "median": 11280.51818899985,
+            "min": 10914.863023004727,
+            "max": 11934.435082999698
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 6914.334295332083,
+            "median": 6867.474090999167,
+            "min": 6577.680082002189,
+            "max": 7297.848712994892
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          492,
+          516,
+          409
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 125.33333333333333,
+            "median": 123,
+            "min": 117,
+            "max": 136
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 31,
+            "median": 31,
+            "min": 31,
+            "max": 31
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 426.3333333333333,
+            "median": 455,
+            "min": 346,
+            "max": 478
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 436.3333333333333,
+            "median": 482,
+            "min": 308,
+            "max": 519
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 124.66666666666667,
+            "median": 122,
+            "min": 112,
+            "max": 140
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 72.33333333333333,
+            "median": 71,
+            "min": 67,
+            "max": 79
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 422,
+            "median": 460,
+            "min": 343,
+            "max": 463
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 428.6666666666667,
+            "median": 468,
+            "min": 349,
+            "max": 469
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 705.3333333333334,
+            "median": 719,
+            "min": 667,
+            "max": 730
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.3726207825933932,
+            "median": 0.38809723386420786,
+            "min": 0.33960396039603963,
+            "max": 0.39016115351993214
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 9257.757615331988,
+            "median": 9281.108789997234,
+            "min": 9102.062099998875,
+            "max": 9390.101955999853
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4610.611188666856,
+            "median": 4402.849582002091,
+            "min": 4281.320930997026,
+            "max": 5147.663053001452
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          463,
+          460,
+          343
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 120.66666666666667,
+            "median": 121,
+            "min": 118,
+            "max": 123
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 37,
+            "median": 38,
+            "min": 34,
+            "max": 39
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 22,
+            "median": 23,
+            "min": 16,
+            "max": 27
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 419.6666666666667,
+            "median": 428,
+            "min": 375,
+            "max": 456
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": -50.333333333333314,
+          "relative": -0.10656316160903313
+        },
+        "body_raw_chars": {
+          "difference": -49.66666666666663,
+          "relative": -0.10383275261324035
+        },
+        "structure_chars": {
+          "difference": -683.6666666666666,
+          "relative": -0.49220062395008396
+        },
+        "body_char_share": {
+          "difference": 0.11895178914082088,
+          "relative": 0.46892522228208755
+        },
+        "latency_ms": {
+          "difference": -2118.8478163361033,
+          "relative": -0.18624604932135963
+        },
+        "accepted_ttft_ms": {
+          "difference": -2303.7231066652266,
+          "relative": -0.33318075294977956
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_07_partial_success_alchemy": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 437.3333333333333,
+            "median": 439,
+            "min": 415,
+            "max": 458
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 444,
+            "median": 447,
+            "min": 419,
+            "max": 466
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1500.3333333333333,
+            "median": 1543,
+            "min": 1303,
+            "max": 1655
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.22690452878783363,
+            "median": 0.21675343114055845,
+            "min": 0.21195097037793667,
+            "max": 0.25200918484500573
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 12073.066525668159,
+            "median": 11837.08368200314,
+            "min": 11260.468396998476,
+            "max": 13121.647498002858
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 7266.093620002114,
+            "median": 7111.785288005194,
+            "min": 6888.707733000047,
+            "max": 7797.787839001103
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          439,
+          415,
+          458
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 143.33333333333334,
+            "median": 143,
+            "min": 141,
+            "max": 146
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 37.333333333333336,
+            "median": 38,
+            "min": 31,
+            "max": 43
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 465.6666666666667,
+            "median": 517,
+            "min": 310,
+            "max": 570
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 455.6666666666667,
+            "median": 466,
+            "min": 431,
+            "max": 470
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 145,
+            "median": 128,
+            "min": 126,
+            "max": 181
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 80.33333333333333,
+            "median": 82,
+            "min": 70,
+            "max": 89
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 429.6666666666667,
+            "median": 420,
+            "min": 380,
+            "max": 489
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 437,
+            "median": 430,
+            "min": 386,
+            "max": 495
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 689.3333333333334,
+            "median": 727,
+            "min": 582,
+            "max": 759
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.38433664744148616,
+            "median": 0.3918269230769231,
+            "min": 0.36617262423714037,
+            "max": 0.39501039501039503
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 9678.542545334494,
+            "median": 9745.578547997866,
+            "min": 8785.407964001934,
+            "max": 10504.641124003683
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4707.296132333188,
+            "median": 4594.407698001305,
+            "min": 4457.53918599803,
+            "max": 5069.941513000231
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          489,
+          380,
+          420
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 130.66666666666666,
+            "median": 132,
+            "min": 128,
+            "max": 132
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 43.333333333333336,
+            "median": 47,
+            "min": 33,
+            "max": 50
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 18.666666666666668,
+            "median": 23,
+            "min": 10,
+            "max": 23
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 390.6666666666667,
+            "median": 419,
+            "min": 301,
+            "max": 452
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": -7.666666666666629,
+          "relative": -0.017530487804877964
+        },
+        "body_raw_chars": {
+          "difference": -7,
+          "relative": -0.015765765765765764
+        },
+        "structure_chars": {
+          "difference": -810.9999999999999,
+          "relative": -0.540546545212175
+        },
+        "body_char_share": {
+          "difference": 0.15743211865365253,
+          "relative": 0.6938253700562272
+        },
+        "latency_ms": {
+          "difference": -2394.5239803336644,
+          "relative": -0.19833602136149453
+        },
+        "accepted_ttft_ms": {
+          "difference": -2558.797487668926,
+          "relative": -0.352155865515559
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_08_failed_action_recovery": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 410.6666666666667,
+            "median": 403,
+            "min": 393,
+            "max": 436
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 416,
+            "median": 409,
+            "min": 399,
+            "max": 440
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1528,
+            "median": 1547,
+            "min": 1474,
+            "max": 1563
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.2117839171505905,
+            "median": 0.21049812533476164,
+            "min": 0.20498474059003052,
+            "max": 0.21986888552697934
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 11601.877027664159,
+            "median": 11738.119089000975,
+            "min": 10830.929981995723,
+            "max": 12236.582011995779
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 7002.79107933117,
+            "median": 7178.209680998407,
+            "min": 6451.085474996944,
+            "max": 7379.078081998159
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          436,
+          403,
+          393
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 125.33333333333333,
+            "median": 126,
+            "min": 120,
+            "max": 130
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 36,
+            "median": 36,
+            "min": 34,
+            "max": 38
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 535,
+            "median": 536,
+            "min": 517,
+            "max": 552
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 455.3333333333333,
+            "median": 444,
+            "min": 428,
+            "max": 494
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 127.33333333333333,
+            "median": 128,
+            "min": 121,
+            "max": 133
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 76,
+            "median": 74,
+            "min": 73,
+            "max": 81
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 485,
+            "median": 474,
+            "min": 397,
+            "max": 584
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 493,
+            "median": 481,
+            "min": 404,
+            "max": 594
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 851.6666666666666,
+            "median": 848,
+            "min": 807,
+            "max": 900
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.36084453808608236,
+            "median": 0.34497816593886466,
+            "min": 0.329734219269103,
+            "max": 0.40782122905027934
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 9693.061421331853,
+            "median": 9997.743835003348,
+            "min": 8753.24144699698,
+            "max": 10328.198981995229
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4289.8681793303695,
+            "median": 4339.545677998103,
+            "min": 4049.195088999113,
+            "max": 4480.863770993892
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          397,
+          584,
+          474
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 126.66666666666667,
+            "median": 125,
+            "min": 121,
+            "max": 134
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 38,
+            "median": 44,
+            "min": 25,
+            "max": 45
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 33.333333333333336,
+            "median": 28,
+            "min": 25,
+            "max": 47
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 547.6666666666666,
+            "median": 548,
+            "min": 514,
+            "max": 581
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": 74.33333333333331,
+          "relative": 0.18100649350649345
+        },
+        "body_raw_chars": {
+          "difference": 77,
+          "relative": 0.18509615384615385
+        },
+        "structure_chars": {
+          "difference": -676.3333333333334,
+          "relative": -0.44262652705061084
+        },
+        "body_char_share": {
+          "difference": 0.14906062093549186,
+          "relative": 0.7038335249484559
+        },
+        "latency_ms": {
+          "difference": -1908.8156063323058,
+          "relative": -0.16452644703790775
+        },
+        "accepted_ttft_ms": {
+          "difference": -2712.922900000801,
+          "relative": -0.38740594561046215
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_09_critical_failure_ambush": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 413.6666666666667,
+            "median": 411,
+            "min": 365,
+            "max": 465
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 422.3333333333333,
+            "median": 419,
+            "min": 375,
+            "max": 473
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1400.3333333333333,
+            "median": 1432,
+            "min": 1236,
+            "max": 1533
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.2279070707309908,
+            "median": 0.22798251093066832,
+            "min": 0.22300596852957136,
+            "max": 0.23273273273273273
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 11493.758577334424,
+            "median": 11880.143530004716,
+            "min": 10717.381652997574,
+            "max": 11883.750549000979
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 6604.613891666911,
+            "median": 6759.803510001802,
+            "min": 6278.047998996044,
+            "max": 6775.9901660028845
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          365,
+          411,
+          465
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 134,
+            "median": 137,
+            "min": 127,
+            "max": 138
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 34.333333333333336,
+            "median": 34,
+            "min": 29,
+            "max": 40
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 477,
+            "median": 458,
+            "min": 422,
+            "max": 551
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 377.6666666666667,
+            "median": 418,
+            "min": 286,
+            "max": 429
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 138,
+            "median": 137,
+            "min": 137,
+            "max": 140
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 66.33333333333333,
+            "median": 68,
+            "min": 57,
+            "max": 74
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 338.6666666666667,
+            "median": 376,
+            "min": 263,
+            "max": 377
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 346.6666666666667,
+            "median": 385,
+            "min": 267,
+            "max": 388
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 703,
+            "median": 735,
+            "min": 607,
+            "max": 767
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.3234288358977041,
+            "median": 0.3289588801399825,
+            "min": 0.3022988505747126,
+            "max": 0.33902877697841727
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 9168.951011333169,
+            "median": 9835.026822001964,
+            "min": 7711.272180000378,
+            "max": 9960.554031997162
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4466.679179330337,
+            "median": 4527.442024998891,
+            "min": 4315.848344995175,
+            "max": 4556.747167996946
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          377,
+          376,
+          263
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 128.66666666666666,
+            "median": 128,
+            "min": 127,
+            "max": 131
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 31.666666666666668,
+            "median": 34,
+            "min": 26,
+            "max": 35
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 9,
+            "median": 9,
+            "min": 9,
+            "max": 9
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 427.6666666666667,
+            "median": 467,
+            "min": 326,
+            "max": 490
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": -75.0,
+          "relative": -0.18130539887187752
+        },
+        "body_raw_chars": {
+          "difference": -75.66666666666663,
+          "relative": -0.1791633780584056
+        },
+        "structure_chars": {
+          "difference": -697.3333333333333,
+          "relative": -0.49797667222089975
+        },
+        "body_char_share": {
+          "difference": 0.09552176516671329,
+          "relative": 0.4191259396223912
+        },
+        "latency_ms": {
+          "difference": -2324.8075660012546,
+          "relative": -0.20226695648416976
+        },
+        "accepted_ttft_ms": {
+          "difference": -2137.9347123365733,
+          "relative": -0.3237032092116726
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    },
+    "case_10_composite_mixed_outcomes": {
+      "A": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 459.3333333333333,
+            "median": 471,
+            "min": 419,
+            "max": 488
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 468,
+            "median": 479,
+            "min": 425,
+            "max": 500
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 1603,
+            "median": 1557,
+            "min": 1516,
+            "max": 1736
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.2233677087808826,
+            "median": 0.23704076497232007,
+            "min": 0.19443155452436195,
+            "max": 0.23863080684596577
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 11954.430439667098,
+            "median": 12015.288280999812,
+            "min": 11591.93456399953,
+            "max": 12256.06847400195
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 7407.505371668473,
+            "median": 7463.515481002105,
+            "min": 6954.592105998017,
+            "max": 7804.408528005297
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          488,
+          471,
+          419
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 242.33333333333334,
+            "median": 242,
+            "min": 238,
+            "max": 247
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 35,
+            "median": 36,
+            "min": 32,
+            "max": 37
+          },
+          "director_reason": {
+            "n": 3,
+            "mean": 4,
+            "median": 4,
+            "min": 4,
+            "max": 4
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 416.3333333333333,
+            "median": 432,
+            "min": 345,
+            "max": 472
+          },
+          "planned_events": {
+            "n": 3,
+            "mean": 518,
+            "median": 528,
+            "min": 455,
+            "max": 571
+          },
+          "scene_reasoning": {
+            "n": 3,
+            "mean": 151,
+            "median": 156,
+            "min": 124,
+            "max": 173
+          },
+          "scene_stopping_point": {
+            "n": 3,
+            "mean": 67.33333333333333,
+            "median": 68,
+            "min": 58,
+            "max": 76
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B": {
+        "calls": 3,
+        "failures": 0,
+        "metrics": {
+          "body_chars": {
+            "n": 3,
+            "mean": 387.3333333333333,
+            "median": 389,
+            "min": 349,
+            "max": 424
+          },
+          "body_raw_chars": {
+            "n": 3,
+            "mean": 390,
+            "median": 393,
+            "min": 351,
+            "max": 426
+          },
+          "structure_chars": {
+            "n": 3,
+            "mean": 731.3333333333334,
+            "median": 726,
+            "min": 681,
+            "max": 787
+          },
+          "body_char_share": {
+            "n": 3,
+            "mean": 0.3461088097448627,
+            "median": 0.3501238645747316,
+            "min": 0.32465116279069767,
+            "max": 0.36355140186915885
+          },
+          "latency_ms": {
+            "n": 3,
+            "mean": 8592.8158300012,
+            "median": 8693.93591699918,
+            "min": 7859.346903002006,
+            "max": 9225.164670002414
+          },
+          "accepted_ttft_ms": {
+            "n": 3,
+            "mean": 4471.991184997023,
+            "median": 4478.71204999683,
+            "min": 4458.055149996653,
+            "max": 4479.2063549975865
+          },
+          "retries": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.input_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.output_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.total_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cached_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          },
+          "accepted_token_usage.cache_creation_tokens": {
+            "n": 0,
+            "mean": null,
+            "median": null,
+            "min": null,
+            "max": null
+          }
+        },
+        "body_lengths": [
+          424,
+          349,
+          389
+        ],
+        "field_chars": {
+          "action_resolutions": {
+            "n": 3,
+            "mean": 221,
+            "median": 224,
+            "min": 214,
+            "max": 225
+          },
+          "closing_prompt": {
+            "n": 3,
+            "mean": 40.333333333333336,
+            "median": 37,
+            "min": 27,
+            "max": 57
+          },
+          "involved_entities": {
+            "n": 3,
+            "mean": 7.666666666666667,
+            "median": 6,
+            "min": 6,
+            "max": 11
+          },
+          "next_action_directions": {
+            "n": 3,
+            "mean": 356.3333333333333,
+            "median": 333,
+            "min": 302,
+            "max": 434
+          }
+        },
+        "finish_reason_reported": 0,
+        "truncation_reported": 0
+      },
+      "B_minus_A": {
+        "body_chars": {
+          "difference": -72.0,
+          "relative": -0.1567489114658926
+        },
+        "body_raw_chars": {
+          "difference": -78,
+          "relative": -0.16666666666666666
+        },
+        "structure_chars": {
+          "difference": -871.6666666666666,
+          "relative": -0.5437720939904346
+        },
+        "body_char_share": {
+          "difference": 0.12274110096398008,
+          "relative": 0.5495024398731941
+        },
+        "latency_ms": {
+          "difference": -3361.6146096658977,
+          "relative": -0.2812024066417597
+        },
+        "accepted_ttft_ms": {
+          "difference": -2935.5141866714503,
+          "relative": -0.39628917420686965
+        },
+        "retries": {
+          "difference": 0,
+          "relative": null
+        },
+        "token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.input_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.output_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.total_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cached_tokens": {
+          "difference": null,
+          "relative": null
+        },
+        "accepted_token_usage.cache_creation_tokens": {
+          "difference": null,
+          "relative": null
+        }
+      }
+    }
+  }
+}

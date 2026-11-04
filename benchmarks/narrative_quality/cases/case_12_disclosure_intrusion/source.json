@@ -1,0 +1,20 @@
+{
+  "case_id": "case_12_disclosure_intrusion",
+  "file": "input.json",
+  "kind": "adapted_play_trace",
+  "source": {
+    "turn_index": 2,
+    "trace_id": "2204c62a-660b-44e7-80d4-f231f41d6b9c",
+    "director_call_id": "0a9cdff6623844f9bf4e4210194dcbcd",
+    "composer_call_id": "f90c747e5de04c74be1ed92d12f47abe",
+    "original_fixture_sha256": "c271046d04e6863ca0631f230023b1bc5d81912c2e85bfb09f9fd8d7dfb0cae2"
+  },
+  "changes": [
+    "Non-explicit adaptation; full second-person previous scene retained; action wording/types and Director guidance aligned; original outcome bands retained as fixture parameters, not a replayed judgment.",
+    "Normalized innkeeper to 苏婉娘 and inn name to 悦来客栈 across profiles, stage materials and engaged-event resources."
+  ],
+  "previous_scene_chars": {
+    "source": 661,
+    "curated": 687
+  }
+}

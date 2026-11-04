@@ -1,0 +1,174 @@
+{
+  "case_id": "case_06_dungeon_puzzle",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "其余火系符文的红光反而因回路的失衡而微微加剧",
+          "reason": "中和引发其他节点变化，创造了相互作用的机关。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "整扇门只是向内陷了不到一指的深度，便又滞住",
+          "reason": "注入、熄灭、机簧卸力、其他节点增强都有明确反馈链。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "两种颜色在石面上绞缠、抵消",
+          "reason": "火星、稳定输送、纹路熄灭到门扇卡住逐步演出操作。"
+        },
+        "playability": {
+          "score": 2,
+          "evidence": "显然这道封印是多点连锁",
+          "reason": "留下其他节点可处理，但玩家主要只能继续补做原本已成功的中和任务。"
+        },
+        "violations": [
+          {
+            "severity": "major",
+            "category": "outcome",
+            "evidence": "你中和掉的只是其中一环",
+            "authority": "act_01 的“调动水系奥术魔力注入潮汐符文中和封印回路”判定为 success。",
+            "reason": "把中和回路的成功改为仅处理一个节点，门仍堵塞且其他节点加强，需继续完成同一任务。"
+          }
+        ]
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "蓝光与残存的红光在节点处彼此僵持",
+          "reason": "冷热反应与残余节点构成具体封印反馈。"
+        },
+        "causal_interaction": {
+          "score": 2,
+          "evidence": "封印回路不再像方才那样绷得死紧",
+          "reason": "反馈止于松弛与僵持，没有推动至玩家行为预期的有效解封状态。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "从刺目的赤红退成暗沉的赭色",
+          "reason": "注入、接触、白气、退色和门震完整演出魔力作用。"
+        },
+        "playability": {
+          "score": 2,
+          "evidence": "石门上仍有几处火纹固执地亮着",
+          "reason": "只留继续处理中和残局，通路和新的可操作区域均未落实。"
+        },
+        "violations": [
+          {
+            "severity": "major",
+            "category": "outcome",
+            "evidence": "中和有效，却远未到彻底瓦解的地步。",
+            "authority": "act_01 的目标是中和封印回路，结果明确为 success，而非 partial_success。",
+            "reason": "用局部有效和脆弱僵持替代已判定成功的中和，使原任务悬而未决。"
+          }
+        ]
+      },
+      "preference": "tie",
+      "reason": "左篇用失衡增亮与卡门，右篇用残余火纹和脆弱僵持展开反馈；都把成功改成尚需继续中和的局面。两篇均有具体过程，但重大结果违规使采用价值受损。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "一路吞掉三枚火纹的节点",
+          "reason": "节点熄灭联动门缝扩大，场景新增内容有机关作用。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "直到足够一个成年人侧身挤过去",
+          "reason": "魔力注入确实产生可通行结果，并伴有耗力和残余反应。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "掌心猛地压紧",
+          "reason": "遭遇灼热、引水、压掌、节点熄灭与开缝把关键操作演出。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "照亮了那道窄缝后幽深的黑暗",
+          "reason": "已能通过或观察门后，手臂发麻和残余火纹影响准备，但未使通路重新关闭。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "台阶边缘嵌着已经锈蚀发黑的古代铜制火管",
+          "reason": "门后火管、热风与橙光共同形成可调查的空间。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "第一道火纹彻底熄灭，接着是第二道、第三道",
+          "reason": "逐节点中和释放门轴，开门后热风又引导观察下方结构。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "门扇在石轴摩擦的粗粝声响中向内裂开",
+          "reason": "中和到开启、举灯看石阶有完整动作反馈。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "石阶第一级上积着薄薄一层黑灰，没有脚印",
+          "reason": "可检查灰迹、火管或下行，成功后落到具体可探索对象。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇打开可通过的门缝，但主要以耗力和可能反扑收束；右篇也演出逐节点解封，并将热风来源落实为石阶和火管，玩家下一步有更具体的观察与行动对象。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "隐约一点比提灯更稳定的、琥珀色的光",
+          "reason": "门后异光给解封后的探索一个现场目标。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "却已不再阻挡",
+          "reason": "克制属性使红芒被压下，机括松动并让出通路，残余光没有撤销成功。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "黑曜石表面浮起一道竖直的细缝",
+          "reason": "专注注入、蒸汽抵消、机括响和风从开缝涌出，过程连贯。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "缝隙约莫一臂宽",
+          "reason": "通路已可利用，也能先调查门内的琥珀光。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "照亮了门后一段向下延伸的石阶",
+          "reason": "解封后揭示了具体通行结构和灰迹。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "整条封印回路的光泽就此熄灭",
+          "reason": "魔力沿回路压灭火纹，结构松脱并开门，完整兑现行动目标。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "细碎的尘灰从门缝里簌簌落下",
+          "reason": "压纹、退色、机括松脱、尘灰和门板移动形成连续反馈。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "阶面上覆着薄灰",
+          "reason": "侧身可通过，且能观察灰迹或向下探索，结束位置具体。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇以可通行裂缝和门后琥珀光续接探索，右篇以回路全熄和覆灰石阶续接；均完整演出解封成功，并未替玩家进入门后，质量接近。"
+    }
+  ]
+}

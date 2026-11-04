@@ -1,0 +1,158 @@
+{
+  "case_id": "case_09_critical_failure_ambush",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "脊背撞上屠案边缘，震得案上铁钩叮当作响",
+          "reason": "血泥致滑、屠案挡退路，屠夫巷的物件参与交锋。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "把巷口那点微光完全挡在了身后",
+          "reason": "失足使刺杀偏离，撞甲惊动目标，目标反击并占据巷口，后果连贯。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "他反手一肘砸来",
+          "reason": "失败由打滑、磕甲、肘击逼退到拔剑演出，不只一句未命中。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "右手已经摸向腰间那柄宽刃短剑",
+          "reason": "玩家被逼到屠案边且巷口被挡，可回应即将拔剑的敌人或利用身边物件。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 4,
+          "evidence": "顺势把你半按在巷墙的湿砖上",
+          "reason": "滑倒、撞甲、脱匕、腕部受制与墙面共同构成具体近身困局。"
+        },
+        "causal_interaction": {
+          "score": 4,
+          "evidence": "铁手套反手扣住你来不及收回的左腕",
+          "reason": "攻击失衡与震脱武器给对手控制空当，扣腕、转身、按墙、抬拳逐步扩大优势。"
+        },
+        "scene_development": {
+          "score": 4,
+          "evidence": "左拳已经攥紧、抬到耳侧",
+          "reason": "关键反制完整发生，并以将落未落的拳头停在交锋时刻，非单纯暴怒表演。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "卷了刃的刀尖砸在石缝里",
+          "reason": "武器掉落且身体被按墙，眼前拳头形成可即时回应的危险，但可行动空间较窄。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇肘击逼退、挡住巷口已形成局面；右篇把震脱匕首、扣腕、按墙与抬拳串成连续反制，敌人的战斗本能通过动作实质发挥，而非靠危险更大取胜。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 4,
+          "evidence": "几点黏腻的凉意落在你左手手背上",
+          "reason": "打滑撞甲导致断刃、反溅自毒，环境、装备和身体代价互相作用。"
+        },
+        "causal_interaction": {
+          "score": 4,
+          "evidence": "它们顺着崩断的刃口反溅回来",
+          "reason": "刀断不止是物品损失，还使毒液伤及自己；对手又用低剑逼近限制反应时间。"
+        },
+        "scene_development": {
+          "score": 4,
+          "evidence": "他没有急着冲上来，而是踩着重步向你逼近",
+          "reason": "断刃、毒感由凉转麻与敌人有节制地逼近交错展开，失败过程完整而有战术。"
+        },
+        "playability": {
+          "score": 4,
+          "evidence": "你左手背的麻意正沿着手腕往上爬，右手还攥着那半截断刃",
+          "reason": "两步距离、扩散的麻意和仅余断刃同时限制回应，形成明确而有取舍的下一回合。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "铁钩与铁链剧烈摇晃",
+          "reason": "打滑让攻击撞上屠宰用具并发出警响，地点物件有效参与。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "在等你先露出破绽",
+          "reason": "撞架暴露后，目标不盲扑而选择持剑等待，与战斗经验相符。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "重甲发出沉闷的铰链声",
+          "reason": "打滑、肋侧擦过、撞架、撞墙及对手抽剑都有实际动作。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "巷口远处，隐约传来巡逻队甲片碰撞的回声",
+          "reason": "近处对手等待、远处巡逻接近，可决定先应付哪一端或利用器架。"
+        },
+        "violations": []
+      },
+      "preference": "left",
+      "reason": "右篇让失足撞响铁架、队长等待破绽，过程成立；左篇则让同一次撞甲产生断刃与毒液反溅，并与两步距离的低剑逼近相连，多个后果互相约束，形成更有分量的交锋。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 2,
+          "evidence": "脚下一滑，整个人的冲势歪了半尺",
+          "reason": "主要给既定失败补上打滑原因，新增物件和关系有限。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "随即像头被惊动的野兽般暴喝转身",
+          "reason": "撞钢板震手后敌人拔剑逼近，攻击与反击直接衔接。"
+        },
+        "scene_development": {
+          "score": 2,
+          "evidence": "脚步已经压着你碾过来",
+          "reason": "刺击与目标反扑有动作，但转入正面对抗后即止，变化较少。"
+        },
+        "playability": {
+          "score": 2,
+          "evidence": "他反手抽出背后的重剑",
+          "reason": "有逼近的具体敌人可回应，但距离、身边掩护和武器状态较粗略。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "匕首在那一瞬脱手飞出",
+          "reason": "失衡造成掉匕和撞墙，武器落点与自身位置形成后续行动关系。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "他居高临下地看着你",
+          "reason": "撞甲反震导致脱手，撞墙跪倒使对手获得位置优势，其反应接续自然。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "右肩撞得砖缝里的泥灰簌簌往下掉",
+          "reason": "从瞄甲缝、滑倒、磕甲、脱手到跪地与对手握剑，过程具体。"
+        },
+        "playability": {
+          "score": 4,
+          "evidence": "你那柄淬毒匕首离你三步远",
+          "reason": "自身半跪、匕首三步外、敌人尚未拔剑，三者共同形成清楚的抢时机与应敌问题。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇以打滑、撞甲和暴喝拔剑迅速收尾；右篇把武器落点、跪地姿势和敌人尚未拔剑的时机同时交代，玩家可据此规划回应，优势在空间与时序。"
+    }
+  ]
+}

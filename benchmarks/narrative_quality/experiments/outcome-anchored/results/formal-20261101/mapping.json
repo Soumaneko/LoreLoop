@@ -1,0 +1,201 @@
+{
+  "seed": 42,
+  "pairs": [
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 1,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 2,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 3,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 1,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 2,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 3,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 1,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 2,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 3,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 1,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 2,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 3,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 1,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 2,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 3,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 1,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 2,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 3,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_07_partial_success_alchemy",
+      "repetition": 1,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_07_partial_success_alchemy",
+      "repetition": 2,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_07_partial_success_alchemy",
+      "repetition": 3,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 1,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 2,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 3,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_09_critical_failure_ambush",
+      "repetition": 1,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_09_critical_failure_ambush",
+      "repetition": 2,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_09_critical_failure_ambush",
+      "repetition": 3,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_10_composite_mixed_outcomes",
+      "repetition": 1,
+      "left": "A",
+      "right": "B"
+    },
+    {
+      "case_id": "case_10_composite_mixed_outcomes",
+      "repetition": 2,
+      "left": "B",
+      "right": "A"
+    },
+    {
+      "case_id": "case_10_composite_mixed_outcomes",
+      "repetition": 3,
+      "left": "A",
+      "right": "B"
+    }
+  ],
+  "excluded": [],
+  "recordings_hash": "6058bf850616d9ed065c1fd2529fe0014fe4502ba093cffd37ea2e924c79a1ae",
+  "judge_prompt_hash": "3dd1005d0173799e43e46d356f6b69be738574daa0b06d0275a7922db2c3aaaf",
+  "calibration_hash": "05b2966d3b7e3c968a564f38daaddcb22cb3c448ac21ad66e58ec9b3008b61f2",
+  "packet_hashes": {
+    "case_01_tavern_inquiry": "5666160562045bec2690bb6fa478b38f080bd62631938d9fee4e08e16893f0ad",
+    "case_02_rogue_recruitment": "83982776c8a149b88e64e86060743ad55e36ead6ae4c22ad6c73f0da6e263403",
+    "case_03_composite_infiltrate_and_disarm": "8ed8d6b4ed8ddd856228f32aefce30e8adfb376462f923fe67a93eb6b88f925a",
+    "case_04_secret_investigation": "bc60d4e742dff28a70007210021f46cf29a5babac79b22fb4e8b3fe2cdddce9e",
+    "case_05_faction_confrontation": "39cf07fe8063ebfe5272948b0afc7c15768fa1f74359453ad187bfe9e06d849b",
+    "case_06_dungeon_puzzle": "5a9996ad2a27f1379e1a29170f3ec7a48e58873a846a6e8fd059cacc7c6d71c0",
+    "case_07_partial_success_alchemy": "212ffb17ec473f38db1da21dbcc573bc5ac54abb6a8d59e03f4823e277027e8d",
+    "case_08_failed_action_recovery": "6ab9e6a0722de0b52c6ffb71e86e7cd94633b714120de0d12b1af27e81cd3240",
+    "case_09_critical_failure_ambush": "b42e370c5d0650e0fece83064024e107d743335f4b54ea6e7027d6367f1f1d0b",
+    "case_10_composite_mixed_outcomes": "9d97fccfeb70870c7c70aae297ddfe33fcde97a7d08d61658e295c70294417b8"
+  }
+}

@@ -1,0 +1,182 @@
+{
+  "case_id": "case_05_faction_confrontation",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "目光却在你摩托后座那只用麻绳捆着的工具箱上多停了一瞬",
+          "reason": "放行后仍关注载物，贪婪和多疑继续影响现场。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "枪口却已经斜了下去",
+          "reason": "香烟促成收受与缓和，放行以降枪、摆手和推路障落实。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "这章子看着倒像那么回事",
+          "reason": "验章、收烟、仍说假章常见再放行，权势表演与逐利并行。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "昨天有辆运水的车没回来",
+          "reason": "路障已开，能立即通过、问路况或回应工具箱上的目光。"
+        },
+        "violations": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "那纸盒虽皱，却没拆封",
+            "authority": "库存和玩家本轮递交的物品明确为半包过滤嘴香烟。",
+            "reason": "将已是半包的香烟描述为未拆封的原包装，数量状态不合，改包装描写即可。"
+          }
+        ]
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "注意力全落在了那层薄薄的锡纸上",
+          "reason": "队长急着拆烟导致警戒注意松动，是有作用的现场细节。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "他这才慢条斯理地翻开通行证",
+          "reason": "先被烟吸引再敷衍验章，贿赂与放行之间的因果具体。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "横杆吱呀一声被摇起",
+          "reason": "接烟、嗅烟、看证、骂人和摇杆完整演出放行。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "栏杆高高抬着",
+          "reason": "明确可通行且队长注意被烟占据，玩家可自行决定是否通过。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇在验章和放行间保留怀疑，并以路况提示和工具箱目光留下互动；右篇让烟占据注意力，形成清晰通行窗口。左篇包装状态有局部问题，但两者场景作用相当。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "回来的时候记得再带点‘诚意’",
+          "reason": "当前贿赂催生回程索贿，把一次放行接成持续关系。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "确认不是空壳，才慢条斯理地翻开通行证",
+          "reason": "优先验烟、草率验章、顾忌供水并放行，逐利原因有具体动作。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "队长往旁边让了半步",
+          "reason": "枪管挑证、收烟、还证、索贿与抬杆逐步发生。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "公路尽头灰蒙蒙一片，几道新鲜的车辙朝镇子的方向延伸过去",
+          "reason": "路已开且回程要求明确，能通过、记下要求或继续交涉。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "回来的时候给老子带两瓶烈酒",
+          "reason": "在已放行的前提下索取下次好处，扩展了哨卡关系。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "嘴角那点凶相松了松",
+          "reason": "嗅烟后缓和，证件与红蝎说辞支持随后抬杆，动机和反应连贯。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "把通行证啪地拍回你掌心",
+          "reason": "验烟、验章、还证、开杆与追加索贿均实际演出。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "你的摩托就停在几步外的路边",
+          "reason": "玩家仍停在卡口前，可取车通过或回应酒的要求。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇验烟是否空壳、借供水话题索回程好处，右篇嗅烟后放松并明确要两瓶烈酒；两者都以实际抬杆兑现成功，也保留对队长要求的回应空间。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "把通行证和香烟一并揣进怀里",
+          "reason": "队长将证件也扣下，改变可交涉的物品状态。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "再没看你一眼",
+          "reason": "验章收烟后开杆，随后转去抽烟，贿赂确实转移注意并促成通行。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "一个瘦得颧骨突出的士兵跑过来把横杆吱呀呀地抬了起来",
+          "reason": "命令落实为下属开杆，结果由人物动作演出。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "把通行证和香烟一并揣进怀里",
+          "reason": "通道已开，既可通过，也可针对通行证被扣要求返还。"
+        },
+        "violations": [
+          {
+            "severity": "local",
+            "category": "player_agency",
+            "evidence": "你压住腰侧猎枪的枪托",
+            "authority": "玩家本轮明确声明“我没有去碰腰间的猎枪”。",
+            "reason": "开头替玩家触碰枪托，与明确的避免碰枪策略相反；改这一动作即可。"
+          }
+        ]
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "镇上要是没这回事，下回你从这过，可就不是递根烟能了结的了",
+          "reason": "放行伴随未来核验威胁，保持队长多疑与逐利。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "这句话似乎比证件更管用",
+          "reason": "假章引起疑虑，供水说辞与香烟促成收证还证、示意开杆，互动有变化。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "队长的手指在印章上停了一停",
+          "reason": "印章异样、供水提醒、态度转折与抬杆串成具体交锋。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "镇上红蝎的人这两天火气大得很",
+          "reason": "留下可询问的镇上局势与回程威胁，但已代玩家穿过哨卡。"
+        },
+        "violations": [
+          {
+            "severity": "major",
+            "category": "player_agency",
+            "evidence": "你推着摩托车从两排枪口之间穿过",
+            "authority": "玩家授权出示证件、递烟并说服放行，没有声明随后通过哨卡和上车离开。",
+            "reason": "在获得通行后直接替玩家执行穿卡及上车，将是否立即通过的实质选择代为完成。"
+          }
+        ]
+      },
+      "preference": "left",
+      "reason": "右篇验章疑虑被供水理由推动，交锋更细，但随后直接代玩家推车过卡、上车，影响采用价值。左篇触枪同样违背授权，属于可局部修正的问题，且保留了要回证件或通过的选择。"
+    }
+  ]
+}

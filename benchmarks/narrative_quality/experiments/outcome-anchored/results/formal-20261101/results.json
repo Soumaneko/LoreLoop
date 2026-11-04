@@ -1,0 +1,962 @@
+[
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 13381.727353000315,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "c670b7cec2e45d828bdd968a3c5d50f2347a29d3418e616e23bc11fd96eb262a",
+    "scene_chars": 567
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 10763.191095997172,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "c670b7cec2e45d828bdd968a3c5d50f2347a29d3418e616e23bc11fd96eb262a",
+    "scene_chars": 655
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 11286.678859003587,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "c670b7cec2e45d828bdd968a3c5d50f2347a29d3418e616e23bc11fd96eb262a",
+    "scene_chars": 661
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 12513.184897994506,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "c670b7cec2e45d828bdd968a3c5d50f2347a29d3418e616e23bc11fd96eb262a",
+    "scene_chars": 445
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 12422.666393998952,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "c670b7cec2e45d828bdd968a3c5d50f2347a29d3418e616e23bc11fd96eb262a",
+    "scene_chars": 473
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 9535.184631997254,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "c670b7cec2e45d828bdd968a3c5d50f2347a29d3418e616e23bc11fd96eb262a",
+    "scene_chars": 482
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 8129.606964001141,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "8effe9d37285af5b90bef7c37856d71c4f201c60522904c8efccdf74986bf5fb",
+    "scene_chars": 487
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 11298.959635998472,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "8effe9d37285af5b90bef7c37856d71c4f201c60522904c8efccdf74986bf5fb",
+    "scene_chars": 518
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 11242.294529998617,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "8effe9d37285af5b90bef7c37856d71c4f201c60522904c8efccdf74986bf5fb",
+    "scene_chars": 595
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 9682.133579997753,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "8effe9d37285af5b90bef7c37856d71c4f201c60522904c8efccdf74986bf5fb",
+    "scene_chars": 514
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 9139.022879004187,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "8effe9d37285af5b90bef7c37856d71c4f201c60522904c8efccdf74986bf5fb",
+    "scene_chars": 611
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 10014.720202998433,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "8effe9d37285af5b90bef7c37856d71c4f201c60522904c8efccdf74986bf5fb",
+    "scene_chars": 403
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 12314.34613300371,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "91bf1ac4c1150f8b89b184f059e59d52d28d22f05c56e35cfa8e4baf0a62abe5",
+    "scene_chars": 548
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 9894.40351400117,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "91bf1ac4c1150f8b89b184f059e59d52d28d22f05c56e35cfa8e4baf0a62abe5",
+    "scene_chars": 459
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 11494.909184002609,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "91bf1ac4c1150f8b89b184f059e59d52d28d22f05c56e35cfa8e4baf0a62abe5",
+    "scene_chars": 524
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 10705.218916002195,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "91bf1ac4c1150f8b89b184f059e59d52d28d22f05c56e35cfa8e4baf0a62abe5",
+    "scene_chars": 576
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 12920.422151000821,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "91bf1ac4c1150f8b89b184f059e59d52d28d22f05c56e35cfa8e4baf0a62abe5",
+    "scene_chars": 677
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 9642.957350006327,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "91bf1ac4c1150f8b89b184f059e59d52d28d22f05c56e35cfa8e4baf0a62abe5",
+    "scene_chars": 475
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 10867.367377999472,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "37e84c8fab61f758edc588fdd6eff50ff3ca804353366a7440f64cab9b8c9929",
+    "scene_chars": 635
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 12328.879677996156,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "37e84c8fab61f758edc588fdd6eff50ff3ca804353366a7440f64cab9b8c9929",
+    "scene_chars": 553
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 13872.30781299877,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "37e84c8fab61f758edc588fdd6eff50ff3ca804353366a7440f64cab9b8c9929",
+    "scene_chars": 622
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 9570.627746004902,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "37e84c8fab61f758edc588fdd6eff50ff3ca804353366a7440f64cab9b8c9929",
+    "scene_chars": 530
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 11809.401790997072,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "37e84c8fab61f758edc588fdd6eff50ff3ca804353366a7440f64cab9b8c9929",
+    "scene_chars": 466
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 9080.675113000325,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "37e84c8fab61f758edc588fdd6eff50ff3ca804353366a7440f64cab9b8c9929",
+    "scene_chars": 524
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 10457.15321500029,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "1170f78e8e7a0032201b8f222d03f72f9d0bbc2680e3e20fa64df758961edeee",
+    "scene_chars": 630
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 11092.344744000002,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "1170f78e8e7a0032201b8f222d03f72f9d0bbc2680e3e20fa64df758961edeee",
+    "scene_chars": 408
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 10221.542706996843,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "1170f78e8e7a0032201b8f222d03f72f9d0bbc2680e3e20fa64df758961edeee",
+    "scene_chars": 668
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 10479.248706004,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "1170f78e8e7a0032201b8f222d03f72f9d0bbc2680e3e20fa64df758961edeee",
+    "scene_chars": 446
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 10200.221248000162,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "1170f78e8e7a0032201b8f222d03f72f9d0bbc2680e3e20fa64df758961edeee",
+    "scene_chars": 671
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 10687.11040099879,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "1170f78e8e7a0032201b8f222d03f72f9d0bbc2680e3e20fa64df758961edeee",
+    "scene_chars": 432
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 10914.863023004727,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "4edc6e46ca3ec91dbab3f137cfbc97ef183969542afa71074cc4caa22651fb0d",
+    "scene_chars": 498
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 9281.108789997234,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "4edc6e46ca3ec91dbab3f137cfbc97ef183969542afa71074cc4caa22651fb0d",
+    "scene_chars": 469
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 9102.062099998875,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "4edc6e46ca3ec91dbab3f137cfbc97ef183969542afa71074cc4caa22651fb0d",
+    "scene_chars": 468
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 11934.435082999698,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "4edc6e46ca3ec91dbab3f137cfbc97ef183969542afa71074cc4caa22651fb0d",
+    "scene_chars": 522
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 9390.101955999853,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "4edc6e46ca3ec91dbab3f137cfbc97ef183969542afa71074cc4caa22651fb0d",
+    "scene_chars": 349
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 11280.51818899985,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "4edc6e46ca3ec91dbab3f137cfbc97ef183969542afa71074cc4caa22651fb0d",
+    "scene_chars": 415
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 10504.641124003683,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "38a4c1d8b33b363522483287c14e2c78ebd1eede28465ff83267430d40c26f7a",
+    "scene_chars": 495
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 11260.468396998476,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "38a4c1d8b33b363522483287c14e2c78ebd1eede28465ff83267430d40c26f7a",
+    "scene_chars": 447
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 8785.407964001934,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "38a4c1d8b33b363522483287c14e2c78ebd1eede28465ff83267430d40c26f7a",
+    "scene_chars": 386
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 11837.08368200314,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "38a4c1d8b33b363522483287c14e2c78ebd1eede28465ff83267430d40c26f7a",
+    "scene_chars": 419
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 9745.578547997866,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "38a4c1d8b33b363522483287c14e2c78ebd1eede28465ff83267430d40c26f7a",
+    "scene_chars": 430
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 13121.647498002858,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "38a4c1d8b33b363522483287c14e2c78ebd1eede28465ff83267430d40c26f7a",
+    "scene_chars": 466
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 8753.24144699698,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "52a4ecc5bd265ffad58fe635834f32f582d0a2a2d3b5382d7a3e3cb898c22589",
+    "scene_chars": 404
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 12236.582011995779,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "52a4ecc5bd265ffad58fe635834f32f582d0a2a2d3b5382d7a3e3cb898c22589",
+    "scene_chars": 440
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 11738.119089000975,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "52a4ecc5bd265ffad58fe635834f32f582d0a2a2d3b5382d7a3e3cb898c22589",
+    "scene_chars": 409
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 9997.743835003348,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "52a4ecc5bd265ffad58fe635834f32f582d0a2a2d3b5382d7a3e3cb898c22589",
+    "scene_chars": 594
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 10328.198981995229,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "52a4ecc5bd265ffad58fe635834f32f582d0a2a2d3b5382d7a3e3cb898c22589",
+    "scene_chars": 481
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 10830.929981995723,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "52a4ecc5bd265ffad58fe635834f32f582d0a2a2d3b5382d7a3e3cb898c22589",
+    "scene_chars": 399
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 10717.381652997574,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "65397d72e1328e65e5981624106b0182827017e302a2508b8f6e8e7ce4f91935",
+    "scene_chars": 375
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 9835.026822001964,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "65397d72e1328e65e5981624106b0182827017e302a2508b8f6e8e7ce4f91935",
+    "scene_chars": 385
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 11883.750549000979,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "65397d72e1328e65e5981624106b0182827017e302a2508b8f6e8e7ce4f91935",
+    "scene_chars": 419
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 9960.554031997162,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "65397d72e1328e65e5981624106b0182827017e302a2508b8f6e8e7ce4f91935",
+    "scene_chars": 388
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 11880.143530004716,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "65397d72e1328e65e5981624106b0182827017e302a2508b8f6e8e7ce4f91935",
+    "scene_chars": 473
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 7711.272180000378,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "65397d72e1328e65e5981624106b0182827017e302a2508b8f6e8e7ce4f91935",
+    "scene_chars": 267
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 12256.06847400195,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "b05031188b2cfa1ce6ab068ad4978830ab78be62248e3259237dad60553f5571",
+    "scene_chars": 500
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 9225.164670002414,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "b05031188b2cfa1ce6ab068ad4978830ab78be62248e3259237dad60553f5571",
+    "scene_chars": 426
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 11591.93456399953,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "b05031188b2cfa1ce6ab068ad4978830ab78be62248e3259237dad60553f5571",
+    "scene_chars": 479
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 8693.93591699918,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "b05031188b2cfa1ce6ab068ad4978830ab78be62248e3259237dad60553f5571",
+    "scene_chars": 351
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 7859.346903002006,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "b05031188b2cfa1ce6ab068ad4978830ab78be62248e3259237dad60553f5571",
+    "scene_chars": 393
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 12015.288280999812,
+    "token_usage": {
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "cache_creation_tokens": null
+    },
+    "error": null,
+    "input_hash": "b05031188b2cfa1ce6ab068ad4978830ab78be62248e3259237dad60553f5571",
+    "scene_chars": 425
+  }
+]

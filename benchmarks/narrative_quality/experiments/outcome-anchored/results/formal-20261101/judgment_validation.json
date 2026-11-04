@@ -1,0 +1,38 @@
+{
+  "files": 10,
+  "pairs": 30,
+  "schema_and_evidence_errors": [],
+  "major_violations": [
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 3,
+      "side": "right",
+      "severity": "major",
+      "category": "player_agency",
+      "evidence": "你推着摩托车从两排枪口之间穿过",
+      "authority": "玩家授权出示证件、递烟并说服放行，没有声明随后通过哨卡和上车离开。",
+      "reason": "在获得通行后直接替玩家执行穿卡及上车，将是否立即通过的实质选择代为完成。"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 1,
+      "side": "left",
+      "severity": "major",
+      "category": "outcome",
+      "evidence": "你中和掉的只是其中一环",
+      "authority": "act_01 的“调动水系奥术魔力注入潮汐符文中和封印回路”判定为 success。",
+      "reason": "把中和回路的成功改为仅处理一个节点，门仍堵塞且其他节点加强，需继续完成同一任务。"
+    },
+    {
+      "case_id": "case_06_dungeon_puzzle",
+      "repetition": 1,
+      "side": "right",
+      "severity": "major",
+      "category": "outcome",
+      "evidence": "中和有效，却远未到彻底瓦解的地步。",
+      "authority": "act_01 的目标是中和封印回路，结果明确为 success，而非 partial_success。",
+      "reason": "用局部有效和脆弱僵持替代已判定成功的中和，使原任务悬而未决。"
+    }
+  ],
+  "local_violation_count": 7
+}

@@ -1,0 +1,108 @@
+{
+  "case_id": "case_06_dungeon_puzzle",
+  "category": "dungeon_puzzle",
+  "title": "黑檀堡遗迹破解符文石门",
+  "description": "检验无 NPC 环境机关互动时，机关部分破解后呈现出的多重环境反馈与探索选择。",
+  "turn_index": 3,
+  "user_input": "我凝神调动体内的水系奥术魔力，将柔和的蓝光缓缓注入石门左侧那枚代表‘潮汐’的古老符文，尝试以相克属性中和封印回路。",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「费伦大陆」，风格为：中世纪正统奇幻 / D&D\n能力体系为：奥术学派、神术信仰与远古遗迹机关"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角亚瑟，男性。游历四方的青年学者兼三级法师，专精防护与塑能系符文学。"
+      },
+      {
+        "id": "c3",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "通用货币为金币。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_006",
+      "location": "黑檀堡地下二层·石门大厅",
+      "participants": [
+        {
+          "name": "亚瑟",
+          "attitude_to_player": null
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "深夜"
+    },
+    "player": {
+      "name": "亚瑟",
+      "visible_status": "手持法杖与提灯的法师"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "附魔黄铜提灯",
+          "quantity": 1
+        },
+        {
+          "name": "学者法杖",
+          "quantity": 1
+        }
+      ],
+      "money": 15,
+      "money_unit": "金币",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "亚瑟"
+      ],
+      "action_type": "cast_or_use_power",
+      "action_text": "调动水系奥术魔力注入潮汐符文中和封印回路",
+      "resolution_source": "automatic",
+      "outcome_band": "success",
+      "risk_level": "medium"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "黑檀堡遗迹石门解密",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "黑檀堡是古代火神祭司修筑的地下要塞，门上的防卫法阵以炽热火流为主体。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [],
+  "director_stage": null,
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_006",
+    "turn_index": 2,
+    "user_input": "观察石门结构",
+    "scene_text": "提灯的光晕驱散了浓厚的阴霾。巨大的黑曜石大门上刻满繁复的元素符文，其中火符文泛着危险的暗红微光，严密锁闭着通路。",
+    "closing_prompt": "石门上的符文静静流转，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

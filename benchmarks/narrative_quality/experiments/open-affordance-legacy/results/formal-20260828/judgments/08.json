@@ -1,0 +1,49 @@
+{
+    "case_id": "case_08_moral_dilemma",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "手里的抗生素仿佛烫得灼手",
+            "right_evidence": "你要是真能拿到钥匙……能带上我吗？",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的黄昏、嘶吼与抗生素灼手感有效强化了道德余震，但结尾直接收束成“上二楼/徒步离开”两选一，行动空间明显变窄。Right在完整兑现皮卡与钥匙线索后，让伤者主动提出同行请求，把车辆线索进一步变成人际负担、救援风险和资源权衡；同时加入“前天亲眼看着它开进来”等可利用细节，使NPC更像有经历与诉求的幸存者，也更容易诱发潜行、谈条件、先侦察、带人或拒绝等不同策略。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "tie",
+            "left_evidence": "缠到第三圈时松了，又拆开重缠",
+            "right_evidence": "那里黑洞洞的，什么也看不清",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left对伤者包扎失败后重缠、听到外界嘶吼便加快动作的描写，让NPC的疼痛、恐惧和求生本能通过行为自行显现，人物质感和现场压迫感更强；末尾“不知是木板还是脚步”的声响也保留了适度未知。Right的楼梯口视觉和“拖拽重物”形成更直接的下一步诱因，而且最终问“你会怎么做”比Left的“你会冒险上去拿吗”更开放，因此在继续欲和行动容纳度上更优。两篇对皮卡、油量、二楼感染店长等可操作线索的具体程度基本相当。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "正在黑暗降临前躁动不安",
+            "right_evidence": "我在这躲了两天，摸清了点情况",
+            "left_violations": [],
+            "right_violations": [
+                "将既定为“在已感染店长口袋里”的车钥匙改写为“挂在他腰带上”，与Turn Resolution的明确钥匙位置冲突。"
+            ],
+            "reason": "Left把外围变异丧尸在入夜前躁动这一既定压力准确嵌入场景，并以沉重的楼板声和开放式“你会怎么做”留下侦察、诱敌、潜行、撤退等多种行动入口，整体张力与游戏性更稳。Right让伤者说明自己“躲了两天，摸清了点情况”，明显增强了NPC作为独立求生者的经历感，也提供办公室、腰带等更细颗粒线索；但其中“钥匙挂在腰带上”直接冲突于判定明确的“钥匙在店长口袋里”，因此损害了事实一致性与总体可信度。"
+        }
+    ]
+}

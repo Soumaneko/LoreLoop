@@ -1,0 +1,20 @@
+{
+  "case_id": "case_14_spontaneous_constable",
+  "file": "input.json",
+  "kind": "adapted_play_trace",
+  "source": {
+    "turn_index": 6,
+    "trace_id": "acb80f2f-ad79-4eea-8807-46b9a119fa22",
+    "director_call_id": "5266ec31b8844baab054df4be08faeac",
+    "composer_call_id": "313c273b65c3478ca363002e91602adf",
+    "original_fixture_sha256": "52d3106e05c3bdddc4fd9e682858586088b9c045f466166e7b12f927567ab490"
+  },
+  "changes": [
+    "Non-explicit adaptation; full second-person previous scene retained; action wording/types and Director guidance aligned; original outcome bands retained as fixture parameters, not a replayed judgment.",
+    "Normalized innkeeper to 苏婉娘 and inn name to 悦来客栈 across profiles, stage materials and engaged-event resources."
+  ],
+  "previous_scene_chars": {
+    "source": 789,
+    "curated": 795
+  }
+}

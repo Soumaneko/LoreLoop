@@ -1,0 +1,325 @@
+{
+  "case_id": "case_11_tavern_entry",
+  "category": "introduce_npc_and_present_event",
+  "title": "客栈交谈与赵七入场",
+  "description": "历史 T1 导演输出经当前确定性管线组装；不含后续改写或确认结果。",
+  "turn_index": 1,
+  "user_input": "环视一下客栈，查看是否有合欢之眼有反应的女性，尝试上前勾引搭讪",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "core_world_identity",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "当前世界名为「天元大陆」，世界风格为：武侠\n能力体系为：低超自然"
+      },
+      {
+        "id": "core_player_identity",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角是柳欢，男性。\n人物介绍：秘密掌握早已失传的合欢派秘术的独行剑客，英俊潇洒从小流连于女人之间，立志睡遍大陆上的众多美女"
+      },
+      {
+        "id": "core_story_expectation",
+        "kind": "narrative_preference",
+        "strength": "strong_preference",
+        "source": "player",
+        "content": "玩家期望的长期故事体验：在冒险中逐步邂逅一同合欢的女性，睡遍各色各样的女性，并逐步提升"
+      },
+      {
+        "id": "core_failure_severity",
+        "kind": "narrative_preference",
+        "strength": "strong_preference",
+        "source": "player",
+        "content": "失败后果尺度：宽容"
+      },
+      {
+        "id": "core_player_abilities",
+        "kind": "ability_rule",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角的特殊能力：\n- 合欢之眼：合欢派失传秘术，能看出某个女性是否愿意与自己合欢\n- 合欢剑法：合欢派失传秘术，剑招阴柔，随着合欢对象的增加提升剑招威力\n- 合欢房中术：合欢派失传秘术，能够大大加强床上的能力"
+      },
+      {
+        "id": "core_currency_system",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "默认货币单位：银两"
+      },
+      {
+        "id": "core_public_power_baseline",
+        "kind": "ability_rule",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "公开力量来源：内力修炼\n社会普及率：少数人掌握\n学习难度：困难\n公开限制：内力无法突破人体经脉承受的极限，强行超越必致经脉俱损。"
+      },
+      {
+        "id": "core_peoples_and_beings",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界中的主要存在主体：人类"
+      },
+      {
+        "id": "core_major_world_conflicts",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "长期塑造世界的主要冲突：\n- 正道名门与邪道散修之间长期对立，彼此争夺武林话语权\n- 各派武学传承封闭，寒门武者难获上乘功法"
+      },
+      {
+        "id": "core_dominant_powers",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "能够影响普通人命运的主导势力：正道盟、邪道散修、朝廷"
+      },
+      {
+        "id": "core_civilization_baseline",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "文明与技术基准：以农耕与手工业为主，城镇间靠驿道与马车往来，江湖门派与官府并存于同一片土地。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_001",
+      "location": "临江镇·悦来客栈",
+      "participants": [
+        {
+          "name": "柳欢",
+          "attitude_to_player": null
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "清晨"
+    },
+    "player": {
+      "name": "柳欢",
+      "visible_status": "男性"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "长剑",
+          "quantity": 1
+        },
+        {
+          "name": "换洗衣物",
+          "quantity": 1
+        },
+        {
+          "name": "干粮",
+          "quantity": 2
+        },
+        {
+          "name": "水囊",
+          "quantity": 1
+        }
+      ],
+      "money": 12,
+      "money_unit": "银两",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "A1",
+      "sequence": 1,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "observe",
+      "action_text": "环视一下客栈",
+      "resolution_source": "automatic",
+      "dice": null,
+      "roll_value": null,
+      "raw_value": null,
+      "dice_sides": null,
+      "outcome_band": "success",
+      "risk_level": "low"
+    },
+    {
+      "action_id": "A2",
+      "sequence": 2,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "cast_or_use_power",
+      "action_text": "查看是否有合欢之眼有反应的女性",
+      "resolution_source": "roll",
+      "dice": "3d20kh",
+      "roll_value": 16,
+      "raw_value": 14,
+      "dice_sides": 20,
+      "outcome_band": "success",
+      "risk_level": "low"
+    },
+    {
+      "action_id": "A3",
+      "sequence": 3,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "speak",
+      "action_text": "尝试上前勾引搭讪",
+      "resolution_source": "roll",
+      "dice": "3d20kh",
+      "roll_value": 17,
+      "raw_value": 16,
+      "dice_sides": 20,
+      "outcome_band": "success",
+      "risk_level": "medium"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "客栈交谈与赵七入场",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "柳欢已知(本人经历): 柳欢已在临江镇停留两日，尚未决定下一站去向，盘缠尚可支撑数日。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f2",
+        "fact": "柳欢已知(亲眼观察): 悦来客栈前堂此刻有行商、两名佩刀汉子、说书人和店小二等客人。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f3",
+        "fact": "柳欢已知(本人经历): 柳欢身怀合欢之眼，能看出女性是否愿意与自己合欢；此前在堂中扫视时已察觉某些神色与气息显出别样意味。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f4",
+        "fact": "柳欢已知(亲眼观察): 柳欢随身携带长剑、换洗衣物、两包干粮、水囊及十二两银子。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f5",
+        "fact": "创作者已知(既有剧情): 上下文未显示客栈中具体有哪些女性客人及其身份。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [
+    {
+      "name": "赵七",
+      "aliases": [],
+      "role": "黑水泽散修，常年往来于沼地旱路与周边州县之间，替聚落接应逃亡者、押运私盐与传递消息，在泽中算得上有几分名号的中年武者。",
+      "appearance": "四十上下的中年男子，身量精瘦，皮肤被沼地的日头和湿气磨成暗褐色；左眉一道旧疤斜到眼角，右手常年戴一只磨得发亮的皮护腕，用来遮住腕上押当留下的烙印；惯穿灰褐短打外罩一件半旧的行商长衫，腰间挂着一只装盐样的旧皮囊，眼神沉，笑时也只动嘴角。",
+      "personality_trait": "凡事先算清退路与得失，谈得拢就当朋友，谈不拢便连夜换道走人，绝不为面子或义气把自己搭进去。",
+      "known_abilities": [
+        {
+          "name": "鬼手擒拿",
+          "description": "近身短打的路数，出手极快，专攻对方持兵刃的手腕与咽喉，适合在客栈前堂、窄巷这类狭小地方抢先制人；招式狠但不耐久战，一旦被拉开距离便失去优势。"
+        },
+        {
+          "name": "沼地旱路识途",
+          "description": "熟悉三省交界沼地枯水季的隐秘旱路与暗桩标记，能带人从州县方向绕行进入泽地深处；需要本地参照物与季节配合，涨水期或陌生地段便无从施展。"
+        },
+        {
+          "name": "黑水暗语",
+          "description": "掌握黑水泽旧暗语与信物押当的规矩，能在集市、客栈等人多之处不露痕迹地辨认同伙、传递消息；暗语只通泽中旧人，对泽外之人毫无用处，且近年已有泄露之虞。"
+        },
+        {
+          "name": "私盐账目眼",
+          "description": "多年经手私盐与押货，能凭一页残账、几个数目快速看出货源来路与银钱走向；只限于盐货与实物交易一类，对正经商号的票据反而不熟。"
+        }
+      ],
+      "faction": "黑水泽",
+      "last_known_location": null,
+      "attitude_to_player": null,
+      "last_scene_summary": null,
+      "last_scene_turn": null,
+      "disclosure_level": null,
+      "core_motivation": null,
+      "hidden_secret": null,
+      "conflict_style": "先掂量对方手里有什么、自己又要付出什么，能不动手就不动手，用话探底、用旧交情换方便；一旦判定对方会威胁到他的活路或那笔私留银两的秘密，便不再留余地，抢在对方动手之前出手，事后还要把痕迹抹干净。",
+      "social_style": "对外一副行商模样的和气，说话慢、爱绕弯子，用暗语与旧交情试探人；对泽中同伴讲义气也讲实利，帮了忙必要记下人情账，从不白出力，也不轻易把底牌亮给任何人。",
+      "director_notes": null,
+      "source_director_npc_id": null,
+      "source_setting_ids": [],
+      "created_turn": null,
+      "introduced_turn": null
+    }
+  ],
+  "director_stage": {
+    "reasoning": "玩家在客栈前堂环视并寻找可搭讪的女性，需要立即提供可互动的女性 NPC。resources.drafts 中有苏婉娘（客栈女掌柜），身份与场景完全匹配，优先起用草稿并以 face_to_face 披露，让编剧能写出她的外貌、性格与社交风格。同时，赵七的 hidden 事件「客栈接头」已到应介入时机，用 present_event 呈现 hook_1（赵七进店落座），把事件方引入前堂，制造与主角同处一室的变数，但不预设主角被发现或失败。",
+    "materials": [
+      {
+        "kind": "npc",
+        "resource_id": "director_npc_c7cae4ddd23e",
+        "guidance": "苏婉娘作为悦来客栈的女掌柜在前堂柜台边登场，可让她主动招呼客人或与店小二搭话，自然进入柳欢的视野。重点呈现她懒洋洋嗑瓜子、半眯眼打量生客的社交风格与丰腴外貌，让她成为柳欢环视时注意到的女性之一；是否上前搭讪、她如何回应，交由下游根据骰子裁决，不要预设她必然接受或拒绝。",
+        "payload": {
+          "source": "director_npc",
+          "draft_id": "director_npc_c7cae4ddd23e",
+          "conflict_style": "先赔笑打圆场，把争执往酒菜和银钱上引，实在压不住才搬出巡检司或镖局的人情来镇场；从不正面动手，事后却会把账算得清清楚楚。",
+          "social_style": "对谁都懒洋洋地搭话，靠一壶茶、一句闲话把客人的底细摸个七七八八；对熟客热络却不亲昵，对生客客气里带着打量，极少主动透露自己的事。",
+          "role": "临江镇「悦来客栈」的老板娘兼女掌柜",
+          "personality_trait": "总靠在柜台边嗑瓜子，看似不上心，却把每张桌坐的是谁、谁欠房钱记得分明。",
+          "known_abilities": [
+            {
+              "name": "客栈人脉",
+              "description": "在临江镇经营多年，与驿馆驿丞、镖局分号、码头脚行都有交情，能打听到驿道上往来的商队消息与镇上风声；但涉及官府隐秘或正道盟内部的事，她探不到也不敢深问。"
+            },
+            {
+              "name": "察言观色",
+              "description": "常年迎客练出的眼力，能从客人的衣着、口音与点菜方式判断其来历与荷包厚薄，据此决定房钱与态度；遇上刻意伪装的高手则容易看走眼。"
+            },
+            {
+              "name": "粗浅拳脚",
+              "description": "早年跑江湖时学过几手防身的拳脚，能对付一两个醉汉泼皮，遇到真正练家子只能拖延几步喊人；内力修为极浅，从不在人前显露。"
+            },
+            {
+              "name": "算账管库",
+              "description": "一手账目清楚利落，客栈的粮菜酒肉、房钱赊欠全记在脑子里，能迅速盘出存货与银钱去向；但只限小本经营，大宗货栈的账她做不来。"
+            }
+          ],
+          "appearance": "三十出头的妇人，身段丰腴，常穿一件洗得发软的靛青布衫，袖口挽到小臂；头发松松挽个髻，斜插一根磨旧的银簪；说话时爱半眯着眼，嘴角总像含着笑意，右手无名指上有一道浅浅的旧疤。",
+          "name": "苏婉娘",
+          "view_mode": "face_to_face"
+        }
+      },
+      {
+        "kind": "event",
+        "resource_id": "director_event_723c33334cb1",
+        "guidance": "以 hook_1 呈现：一名风尘仆仆的中年汉子（赵七）背着旧布包走进客栈前堂，目光扫过堂中一圈后拣靠后门的桌子坐下，要一壶最便宜的茶。让柳欢在环视时自然看到这一幕，作为堂中新增的动静；赵七此时只是寻常落座，尚未与任何人接头，不要提前暴露其身份或意图，也不要让柳欢必然察觉异常。",
+        "payload": {
+          "event_id": "director_event_723c33334cb1",
+          "title": "客栈接头",
+          "stage": "hidden",
+          "hook": {
+            "hook_id": "hook_1",
+            "kind": "visual",
+            "content": "一名风尘仆仆的中年汉子背着旧布包走进客栈前堂，目光在堂中扫过一圈后，拣了靠后门的一张桌子坐下，要了一壶最便宜的茶。"
+          },
+          "actors": [
+            "赵七"
+          ]
+        }
+      }
+    ]
+  },
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_001",
+    "turn_index": 0,
+    "user_input": "",
+    "scene_text": "晨光从悦来客栈前堂的木窗格子里斜斜照进来，落在你手边那壶还温着的酒上。你叫柳欢，此刻正独自坐在靠窗的一张方桌旁，脚边搁着随身的行囊——里头有一柄长剑、一套换洗衣物、两包干粮和一只水囊，腰间钱袋里还剩十二两银子。\n\n堂内已经坐了几桌人。几个行商围在角落低声核对着货单，两名佩刀的汉子占着门边那张桌，吃面吃得呼噜作响。说书人还没开嗓，正慢条斯理地摆弄他的醒木。店小二端着热气腾腾的蒸笼从你身旁经过，顺口招呼了一声客官慢用。\n\n你在这临江镇已经停了两日。驿道从镇口穿过，南来北往的车马把青石板磨得发亮，可你至今没想好下一站往哪走。盘缠还够撑上几日，酒也还温着，窗外的街市正一点点热闹起来。\n\n你端起酒杯，目光不经意扫过堂中——合欢之眼悄然一动，某些细微的神色与气息便在你眼底显出别样的意味来。",
+    "closing_prompt": "",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

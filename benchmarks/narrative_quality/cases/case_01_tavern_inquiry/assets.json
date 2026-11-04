@@ -1,0 +1,68 @@
+{
+  "event": {
+    "event_id": "benchmark_event_south_bank_auction",
+    "title": "南岸旧盐仓私拍",
+    "stage": "hidden",
+    "subject": "赤砂帮借二阶雷纹豹精血的私拍消息，将有购买能力的修士引到南岸旧盐仓。",
+    "intent": "让携带灵石赴会的修士集中进入旧盐仓，封住出口后一起扣下，搜走财物。",
+    "method": "派中间人向孙掌柜展示一小瓶精血，许诺引荐酬金，请他私下向有需求的客人传播。以雷纹铜签验人入场，仓内暗伏帮众，待来客聚齐再封门动手。",
+    "macro_intent": "赤砂帮借私拍洗劫落雁渡的外来灵材买家，攫取财物并震慑暗市同行。",
+    "conception": "赤砂帮想夺取外来修士携带的灵石与灵材，以一瓶确有其物的二阶雷纹豹精血取信，伪装成小范围灵材私拍。孙掌柜只知道有人托他向合适买家传话，以为这是普通暗市生意，并不知道诱捕安排。",
+    "hook_pool": [
+      {
+        "hook_id": "hook_private_auction",
+        "kind": "rumor",
+        "content": "孙掌柜受卖方之托私下传话：今夜二更，落雁渡南岸旧盐仓有场小范围灵材私拍，卖方称有一瓶二阶雷纹豹精血，凭雷纹铜签入场；有意的买家可经他引荐取签。",
+        "trigger_anchors": [
+          "孙掌柜",
+          "二阶雷纹豹精血",
+          "灵材暗市"
+        ],
+        "consumed": false,
+        "consumed_turn": null
+      }
+    ],
+    "actors": [
+      {
+        "name": "孙掌柜",
+        "ref": {
+          "kind": "npc",
+          "resource_id": "benchmark_npc_sun"
+        }
+      }
+    ],
+    "source_setting_ids": [],
+    "source_setting_fact_ids": [],
+    "world_impact": {
+      "description": "若无人干预，赤砂帮在私拍时封住盐仓，将赴会修士一并扣下搜走财物；孙掌柜随后才发现自己替劫掠者招揽了买家。"
+    },
+    "deadline_clock": {
+      "day": 1,
+      "phase": "深夜"
+    },
+    "final_world_impact": null,
+    "resolved_reason": null,
+    "resolved_turn": null,
+    "created_turn": 1,
+    "updated_turn": null,
+    "created_at": "",
+    "updated_at": ""
+  },
+  "director_decision": {
+    "reasoning": "玩家正向孙掌柜付费打听雷纹豹精血，私拍口信与其需求直接相关，选择该事件 Hook，由孙掌柜在交谈中传递。",
+    "requests": [
+      {
+        "request_id": "present_private_auction",
+        "skill": "present_event",
+        "arguments": {
+          "event_id": "benchmark_event_south_bank_auction",
+          "hook_id": "hook_private_auction",
+          "actors": [
+            "孙掌柜"
+          ]
+        },
+        "guidance": "孙掌柜收到两块灵石后，把受托传播的私拍口信作为雷纹豹精血的消息告诉萧欢。沿用他认钱不认人、说话留半句的习惯，自然谈到拍品、时地和取签办法。他把卖方说辞当真，表现为做一笔情报与引荐生意。"
+      }
+    ]
+  }
+}

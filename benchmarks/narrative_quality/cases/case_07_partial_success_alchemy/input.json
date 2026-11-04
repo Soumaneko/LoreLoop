@@ -1,0 +1,101 @@
+{
+  "case_id": "case_07_partial_success_alchemy",
+  "category": "partial_success_compromise",
+  "title": "地火丹房强炼筑基丹的折衷代价",
+  "description": "检验 partial_success 档位下，正文是否严格给出成中有瑕（目的达成但伴随明确代价/副作用），严禁滑坡为纯成功或纯失败。",
+  "turn_index": 3,
+  "user_input": "丹炉火候将尽，我不惜损耗神识全力压制狂暴的紫阳真火，强行将药液凝聚成丹！",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「天元仙域」，风格为：修真炼丹\n能力体系为：地火引流、神识控丹与灵药生克"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角陆羽，男性。炼丹散修，急需成丹突破瓶颈。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_007",
+      "location": "落霞谷·地火地脉炼丹室",
+      "participants": [
+        {
+          "name": "陆羽",
+          "attitude_to_player": null
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 2,
+      "phase": "下午"
+    },
+    "player": {
+      "name": "陆羽",
+      "visible_status": "满头大汗、真元激荡的炼丹师"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "青铜双龙丹炉",
+          "quantity": 1
+        }
+      ],
+      "money": 10,
+      "money_unit": "下品灵石",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "陆羽"
+      ],
+      "action_type": "cast_or_use_power",
+      "action_text": "全力压制狂暴的紫阳真火，强行将药液凝聚成丹",
+      "resolution_source": "roll",
+      "dice": "1d20",
+      "dice_sides": 20,
+      "roll_value": 11,
+      "raw_value": 11,
+      "outcome_band": "partial_success",
+      "risk_level": "high"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "地火室强行凝丹",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "地火脉近期波动剧烈，若再受重击可能引发地火喷涌。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [],
+  "director_stage": null,
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_007",
+    "turn_index": 2,
+    "user_input": "稳住火门调和药力",
+    "scene_text": "丹炉内药香四溢，但地火突然暴涨，青铜炉身剧烈震颤，药液在沸腾中几乎要化为焦炭！",
+    "closing_prompt": "真火狂暴欲炸，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -17,7 +19,8 @@ if str(ROOT) not in sys.path:
 
 from app.core.ids import new_hex_id
 from app.core.llm import LLMGateway
-from app.core.llm.config import create_gateway
+from app.core.llm.config import GatewayConfig, SharedGatewayFactory, create_gateway
+from app.core.llm.prompts import PromptLoader
 from app.domain.context_facts.schemas import ContextFactSet
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
@@ -33,9 +36,9 @@ from app.domain.short_term_memory.schemas import ShortTermScene
 from app.domain.action_judgment.schemas import ActionJudgment
 
 
-DEFAULT_FIXTURES = ROOT / "benchmarks" / "narrative_quality" / "fixtures.json"
+DEFAULT_FIXTURES = ROOT / "benchmarks" / "narrative_quality" / "cases" / "standard.json"
 DEFAULT_RECORDINGS = (
-    ROOT / "benchmarks" / "narrative_quality" / "recordings" / "current.json"
+    ROOT / "benchmarks" / "narrative_quality" / "local" / "contract-check" / "current.json"
 )
 
 
@@ -73,7 +76,86 @@ class CaseRecording(BaseModel):
 
 
 def load_fixtures(path: Path = DEFAULT_FIXTURES) -> list[NarrativeTestCase]:
-    return TypeAdapter(list[NarrativeTestCase]).validate_json(path.read_text())
+    data = json.loads(path.read_text())
+    adapter = TypeAdapter(list[NarrativeTestCase])
+    if isinstance(data, dict) and "cases" in data:
+        cases = []
+        for reference in data["cases"]:
+            source = json.loads((path.parent / reference["path"]).read_text())
+            candidates = adapter.validate_python(source if isinstance(source, list) else [source])
+            selected = [case for case in candidates if case.case_id == reference["case_id"]]
+            if len(selected) != 1:
+                raise ValueError(f"suite reference must select one case: {reference!r}")
+            cases.extend(selected)
+    else:
+        cases = adapter.validate_python(data if isinstance(data, list) else [data])
+    ids = [case.case_id for case in cases]
+    if len(ids) != len(set(ids)):
+        raise ValueError("fixture case_ids must be unique")
+    return cases
+
+
+def record_run(
+    fixtures: list[NarrativeTestCase], config: GatewayConfig, run_dir: Path,
+    *, prompts_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    # Each directory is an immutable run; a repeated path must never reuse stale output.
+    run_dir.mkdir(parents=True, exist_ok=False)
+    snapshot = run_dir / "prompts"
+    shutil.copytree(prompts_dir or PromptLoader().prompts_dir, snapshot)
+    fixture_text = json.dumps([case.model_dump(mode="json") for case in fixtures], ensure_ascii=False, indent=2)
+    (run_dir / "fixtures.json").write_text(fixture_text)
+    manifest = {
+        "case_ids": [case.case_id for case in fixtures],
+        "model": config.model, "protocol": config.protocol,
+        "thinking": config.thinking, "reasoning_effort": config.reasoning_effort,
+        "temperature": 0.8, "timeout_seconds": config.timeout,
+        "request_profile": config.request_profile, "max_output_tokens": None,
+        "fixtures_sha256": hashlib.sha256(fixture_text.encode()).hexdigest(),
+        "prompt_sha256": {str(p.relative_to(snapshot)): hashlib.sha256(p.read_bytes()).hexdigest()
+                          for p in sorted(snapshot.rglob("*")) if p.is_file()},
+        "code_sha256": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+                        for p in [Path(__file__).resolve(),
+                                  ROOT / "app/domain/narrative_composer/runner.py",
+                                  ROOT / "app/domain/narrative_composer/schemas.py",
+                                  ROOT / "app/domain/scene_writer/schemas.py"]},
+    }
+    (run_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    records = []
+    for case in fixtures:
+        folder = run_dir / case.case_id
+        folder.mkdir()
+        gateway = SharedGatewayFactory(
+            config=config, prompts_dir=str(snapshot), log_path=str(folder / "traces.jsonl"),
+        )()
+        gateway.set_trace_context(turn_index=case.turn_index, session_type="narrative_benchmark")
+        context = NarrativeComposerContext.model_validate(case.model_dump(mode="json"))
+        started = time.perf_counter()
+        print(f"{case.case_id}: started", flush=True)
+        record: dict[str, Any] = {"case_id": case.case_id}
+        try:
+            result = run_narrative_composition(
+                gateway, context=context, recent_scene=case.recent_scene,
+                turn_index=case.turn_index, trace_id=new_hex_id(prefix="bench_narrative", length=12),
+            )
+            output = result.model_dump(mode="json")
+            (folder / "composition.json").write_text(json.dumps(output, ensure_ascii=False, indent=2))
+            (folder / "scene.md").write_text(result.scene_text)
+            (folder / "scene-result.json").write_text(result.to_scene_result().model_dump_json(indent=2))
+            record.update(success=True, scene_chars=len(result.scene_text),
+                          npc_usages=output["npc_usages"],
+                          invariant_check=check_invariants(case, output).model_dump())
+        except Exception as exc:
+            record.update(success=False, error=str(exc))
+        trace = folder / "traces.jsonl"
+        attempts = [json.loads(line) for line in trace.read_text().splitlines()] if trace.exists() else []
+        record.update(latency_ms=round((time.perf_counter() - started) * 1000, 2),
+                      attempts=len(attempts), errors=[c["error"] for c in attempts if c.get("error")])
+        records.append(record)
+        (folder / "result.json").write_text(json.dumps(record, ensure_ascii=False, indent=2))
+        (run_dir / "results.json").write_text(json.dumps(records, ensure_ascii=False, indent=2))
+        print(json.dumps(record, ensure_ascii=False), flush=True)
+    return records
 
 
 def check_invariants(
@@ -149,10 +231,34 @@ def main() -> None:
     parser.add_argument("--recordings", type=Path, default=DEFAULT_RECORDINGS)
     parser.add_argument("--model")
     parser.add_argument("--only")
+    parser.add_argument("--run-dir", type=Path, help="Create a new run directory; existing paths are rejected")
+    parser.add_argument("--service", help="Saved model service config ID or preset ID, used with --run-dir")
     args = parser.parse_args()
 
     fixtures = load_fixtures(args.fixtures)
     if args.record:
+        if args.run_dir:
+            if args.service:
+                from app.runtime.model_config import ModelConfigStore
+
+                services = [c for c in ModelConfigStore().load_set().services
+                            if args.service in {c.config_id, c.preset_id}]
+                if len(services) != 1:
+                    parser.error("--service must identify exactly one saved model service")
+                config = services[0].gateway_config()
+                if args.model and args.model != config.model:
+                    parser.error("--model must match the saved service model")
+            else:
+                config = GatewayConfig.from_env(model=args.model)
+            selected = [c for c in fixtures if not args.only or c.case_id == args.only]
+            if not selected:
+                parser.error("--only did not match any fixture")
+            records = record_run(selected, config, args.run_dir)
+            if any(not record["success"] for record in records):
+                raise SystemExit("one or more benchmark calls failed; see results.json")
+            return
+        if args.service:
+            parser.error("--service requires --run-dir")
         recordings = run_recording(fixtures, create_gateway(model=args.model), args.only)
         args.recordings.parent.mkdir(parents=True, exist_ok=True)
         args.recordings.write_text(

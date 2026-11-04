@@ -1,55 +1,76 @@
-# Narrative Quality Benchmark
+# Composer 叙事测试库
 
-`fixtures.json` contains ten fixed production-contract cases covering composite
-actions and every outcome band. The active benchmark calls the current
-single-stage Narrative Composer and checks action coverage, outcome-band
-preservation, and non-empty prose/stopping state.
+**14 个可复用用例，4 个实验。** 当前 NPC 使用记录实验已完成正式十例 A/B 的评分、复核与解盲。
 
-```bash
-python scripts/benchmark_narrative_quality.py --record
-python scripts/benchmark_narrative_quality.py --check
+## 文件目录
+
+```text
+narrative_quality/
+├── README.md
+├── cases/                             入库：14 个固定用例及来源
+│   ├── standard.json                  构造十例清单
+│   └── <case_id>/
+│       ├── input.json
+│       ├── source.json                有来源记录时
+│       └── assets.json                有后台资源时
+├── experiments/                       入库：方案、版本对比、统计和结论
+│   ├── npc-usages/
+│   │   ├── README.md                  目标、十例 A/B 设置和操作入口
+│   │   ├── suite.json                  普通验证六例
+│   │   ├── plan.json                   正式十例、抽样种子与版本
+│   │   ├── judge.md                    评分说明
+│   │   └── comparison/                 通用 Prompt／Schema 前后版本
+│   ├── tr-composer-unification/
+│   ├── outcome-anchored/
+│   └── open-affordance-legacy/
+└── local/                             不入库：全部原始与临时材料
+    ├── <实验>/<轮次>/                  调用、重试、整套快照、脚本
+    └── sources/                       历史来源及提取过程
 ```
 
-Generated recordings live under `recordings/` and remain git-ignored.
+## 用例：14 个
 
-## Resolved TR-Composer experiment
+每例输入只有一份，放在自己的目录内；来源和后台资源跟随该例。实验通过 `suite.json` 引用用例。01–10 为构造场景，11–14 来自游玩记录；来源不影响用例的命名和调用方式。
 
-The completed A/B experiment keeps its compact evidence package in Git while
-the large raw call recording remains local:
+| 编号 | 场景 | 重点 | 导演输入 | 本次正式十例 |
+|---|---|---|---|---|
+| [01](cases/case_01_tavern_inquiry/input.json) | 孙掌柜提供私下拍卖消息 | 事件演员、线索披露、后续调查空间 | `present_event`，孙掌柜为 actor | 是 |
+| [02](cases/case_02_rogue_recruitment/input.json) | 招募艾莉丝 | 人物性格、顾虑与招募互动 | `introduce_npc` 艾莉丝 | 是 |
+| [03](cases/case_03_composite_infiltrate_and_disarm/input.json) | 潜入、拆解机关、发信号 | 连续三项行动的顺序与覆盖 | 无 | 是 |
+| [04](cases/case_04_secret_investigation/input.json) | 刑侦秘密调查 | 具体物证与调查方向 | 无 | 是 |
+| [05](cases/case_05_faction_confrontation/input.json) | 势力关卡交锋 | 化解阻力、通过关卡 | 无 | 是 |
+| [06](cases/case_06_dungeon_puzzle/input.json) | 地下机关谜题 | 无 NPC 的环境互动 | 无 | — |
+| [07](cases/case_07_partial_success_alchemy/input.json) | 炼金部分成功 | 成功与代价同时成立 | 无 | — |
+| [08](cases/case_08_failed_action_recovery/input.json) | 行动失败后应变 | 失败后果与撤退选择 | 无 | 是 |
+| [09](cases/case_09_critical_failure_ambush/input.json) | 伏击中的大失败 | 严重劣势的兑现 | 无 | — |
+| [10](cases/case_10_composite_mixed_outcomes/input.json) | 复合行动混合成败 | 分项结果与叙事衔接 | 无 | — |
+| [11](cases/case_11_tavern_entry/input.json) | 初入客栈，赵七进店 | 正式姓名与匿名出场称呼的对应 | 引入苏婉娘＋呈现赵七事件 | 是 |
+| [12](cases/case_12_disclosure_intrusion/input.json) | 与掌柜谈心时事件介入 | 披露升级、人物互动与事件介入 | 苏婉娘披露升级＋赵七介入 | 是 |
+| [13](cases/case_13_event_pressure/input.json) | 玩家旁观，赵七推进事件 | 被动观察中的人物使用记录 | 赵七介入进行中的事件 | 是 |
+| [14](cases/case_14_spontaneous_constable/input.json) | 厢房交谈，差役敲门 | 即兴人物及声音、间接出场的对应 | 即兴引入周德海 | 是 |
 
-- `recordings/tr_composer_unification.manifest.json`: versioned recording identity;
-- `recordings/tr_composer_unification.json`: ignored raw A/B calls;
-- `eval_prompts/tr_composer_unification/`: versioned blind prompts and mapping;
-- `judgments/tr_composer_unification/`: versioned final web judgments;
-- `reports/tr_composer_unification.json` and `.metrics.json`: versioned results.
+01、02 已补入本次实验的导演输入；03–10 保持原输入。01 的陷阱全貌保存在后台 `assets.json`，Composer 只接收 Hook。四个游玩场景独立运行，不将新生成的前例正文串入后例。
 
-The candidate won 20 of 30 generation pairs, tied the baseline 5-5 at case
-level, reduced average total tokens by 43.5%, and reduced average total latency
-by 34.4%. The old TR+Composer implementation is not retained as a runtime or
-benchmark compatibility path; the recordings preserve the completed comparison.
+11/12/13 统一了苏婉娘、悦来客栈的名称，13 去掉与赵七重复的在场者“中年汉子”。12、14 经用户同意改为非露骨交谈，保留完整第二人称上一幕，原动作顺序和结果档位作为固定测试参数；逐例整理内容见各自 `source.json`。历史原件在[存档调查的提取资料](local/sources/player-save-20261101)中保留。
 
-## Closed outcome-anchored Composer experiment — 2026-11-01
+## 实验与结果
 
-Compared the production Composer (A) with a candidate (B) that removed pre-prose
-planning/reasoning fields, placed prose immediately after action resolutions,
-and extracted involved entities afterward. Prompt and Schema changed together.
-Using `deepseek-v4.1-flash`, ten fixed cases with three repetitions per variant
-produced 60 successful generations and 30 pairs, with no retries.
+| 实验 | 做过的测试 | 结论与入口 |
+|---|---|---|
+| [NPC 使用记录](experiments/npc-usages/README.md) | 已固定十例、两版本各 3 次 | 已解盲：A 胜 9 对、B 胜 10 对、11 平；重大视角问题另列 |
+| [TR 与 Composer 合并](experiments/tr-composer-unification/README.md) | 10 例，每侧 3 次，30 对 | 候选胜 20 对；总 Token 均值下降 43.5% |
+| [结果锚定 Composer](experiments/outcome-anchored/README.md) | 正式 10 例，每侧 3 次 | 未取得稳定叙事收益，候选未采用 |
+| [早期开放叙事](experiments/open-affordance-legacy/README.md) | 旧用例 27 对，24 对有效 | A/B 各胜 12 对；旧用例集合与当前不同 |
 
-Original blind preferences were A 8 wins, B 10 wins, and 12 ties. Mean quality
-scores were 12.000/16 and 12.033/16. B increased prose characters by 3.7%, reduced
-structured-output characters by 49.5%, and reduced total latency by 18.4%.
-Token usage was unavailable; character savings do not measure token savings.
+## 继续收录与测试
 
-The candidate was not adopted: these results did not establish a stable
-improvement in scene construction or resolve defensive prose. The baseline also
-did not reliably exhibit that problem in these cases, limiting their usefulness
-for evaluating a remedy. Judging used one Codex session rather than a fresh web
-conversation per case. A subsequent assistant review recommended revising one
-preference; the original scores were preserved, and that review was not a new
-human blind evaluation. The combined Prompt/Schema experiment cannot isolate
-the effects of individual changes.
+- 新用例：新增 `cases/<case_id>/input.json`，有来源或后台资源时放在同目录；在本页用例表加一行。
+- 新实验：新增 `experiments/<实验>/suite.json` 和 `README.md`，列明目标、用例范围和轮次。
+- 普通验证：连通性、字段准确性和输入排查等材料保存在 `local/<实验>/`，实验 README 简要记录准备进展。
+- 正式测试：按确定的版本、用例、重复次数和评分标准执行。原始调用保存在 `local/<实验>/<轮次>/`；正式小结、统计、评分及理由收录到 `experiments/<实验>/results/<轮次>/`，并登记结果链接。
+- 实际比较的通用 Prompt／Schema 前后版本放在该轮 `comparison/`；用例通过 ID、版本或哈希引用。完整正文、渲染后的逐例输入、盲评题包、冻结的用例副本及整套快照留在 `local/`。
+- 用例改动后重新开一轮。旧轮次保留当时冻结的输入和输出；输入错误或未完成的轮次明确标注。
 
-Dedicated experimental tooling was removed; production contracts remain active.
-Detailed local evidence is retained in the ignored directory
-`.bench/outcome-anchored/closed-20261101/` (relative to the repository root).
+仓库保留实验设计、版本对比、统计、评分理由和结论。本地目录保留完整诊断证据，需另行备份。对应忽略规则只有 `/benchmarks/narrative_quality/local/`，没有反向例外。
+
+普通验证和正式 A/B 的操作入口见 [NPC 使用记录实验](experiments/npc-usages/README.md)。默认 `--record` / `--check` 使用原构造十例清单 `cases/standard.json`，默认原始记录写入 `local/contract-check/current.json`。

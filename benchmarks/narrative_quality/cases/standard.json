@@ -1,0 +1,46 @@
+{
+  "name": "standard",
+  "description": "Original ten constructed cases",
+  "cases": [
+    {
+      "path": "case_01_tavern_inquiry/input.json",
+      "case_id": "case_01_tavern_inquiry"
+    },
+    {
+      "path": "case_02_rogue_recruitment/input.json",
+      "case_id": "case_02_rogue_recruitment"
+    },
+    {
+      "path": "case_03_composite_infiltrate_and_disarm/input.json",
+      "case_id": "case_03_composite_infiltrate_and_disarm"
+    },
+    {
+      "path": "case_04_secret_investigation/input.json",
+      "case_id": "case_04_secret_investigation"
+    },
+    {
+      "path": "case_05_faction_confrontation/input.json",
+      "case_id": "case_05_faction_confrontation"
+    },
+    {
+      "path": "case_06_dungeon_puzzle/input.json",
+      "case_id": "case_06_dungeon_puzzle"
+    },
+    {
+      "path": "case_07_partial_success_alchemy/input.json",
+      "case_id": "case_07_partial_success_alchemy"
+    },
+    {
+      "path": "case_08_failed_action_recovery/input.json",
+      "case_id": "case_08_failed_action_recovery"
+    },
+    {
+      "path": "case_09_critical_failure_ambush/input.json",
+      "case_id": "case_09_critical_failure_ambush"
+    },
+    {
+      "path": "case_10_composite_mixed_outcomes/input.json",
+      "case_id": "case_10_composite_mixed_outcomes"
+    }
+  ]
+}

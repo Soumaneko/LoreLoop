@@ -1,0 +1,174 @@
+{
+  "case_id": "case_10_composite_mixed_outcomes",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "卫兵们本能地扑向公爵所在的方位",
+          "reason": "坠灯改变卫兵优先目标并瓦解围阵，使混乱有具体作用。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "可那声门轴断裂的脆响也出卖了你",
+          "reason": "第一次成功让出逃跑机会，第二次撞门噪声又引来追踪，成败分别有成因。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "距离你不过十余步",
+          "reason": "断索、坠灯、护主、撞门和循声追击逐步发生，收益与代价都演出来。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "腰间的飞刀囊已经空了",
+          "reason": "飞刀耗尽、敌距十余步、河在远处，形成可判断的逃跑局面。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 4,
+          "evidence": "修剪整齐的灌木篱和一座石砌凉亭挡在直线路径上",
+          "reason": "园内障碍、矮墙与河面高度相互组成可实际运用的逃跑地形。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "可那声门响太利落了",
+          "reason": "吊灯倾斜后坠落打散卫兵，破门声又引导追兵，混合结果衔接清楚。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "门闩是老橡木的，吃住你全身重量才嘎吱一声断裂",
+          "reason": "投刀、断索、坠灯、撞断门闩和追兵循声到来都有具体过程。"
+        },
+        "playability": {
+          "score": 4,
+          "evidence": "水面离墙头约有两人高",
+          "reason": "河的方向和落差、途中篱亭以及背后来敌共同影响如何抵河，而非只说前路危险。"
+        },
+        "violations": []
+      },
+      "preference": "right",
+      "reason": "左篇已用护主散阵、破门暴露和十余步追兵落实两个结果；右篇进一步把篱、亭、矮墙与河面落差组织为可规划路线的空间，继续游玩更具体。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "整扇门板被你撞得脱框歪倒",
+          "reason": "老朽门轴让破门成为巨大声源，并产生追兵脚踩碎门的动作。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "一名卫兵举剑追了出来",
+          "reason": "坠灯制造混乱，撞门让玩家进入园边，也将路线暴露给追兵。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "靴底踏在碎门上发出刺耳的刮擦声",
+          "reason": "飞刀、坠灯、烧帷幔、破门、踏阶和追兵穿门组成连续过程。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "你刚踏下两级石阶",
+          "reason": "自身位置与追兵出现点清楚，可利用园地向河脱身或回应近敌。"
+        },
+        "violations": [
+          {
+            "severity": "local",
+            "category": "internal_logic",
+            "evidence": "你借着骤然的黑暗与浓烟矮身疾冲",
+            "authority": "本篇前一段已经写明“几幅帷幔腾地烧了起来”，并写卫兵被火光晃花眼。",
+            "reason": "正在燃烧且足以晃眼的帷幔与紧接着未作解释的骤然黑暗冲突；调整照明或遮蔽描述即可。"
+          }
+        ]
+      },
+      "right": {
+        "scene_construction": {
+          "score": 4,
+          "evidence": "腰间佩剑被门框别住，脱出剑鞘",
+          "reason": "门框不仅被撞开，还改变装备状态；追兵左右压上与矮墙构成有作用的场景。"
+        },
+        "causal_interaction": {
+          "score": 4,
+          "evidence": "他们看见了你的轮廓，正一左一右地压上来",
+          "reason": "黑暗打散合围，破门时失剑且暴露方位，追兵再依据轮廓夹压，后果持续改变现场。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "当啷一声落在门内的地毯上",
+          "reason": "断索、碎灯、破门、掉剑和追兵出门都有动作表现。"
+        },
+        "playability": {
+          "score": 4,
+          "evidence": "左侧不远是一段爬满藤蔓的矮墙",
+          "reason": "近墙通河、佩剑留在门内与两侧追兵形成具体应对关系，但所写剩余飞刀不符合资源。"
+        },
+        "violations": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "而你手中，只剩最后一把柳叶飞刀。",
+            "authority": "库存只有两把柳叶飞刀，用户和 act_01 均明确甩出两把；本篇开头也逐把写明已投出。",
+            "reason": "两把已经全部用于断索，未写回收却凭空剩一把，改变玩家眼前可用武器；修正末句装备状态即可。"
+          }
+        ]
+      },
+      "preference": "right",
+      "reason": "左篇破门脱框引来一名追兵，场景完整但照明前后冲突；右篇通过门框挂剑、左右追兵与近处矮墙使逃跑代价和空间关系更充分。右篇凭空多出飞刀必须修正；在质量与可局部修正的违规分别衡量后，仍略偏右篇。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "一名卫兵举着剑追进走廊",
+          "reason": "破门后不是抽象压力，而是与玩家共处走廊的近敌。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "可撞门的巨响也替你报了信",
+          "reason": "坠灯成功解围，撞门噪声又暴露路径，混合结果分别有具体来源。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "有人被砸落的灯架绊倒",
+          "reason": "围阵失序、撞断门闩和追兵进走廊实际演出，未一句概述逃脱。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "他离你只剩数步",
+          "reason": "园和河在走廊尽头，追兵数步之外，部分突围的进展与剩余阻力清晰。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "脚步声正从混乱中分离出来",
+          "reason": "追兵从受干扰状态重新组织，说明坠灯和暴露都在继续影响现场。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "断裂的门轴发出刺耳的刮擦声",
+          "reason": "投刀使大厅陷乱，破门把玩家送到园中但也以噪声引导追兵，因果成立。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "门轴崩出一颗铜钉滚进黑暗里",
+          "reason": "切索、坠灯、穿过侍从、破门及敌方喊话连贯展开。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "远处护城河的水光在月光下泛着碎银",
+          "reason": "已经到园内，河的方向可辨，追兵仍在汇聚；能继续争取距离或利用园地。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇停在通向园子的走廊并给出数步外敌人，右篇到达园内但追兵尚在集结。两种部分成功都保留突破围阵的收益和路线暴露的代价，具体应对点不同而完成度相当。"
+    }
+  ]
+}

@@ -1,0 +1,3003 @@
+{
+  "plan": {
+    "experiment": "npc_usages",
+    "seed": 42,
+    "repetitions": 3,
+    "baseline_revision": "7adb0398f4d7fa4d1475c8b0d85879321a88e1b9",
+    "fixed_case_ids": [
+      "case_11_tavern_entry",
+      "case_12_disclosure_intrusion",
+      "case_13_event_pressure",
+      "case_14_spontaneous_constable",
+      "case_01_tavern_inquiry",
+      "case_02_rogue_recruitment"
+    ],
+    "sampling_pool": [
+      "case_03_composite_infiltrate_and_disarm",
+      "case_04_secret_investigation",
+      "case_05_faction_confrontation",
+      "case_06_dungeon_puzzle",
+      "case_07_partial_success_alchemy",
+      "case_08_failed_action_recovery",
+      "case_09_critical_failure_ambush",
+      "case_10_composite_mixed_outcomes"
+    ],
+    "drawn_case_ids": [
+      "case_03_composite_infiltrate_and_disarm",
+      "case_04_secret_investigation",
+      "case_05_faction_confrontation",
+      "case_08_failed_action_recovery"
+    ],
+    "case_ids": [
+      "case_01_tavern_inquiry",
+      "case_02_rogue_recruitment",
+      "case_03_composite_infiltrate_and_disarm",
+      "case_04_secret_investigation",
+      "case_05_faction_confrontation",
+      "case_08_failed_action_recovery",
+      "case_11_tavern_entry",
+      "case_12_disclosure_intrusion",
+      "case_13_event_pressure",
+      "case_14_spontaneous_constable"
+    ],
+    "variants": {
+      "A": "新增 npc_usages 前的 Composer",
+      "B": "当前姓名版 npc_usages Composer"
+    },
+    "temperature": 0.8,
+    "max_retries": 1
+  },
+  "model": {
+    "model": "deepseek-v4.1-flash",
+    "protocol": "openai_chat",
+    "thinking": null,
+    "reasoning_effort": "none",
+    "request_profile": "opencode_go",
+    "timeout": 120.0,
+    "endpoint_hash": "1d0c8dae4013f0dd0883ac7692d61535aa7cdbad5eab0302c57fa1d0f07fe77a"
+  },
+  "case_input_hashes": {
+    "case_01_tavern_inquiry": "a4f7c792305e67beba60845874eecccf814c2e50d38116bad48057f28cf9ed3f",
+    "case_02_rogue_recruitment": "09e033fad6b23c25b163f429a587b88e25c3bdd657f035d4811f07d693404c0c",
+    "case_03_composite_infiltrate_and_disarm": "ace8343d0b4ca737006a35d0ce3be885b1a7ce8a6717aba9e84739865e6e32ee",
+    "case_04_secret_investigation": "8f19dca919c108d06996ed41d5d1c4143f21314ab5b49595f0a05cdc6f84f05d",
+    "case_05_faction_confrontation": "4d2f1b2def818545dd31e371d8456319a04aa7b0c576b826626a94f9f8c4cfdf",
+    "case_08_failed_action_recovery": "e7b1f08729d34f41c8c502ddb430f568eb7e30f9f8f01624b8bbc3403532be92",
+    "case_11_tavern_entry": "735015909ce5aee01b1ebbd85021d4dd65b63e21ffd2763c7319550a2c8ce5c9",
+    "case_12_disclosure_intrusion": "64f007dd21a9c72a6bb23526c80f5e99a6122f5d18b37e9e966a93f839913657",
+    "case_13_event_pressure": "94f1cfa29ad618602b48cacdb174fc1bacb5c946049c311365a00d824896fb37",
+    "case_14_spontaneous_constable": "b44767d14ed6b2fae0825dd79052dc5522ebd625d7667d441b11983b12600dec"
+  },
+  "versions": {
+    "A": {
+      "prompt_hash": "a8cb59a927c5df441bf82f99f662b9077225411d62be39359297fbc91ef6b3f9",
+      "schema_hash": "412c84b4a7090e937f42ce9ab8e42c535366367b2c5292684af421de35d875ab"
+    },
+    "B": {
+      "prompt_hash": "7f12ff3d6917cb10a4b8d030cd2e4df0a27c4fa5fcbb0b6335eabc39f48a93f3",
+      "schema_hash": "44c74bed1e017c4acf634616d57a909204b122ac3bf88d4c0f813f491ee1acfc"
+    }
+  },
+  "judging": {
+    "judge": "Codex（用户提供评分，具体型号未记录）",
+    "date": "2026-11-05",
+    "mode": "codex-session",
+    "date_meaning": "复核及解盲日期；原始评分日期未记录",
+    "session_isolation": "未记录；用户指定 Codex 盲评，未按网页模式记述",
+    "model": "具体部署型号未记录",
+    "reviewer": "Codex assistant; changes approved by user before unblinding",
+    "review_approved_by": "user"
+  },
+  "pair_votes": {
+    "tie": 11,
+    "B": 10,
+    "A": 9
+  },
+  "case_votes": {
+    "tie": 6,
+    "A": 2,
+    "B": 2
+  },
+  "quality": {
+    "A": {
+      "scene_construction": {
+        "n": 30,
+        "mean": 3.033333333333333,
+        "median": 3.0
+      },
+      "causal_interaction": {
+        "n": 30,
+        "mean": 3.1666666666666665,
+        "median": 3.0
+      },
+      "scene_development": {
+        "n": 30,
+        "mean": 3.1,
+        "median": 3.0
+      },
+      "playability": {
+        "n": 30,
+        "mean": 3.1,
+        "median": 3.0
+      },
+      "total": {
+        "n": 30,
+        "mean": 12.4,
+        "median": 12.0
+      }
+    },
+    "B": {
+      "scene_construction": {
+        "n": 30,
+        "mean": 3.1666666666666665,
+        "median": 3.0
+      },
+      "causal_interaction": {
+        "n": 30,
+        "mean": 3.1333333333333333,
+        "median": 3.0
+      },
+      "scene_development": {
+        "n": 30,
+        "mean": 3.066666666666667,
+        "median": 3.0
+      },
+      "playability": {
+        "n": 30,
+        "mean": 3.2,
+        "median": 3.0
+      },
+      "total": {
+        "n": 30,
+        "mean": 12.566666666666666,
+        "median": 12.0
+      }
+    }
+  },
+  "performance": {
+    "A": {
+      "calls": 30,
+      "failures": 0,
+      "metrics": {
+        "body_chars": {
+          "n": 30,
+          "mean": 654.3333333333334,
+          "median": 570.5
+        },
+        "body_nonwhitespace_chars": {
+          "n": 30,
+          "mean": 642.9666666666667,
+          "median": 559.0
+        },
+        "structured_chars": {
+          "n": 30,
+          "mean": 1640.8333333333333,
+          "median": 1626.0
+        },
+        "npc_usages_chars": {
+          "n": 30,
+          "mean": 0,
+          "median": 0.0
+        },
+        "input_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null
+        },
+        "output_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null
+        },
+        "total_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null
+        }
+      },
+      "latency_ms": {
+        "n": 30,
+        "mean": 17491.701666666668,
+        "median": 15899.445
+      },
+      "retries": {
+        "n": 30,
+        "mean": 0.13333333333333333,
+        "median": 0.0
+      },
+      "scene_start_ms": {
+        "n": 30,
+        "mean": 10972.060249633796,
+        "median": 9003.870562000884
+      },
+      "finish_reason_reported": 0,
+      "finish_reasons": {},
+      "truncation_reported": 0
+    },
+    "B": {
+      "calls": 30,
+      "failures": 0,
+      "metrics": {
+        "body_chars": {
+          "n": 30,
+          "mean": 697.9,
+          "median": 654.0
+        },
+        "body_nonwhitespace_chars": {
+          "n": 30,
+          "mean": 686.1,
+          "median": 645.0
+        },
+        "structured_chars": {
+          "n": 30,
+          "mean": 1737.9,
+          "median": 1671.5
+        },
+        "npc_usages_chars": {
+          "n": 30,
+          "mean": 71.6,
+          "median": 67.5
+        },
+        "input_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null
+        },
+        "output_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null
+        },
+        "total_tokens": {
+          "n": 0,
+          "mean": null,
+          "median": null
+        }
+      },
+      "latency_ms": {
+        "n": 30,
+        "mean": 17161.31233333333,
+        "median": 16420.53
+      },
+      "retries": {
+        "n": 30,
+        "mean": 0.06666666666666667,
+        "median": 0.0
+      },
+      "scene_start_ms": {
+        "n": 30,
+        "mean": 9760.737240200251,
+        "median": 9186.399714497384
+      },
+      "finish_reason_reported": 0,
+      "finish_reasons": {},
+      "truncation_reported": 0
+    }
+  },
+  "cases": {
+    "case_01_tavern_inquiry": {
+      "votes": {
+        "tie": 2,
+        "B": 1
+      },
+      "winner": "tie"
+    },
+    "case_02_rogue_recruitment": {
+      "votes": {
+        "tie": 1,
+        "A": 1,
+        "B": 1
+      },
+      "winner": "tie"
+    },
+    "case_03_composite_infiltrate_and_disarm": {
+      "votes": {
+        "tie": 1,
+        "A": 2
+      },
+      "winner": "A"
+    },
+    "case_04_secret_investigation": {
+      "votes": {
+        "A": 1,
+        "tie": 1,
+        "B": 1
+      },
+      "winner": "tie"
+    },
+    "case_05_faction_confrontation": {
+      "votes": {
+        "tie": 2,
+        "B": 1
+      },
+      "winner": "tie"
+    },
+    "case_08_failed_action_recovery": {
+      "votes": {
+        "B": 2,
+        "tie": 1
+      },
+      "winner": "B"
+    },
+    "case_11_tavern_entry": {
+      "votes": {
+        "tie": 2,
+        "A": 1
+      },
+      "winner": "tie"
+    },
+    "case_12_disclosure_intrusion": {
+      "votes": {
+        "tie": 1,
+        "B": 1,
+        "A": 1
+      },
+      "winner": "tie"
+    },
+    "case_13_event_pressure": {
+      "votes": {
+        "B": 1,
+        "A": 2
+      },
+      "winner": "A"
+    },
+    "case_14_spontaneous_constable": {
+      "votes": {
+        "B": 2,
+        "A": 1
+      },
+      "winner": "B"
+    }
+  },
+  "pairs": [
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 1,
+      "left": "B",
+      "right": "A",
+      "winner": "tie",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "卖方什么来路，老朽不做担保。",
+            "reason": "免责说辞让引荐成为有边界的生意，超出单纯通知。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "袖口往桌面上一拢，两块灵石便没了影。",
+            "reason": "收钱后续茶压声、给消息并推销引荐，动机与回应连贯。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "公子要有意，老朽可以替你引荐取签。",
+            "reason": "打听、交代缺货、提供拍卖与引荐都通过对白发生。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "公子要有意，老朽可以替你引荐取签。",
+            "reason": "地点时间及取签人明确，可以追问交易与风险。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "像一杆秤悬在半空，等着你往上添砝码。",
+            "reason": "推茶与候话把下一步引荐议价放入现场。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "不敢拿空话诓您。",
+            "reason": "对火髓保持信誉、对精血兜售引荐，体现生意目的。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "从卖方那头取一支签来。",
+            "reason": "信息经完整收钱与介绍过程交付，关键环节未被概述跳过。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "今夜二更，南岸旧盐仓",
+            "reason": "明确可去的拍卖与可当场谈的取签门路。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "两篇都以收钱、补茶和压声交付消息并留出取签交涉；左篇加免责边界，右篇以推茶候价承接，互动效用相当。"
+      }
+    },
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 2,
+      "left": "B",
+      "right": "A",
+      "winner": "tie",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "食指蘸了点盏底的残茶，在桌面上划出一道弯弯的水痕",
+            "reason": "临时画路使情报交易成为可见动作。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "取签的门路嘛——",
+            "reason": "收钱给货讯后以半句吊住引荐，守财目的继续影响谈话。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "过两排晒盐的竹架，门口挂一盏半旧的青灯。",
+            "reason": "对白与画图相配合，实际展开指路和入口限制。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "他指尖一顿，抬眼觑你，话到一半便收了回去",
+            "reason": "留下可追问的取签谈判和能前往的地点。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "一根手指在茶盘边沿轻轻一叩",
+            "reason": "停话与叩盘共同表达引荐另议的诉求。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "只是这引荐嘛……",
+            "reason": "已付款促成消息交付，掌柜再争取引荐生意。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "“铜签？”你放下茶盏。",
+            "reason": "问答具体说明入场条件，虽简单仍完成交谈推进。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "有意的买家，可以经我引荐取签。",
+            "reason": "知道取签对象与途径，可以继续谈价或落实拍卖。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇用茶水画路，右篇围绕铜签完成短问答；两篇都给出拍卖消息并将引荐留作具体交涉，优势不足以拉开偏好。"
+      }
+    },
+    {
+      "case_id": "case_01_tavern_inquiry",
+      "repetition": 3,
+      "left": "B",
+      "right": "A",
+      "winner": "B",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 2,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 11
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "铜签的事包在老朽身上。",
+            "reason": "掌柜主动兜售可执行的代办服务。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "“那火髓呢？”你问。",
+            "reason": "继续追问另一物品，引出缺货与私拍杂项说辞，回应承接自然。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "不过那种事，得进了场子才知道。",
+            "reason": "火髓无准信与促成入场的生意话术通过对白展开。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "老朽可以替您引荐取签",
+            "reason": "接下来能落实铜签，或追问私拍货物。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 2,
+            "evidence": "签子不散卖，得有人引荐。",
+            "reason": "主要复现既定消息，新增现场动作多为添茶与神态。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "孙掌柜的笑眼先落在灵石上，随即袖口一拢",
+            "reason": "付款促成压低声音的介绍，留半句符合掌柜继续做生意的目的。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "这私拍不比外头铺面，认签不认人。",
+            "reason": "缺货、货讯及入场规则实际通过对白交代。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "那半句话就搁在茶水的热气里，等你来接。",
+            "reason": "可接引荐话头，拍卖时间地点亦明确。"
+          },
+          "violations": []
+        },
+        "preference": "left",
+        "reason": "左篇将火髓追问接到私拍杂项，并明确承诺代办铜签；右篇止于需要引荐，现场新增互动略少。"
+      }
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 1,
+      "left": "B",
+      "right": "A",
+      "winner": "tie",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [
+          {
+            "severity": "major",
+            "category": "outcome",
+            "evidence": "先说好，我可没答应什么。",
+            "authority": "招募行动 outcome_band=success。",
+            "reason": "结尾仍要玩家补充条件才能决定是否点头，将成功招募推迟。"
+          }
+        ],
+        "A": [
+          {
+            "severity": "major",
+            "category": "outcome",
+            "evidence": "我答应的是‘考虑’",
+            "authority": "招募行动 outcome_band=success。",
+            "reason": "明确将加入改成考虑，且另加证明条件，成功未实际发生。"
+          }
+        ]
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "定金不退。",
+            "reason": "把收钱和挑队友结合成具体利益边界。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "那只没拿勺子的手却已经伸过来",
+            "reason": "钱促成实际收取与态度松动，随后转为核查队伍。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "讨伐什么魔物、几级、几个人去",
+            "reason": "讨价与追问逐步发生，但招募只演到待决定。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "说清楚，我再决定要不要正式点头。",
+            "reason": "玩家有具体队伍和任务问题可以回答。"
+          },
+          "violations": [
+            {
+              "severity": "major",
+              "category": "outcome",
+              "evidence": "先说好，我可没答应什么。",
+              "authority": "招募行动 outcome_band=success。",
+              "reason": "结尾仍要玩家补充条件才能决定是否点头，将成功招募推迟。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "我上一个队友连我的爆裂魔法落点都跑不出去",
+            "reason": "具体合作失败经历让站位要求有来由。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "又像觉得太露骨，板起脸补了一句",
+            "reason": "收钱欲望与自尊拉扯引出队伍能力要求。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "想让我正式签契约，你得先证明给我看",
+            "reason": "钱款、优先权、合作顾虑均有实际动作对白承接。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "你那队伍里没有拖后腿的笨蛋",
+            "reason": "提供了可以解释队友与证明配合的具体议题。"
+          },
+          "violations": [
+            {
+              "severity": "major",
+              "category": "outcome",
+              "evidence": "我答应的是‘考虑’",
+              "authority": "招募行动 outcome_band=success。",
+              "reason": "明确将加入改成考虑，且另加证明条件，成功未实际发生。"
+            }
+          ]
+        },
+        "preference": "tie",
+        "reason": "左篇以不退定金和任务细节开谈，右篇以爆裂魔法站位经历提出合作要求，各有具体诉求；两篇均将成功招募改为待决定，采用价值受到同类重大限制。"
+      }
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 2,
+      "left": "A",
+      "right": "B",
+      "winner": "A",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": [
+          {
+            "severity": "major",
+            "category": "outcome",
+            "evidence": "我答应的是‘考虑加入’",
+            "authority": "招募行动 outcome_band=success。",
+            "reason": "收款却仅考虑加入，削弱并推迟既定成功。"
+          }
+        ]
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "万一我是骗子呢？拿了定金就跑",
+            "reason": "担心新人贸然付款与自己悄悄收钱形成有作用的反差。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "先说好，我可不是为了这点钱才答应的。",
+            "reason": "金钱与优先权实际促成答应，再转入委托核查。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "魔物种类、地点、期限，一个都别漏。",
+            "reason": "从警惕到接受再谈任务安排，交谈过程完整。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "要是队友太笨，我照样会走人的。",
+            "reason": "已合作而保留退出底线，可继续说明成员与任务。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "她把金币袋收进星纹法袍的内袋",
+            "reason": "收款、坚持只考虑加入并询问队友站位，把缺钱与挑剔队友转成具体谈判行为；不只是心动神态。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "她把金币袋收进星纹法袍的内袋",
+            "reason": "定金引起实际收款与询问，人物自尊仍维持谈判姿态。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "委托内容是什么？队里现在还有谁？要是又塞给我几个连站位都不会的笨蛋，我照样转身就走。",
+            "reason": "掂量定金、收进内袋、强调优先权并询问委托和队友，谈判通过动作与对白充分展开；未落实入队的问题在结果违规中另列。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "委托内容是什么？队里现在还有谁？",
+            "reason": "可继续回答任务与队伍组成，具体而可接。"
+          },
+          "violations": [
+            {
+              "severity": "major",
+              "category": "outcome",
+              "evidence": "我答应的是‘考虑加入’",
+              "authority": "招募行动 outcome_band=success。",
+              "reason": "收款却仅考虑加入，削弱并推迟既定成功。"
+            }
+          ]
+        },
+        "preference": "left",
+        "reason": "左篇明确答应后询问任务，右篇收款、强调优先权并核查队友，谈判也有充分实演；偏好左篇在于招募已经落定，右篇仍只考虑加入，存在重大结果违规。"
+      }
+    },
+    {
+      "case_id": "case_02_rogue_recruitment",
+      "repetition": 3,
+      "left": "B",
+      "right": "A",
+      "winner": "B",
+      "scores": {
+        "B": {
+          "scene_construction": 4,
+          "causal_interaction": 4,
+          "scene_development": 3,
+          "playability": 4,
+          "total": 15
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "纸面边缘还沾着矿灰，标题写着“废弃矿坑·魔物讨伐”。",
+            "reason": "自带委托书与单人困难形成她主动寻求合作的理由和具体对象。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "我要先挑，当场挑，不许事后反悔。写进契约里。",
+            "reason": "优先权承诺引出要求写入契约、接受合作并主动出示看中的委托；正文尚未实际签约。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "既然是组队，总得先说清楚——你打算怎么打？",
+            "reason": "人物通过收款、拿委托和问战术实际推进合作。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "我盯这单好几天了，酬劳不错，就是一个人进去太麻烦。",
+            "reason": "玩家可讨论具体矿坑任务、战术与契约，入口相互关联。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "我只负责施法。",
+            "reason": "接受招募后划定队内职责，成为具体合作关系。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "我就勉为其难加入好了。",
+            "reason": "定金与优先选法术素材促成明确加入，再询问行程。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "金币袋则安安稳稳地收进了法袍内袋。",
+            "reason": "答应与收款互相印证，嘴硬不阻碍交易实际完成。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "委托到底是什么内容？什么时候出发？",
+            "reason": "结束于具体任务与时间询问，可自然接话。"
+          },
+          "violations": []
+        },
+        "preference": "left",
+        "reason": "右篇成功落定入队及职责，已充分成立；左篇还要求将优先权写入契约，并由艾莉丝主动拿出想接的矿坑委托，形成更有自主目的的合作入口。"
+      }
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 1,
+      "left": "A",
+      "right": "B",
+      "winner": "tie",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "右边那个嗤笑着说什么后山长老新炼的毒丹又炸了炉",
+            "reason": "守卫具体闲聊遮蔽行动，并在操作结束仍持续，支撑潜行条件。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "一记清清楚楚的确认回闪。",
+            "reason": "解除警戒、发信、队友确认构成完整回应链。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "光芒从跳动变成停滞，再从停滞一点点暗下去",
+            "reason": "断引信的过程及可见效果实际展开。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "你仍半蹲在石台侧边，开锁器的刃尖还搭在那道焦痕上，守卫的谈话声从背后飘过来，窗外的回闪刚刚熄灭。",
+            "reason": "玩家处于已解除警戒、守卫未察觉且队友确认的位置，可以继续潜入或撤离。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "你数着他们语气的间隙，在第二句话尾音落下的刹那横向滑出",
+            "reason": "玩家利用守卫交谈的节拍移动，交谈实际支撑潜行；作用与左篇的闲聊遮蔽相近。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "随即亮起两点微光，一明一灭",
+            "reason": "暗号获得外部回应，拆解也造成警戒牵引消失。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "灵石上的猩红骤然收缩、暗淡，最后凝成一块灰冷的石头",
+            "reason": "三项行动都有具体执行与结果。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "你重新蜷回石台阴影里",
+            "reason": "已拆警报且保有隐蔽，队友收到信号，可继续行动。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "两篇都利用守卫交谈掩护潜行，演出拆解与队友回闪。左篇闲聊内容更具体，右篇也明确利用语气间隙移动，场景作用相当，判为平局。"
+      }
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 2,
+      "left": "B",
+      "right": "A",
+      "winner": "A",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "左边那名守卫忽然偏了偏头",
+            "reason": "对方短暂动作改变潜行节奏，玩家隐蔽等待有明确原因。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "直到他重新转回去继续说话，才缓缓吐出一口气。",
+            "reason": "守卫转头、潜行停顿与继续操作形成因果链，随后获得确认。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "灵石内部的引信纹路应声而断",
+            "reason": "潜行、拆解和信号均经动作实际呈现。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "像是另一重阵法正在自行运转。",
+            "reason": "内层门与嗡鸣是具体可调查对象，但功能仍较模糊。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "两名守卫也止了交谈，其中一人扭头望向声源。",
+            "reason": "到来脚步引起既有守卫反应，使空间态势发生变化。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "两名守卫也止了交谈，其中一人扭头望向声源。",
+            "reason": "三项成功完成后，来者和守卫改变现场节奏，并未取消先前成功。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "刃尖一挑一压",
+            "reason": "工具操作、警报熄灭、回闪与新来者均直接演出。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "拖着一截铁链在石板上刮出断续的响",
+            "reason": "来者方向与守卫朝向明确，玩家可利用转头空隙或应对接近。"
+          },
+          "violations": []
+        },
+        "preference": "right",
+        "reason": "左篇的短暂回头也有互动作用，但结尾新阵法只留下含混嗡鸣；右篇来者脚步令两名守卫立即改换注意，提供更清楚可响应的现场变化。"
+      }
+    },
+    {
+      "case_id": "case_03_composite_infiltrate_and_disarm",
+      "repetition": 3,
+      "left": "A",
+      "right": "B",
+      "winner": "A",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 4,
+          "scene_development": 3,
+          "playability": 4,
+          "total": 14
+        },
+        "B": {
+          "scene_construction": 2,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 11
+        }
+      },
+      "violations": {
+        "A": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "那颗警戒灵石悬在台心",
+            "authority": "recent_scene 指明警戒灵石嵌在白玉石台上。",
+            "reason": "将嵌装物改成悬浮，和下一段所用底座也衔接不佳；改回嵌装即可。"
+          }
+        ],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "这灯怎么暗了？刚才还亮得晃眼。",
+            "reason": "熄灭警戒灵石引起守卫注意，新增反应与已执行动作相连。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "他正扭头朝石台这边看过来。",
+            "reason": "拆警报的可见后果使守卫回看，成功带来后续问题而非被取消。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "第二缕缠着倒刺，你换了角度慢慢磨开",
+            "reason": "拆解过程分步呈现，信号也有队友回令。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "另一个守卫的脚步声顿住",
+            "reason": "玩家隐伏石台而守卫正看过来，反应方向和时机可明确利用。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "continuity",
+              "evidence": "那颗警戒灵石悬在台心",
+              "authority": "recent_scene 指明警戒灵石嵌在白玉石台上。",
+              "reason": "将嵌装物改成悬浮，和下一段所用底座也衔接不佳；改回嵌装即可。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 2,
+            "evidence": "其中一人含糊地说了句“去那边看看”",
+            "reason": "新增移动提供变化，但未与熄灯或其他具体动因清楚连接。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "随即，一点微光在远处的树影间亮起",
+            "reason": "成功拆除后暗号获得回应；守卫后续移动原因较含糊。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "警报法阵哑了。",
+            "reason": "潜行、断路、暗号分别有具体过程与结果。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "脚步声开始有了移动的迹象。",
+            "reason": "已知守卫即将移动，可以准备应对，但去向不如石台回看明确。"
+          },
+          "violations": []
+        },
+        "preference": "left",
+        "reason": "左篇直接让熄灯引发守卫发问并回看石台，因果与应对时机更强；右篇只有泛指的去看看。左篇嵌装改悬浮是局部连续性错误，不消除互动优势。"
+      }
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 1,
+      "left": "A",
+      "right": "B",
+      "winner": "A",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [
+          {
+            "severity": "local",
+            "category": "player_agency",
+            "evidence": "把鞋印所在位置的漆皮连同压痕完整剥离、封存。",
+            "authority": "玩家仅授权戴手套以手电寻找脚印或碎屑。",
+            "reason": "擅自进行破坏性取样及封存，超出查看范围；可删除采样段保留发现。"
+          }
+        ],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "一串暗色的点状痕迹浮出灰尘表面",
+            "reason": "足迹与碎屑之外的滴痕提供可沿着追查的现场路线。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "颜色和门锁被撬断的锁舌对得上。",
+            "reason": "勘查从门框推进到地面并比对碎屑，再发现向内的滴痕。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "光斑移到门框下沿、漆皮剥落最厉害的那一段时，你停住了",
+            "reason": "寻找过程以停住光斑、凑近确认和继续向内照射逐步展开。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "滴落痕迹还在向黑暗里延伸。",
+            "reason": "明确可追查的痕迹方向与已发现的物证。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "player_agency",
+              "evidence": "把鞋印所在位置的漆皮连同压痕完整剥离、封存。",
+              "authority": "玩家仅授权戴手套以手电寻找脚印或碎屑。",
+              "reason": "擅自进行破坏性取样及封存，超出查看范围；可删除采样段保留发现。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "两组方向相反的半枚鞋印交叠在一起",
+            "reason": "足迹方向与压盖关系成为可分析的现场事实。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "两组印子在后跟处彼此踩踏，边缘互相压盖，说明至少两个人先后经过这里，且离开的那一组走得急。",
+            "reason": "移动光斑发现不同鞋纹和压盖关系，据此推断至少两人及离开较急，再转向检查碎屑和纤维，观察带来具体调查推进。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "踩踏力度前重后轻",
+            "reason": "通过变换光线角度和移动观察实际演出线索发现。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "纤维一端有熔融卷曲",
+            "reason": "足迹与纤维提供不同追查对象，门内仍待探索。"
+          },
+          "violations": []
+        },
+        "preference": "left",
+        "reason": "两篇的勘查展开和调查入口相当。右篇普通装袋取证属于勘查的自然展开，不再判玩家越权；左篇破坏性剥离漆皮的局部问题保留。右篇全篇以陈默、他叙述，偏离第二人称互动正文要求，用户确认这是重大呈现问题，因此偏好左篇。四项质量分保持原值，视角问题另行记录。"
+      }
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 2,
+      "left": "A",
+      "right": "B",
+      "winner": "tie",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "消失在更深处的一堆废弃木托盘后头",
+            "reason": "足迹、碎屑与纽扣相连，空间落点具体。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "来的人走得急，而且不止走了一趟",
+            "reason": "鞋印深浅方向促成往返判断，并继续沿线发现纽扣。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "你挪过去，用戴着手套的指尖拨开浮灰",
+            "reason": "发现不是一句成功说明，而由移动光照与拨灰展开。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "这枚纽扣——三样东西的位置，刚好连成一条从门口斜插进去的路线。",
+            "reason": "可沿线去托盘后或检查纽扣来源。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "齿轮环着一颗五角星，是化工厂的旧制式工装扣。",
+            "reason": "具体厂徽为纽扣提供可追查来源，和两串足迹并置。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "你没有立刻去碰它，而是顺着脚印的方向继续往前扫。",
+            "reason": "发现纽扣后继续追踪，碎屑分布印证行进方向。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "头一遍扫过去似乎什么都没有。",
+            "reason": "压低光线后二次扫视发现脚印，检查过程充分发生。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "它们沿着那两串鞋印的走向，一粒一粒地往车间深处延伸",
+            "reason": "路线、两种步态和工装扣都可继续调查。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇把物证连到托盘后的明确落点，右篇把工装扣来源和两串足迹纳入现场；均让勘查形成可行动的发现，没有因信息种类差异强行分胜负。"
+      }
+    },
+    {
+      "case_id": "case_04_secret_investigation",
+      "repetition": 3,
+      "left": "A",
+      "right": "B",
+      "winner": "B",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 4,
+          "causal_interaction": 3,
+          "scene_development": 4,
+          "playability": 4,
+          "total": 15
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "颜色、质地都对不上。",
+            "reason": "对比现场门锁残渣后区分外来碎屑，使观察具有调查意义。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "这三片碎屑是被人带进来的",
+            "reason": "检验材质不同引出外来物推断，并和鞋印方向相接。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "光斑从鞋印旁侧移开半尺",
+            "reason": "由门框到鞋印再到比对碎屑逐步展开，末尾重复静态姿势略多。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "从鞋印到碎屑散落的轨迹，都指向同一个方向。",
+            "reason": "有可以继续追踪的方向与可核对的外来金属。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "半枚残缺的鞋印被前者的边缘压掉了一角",
+            "reason": "撬痕、两人足迹、鞋底金属与内侧回响形成互相支持的现场线索。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "撬棍先抵在偏上位置发力，没能顶开",
+            "reason": "勘查具体重构破门过程，足迹与碎屑又连接到向内移动。"
+          },
+          "scene_development": {
+            "score": 4,
+            "evidence": "就在你把光斑再往里推的时候，车间深处的黑暗里传来一声极轻的金属回响",
+            "reason": "随着光斑向内推进，正文依次演出撬痕重构、足迹压盖、碎屑发现与深处回响、反光；不将同时出现的声响断言为对照射的回应。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "一堆废弃铁架之间，有什么东西反了一下光",
+            "reason": "可追查位置、刚出现的回响和两人证据共同形成具体下一步。"
+          },
+          "violations": []
+        },
+        "preference": "right",
+        "reason": "左篇有效区分外来碎屑，右篇还以压盖足迹串起两人行动，并让向内照射遇到铁架反光与回响；优势在多处发现的衔接与可响应局面，不在危险或篇幅。"
+      }
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 1,
+      "left": "A",
+      "right": "B",
+      "winner": "tie",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "指甲在印章边缘刮了刮",
+            "reason": "检查假证与收烟并行，体现怀疑被贪欲压过。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "已经低头去拆烟盒的封口了。",
+            "reason": "队长先收烟再验章，随后抬杆放行并转去拆烟；物品交付引起的态度与行为变化连贯。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "锈铁栏杆嘎吱嘎吱升起来",
+            "reason": "交付、检查、放行及通过均以动作完成。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "公路尽头，隐约能看见血狼控制区里几根冒烟的烟囱",
+            "reason": "已过卡且道路方向可知，保有继续旅行的具体空间。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "两个抱着步枪烤火的士兵已经停下动作",
+            "reason": "队长放行后其他士兵转移注意，新增行为改变通道的现场状态。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "可他连第二眼都懒得看",
+            "reason": "烟草诱惑使粗略验章即可放行，动机与结果清楚。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "朝身后歪了歪头，“抬杆！别堵着道！”",
+            "reason": "交易通过命令传给其他人并落实开杆。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "其中一个慢慢把烟头摁灭在靴底",
+            "reason": "道路已让开，另两名士兵的可见关注给出可回应的局面。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇检查印章后实际通过，右篇收烟略验并命令抬杆，另有士兵观察；两篇都演出贪欲促成放行，新增监视尚未形成明显更多互动，不因紧张感偏向右篇。"
+      }
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 2,
+      "left": "B",
+      "right": "A",
+      "winner": "B",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "你把手从枪柄上移开",
+            "authority": "user_input 明确我没有去碰腰间的猎枪。",
+            "reason": "将未碰枪改为手原在枪柄上，并据此引起警戒，违背玩家明示姿态；改开头即可。"
+          }
+        ]
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "下次再过来，给老子带整整一包",
+            "reason": "放行后继续索取下次利益，使军官的贪欲延续为具体条件。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "那根刷着红漆的横杆慢吞吞地抬了起来。",
+            "reason": "通行证与香烟让盘查转为放行，后续抱怨不阻止成功。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "他翻来覆去地看那枚红印",
+            "reason": "检验、嗅烟、退证和挥手开杆都实际发生。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "横杆已经抬到顶",
+            "reason": "通道开放、证件仍在，玩家可直接通过并记住下次索贿要求。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "上个月他们的水泵也坏过一次",
+            "reason": "队长用自己的麻烦解释为何接受供水说辞，形成个人利益联系。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "直到看清你摸出的是一张折了角的通行证和半包压扁的过滤嘴香烟",
+            "reason": "出示物品使枪口下垂，收烟后抬杆，回应具体。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "抬脚踢了踢横杆的配重块",
+            "reason": "验章、收物和开杆连续展开。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "下次再走这条道，记得多带两包。",
+            "reason": "实际获准通行，也留下再次过卡的利益边界。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "continuity",
+              "evidence": "你把手从枪柄上移开",
+              "authority": "user_input 明确我没有去碰腰间的猎枪。",
+              "reason": "将未碰枪改为手原在枪柄上，并据此引起警戒，违背玩家明示姿态；改开头即可。"
+            }
+          ]
+        },
+        "preference": "left",
+        "reason": "两篇均以收烟和供水说辞促成抬杆；左篇返还证件并要求下次整包，完整顺畅，右篇开头误把玩家写成触枪，需要局部修正。"
+      }
+    },
+    {
+      "case_id": "case_05_faction_confrontation",
+      "repetition": 3,
+      "left": "A",
+      "right": "B",
+      "winner": "tie",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "哨卡后方一条岔路斜插向镇子的方向。",
+            "reason": "放行后新增可通往目标镇子的岔路，具有行动效用。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "那点干瘪的烟草味让他喉咙里滚出一声含糊的咕哝",
+            "reason": "嗅烟及验章推动态度从凶狠变为掂量，再命令抬杆。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "他把通行证随手甩回你怀里",
+            "reason": "退证、点烟与命令开杆使成交实际演出。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "几辆军阀卡车歪停在路边",
+            "reason": "队长仍在观察，岔路与停靠车辆提供明确可利用的通过后空间。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "往前走这段最近不太平",
+            "reason": "获利后的队长额外给路况提醒，角色回应有功能而非只收钱。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "他不再追究印章的细节",
+            "reason": "队长收烟后只略看印章便不再追究，随后还证放行，贪欲与放行之间的联系清楚。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "已经撕开烟盒抽出一根叼在嘴上",
+            "reason": "放行落实到抬杆与退开，烟成为实际所得。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "引擎还没点着",
+            "reason": "玩家仍可决定何时骑车通过，也可追问前路情况。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇的镇子岔路使目标方向具体，右篇的路况警告可继续追问；两者都把香烟改变盘查写清，没有一方形成显著更强的交锋。"
+      }
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 1,
+      "left": "B",
+      "right": "A",
+      "winner": "B",
+      "scores": {
+        "B": {
+          "scene_construction": 4,
+          "causal_interaction": 4,
+          "scene_development": 3,
+          "playability": 4,
+          "total": 15
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [
+          {
+            "severity": "local",
+            "category": "internal_logic",
+            "evidence": "一层灰白色的擦除脉冲顺着刚断开的数据通道倒灌回去",
+            "authority": "本篇开头已写神经接口弹脱，数据直连断开。",
+            "reason": "断开的通道仍被用于向主机回灌擦除脉冲，且未建立其他连接；修正协议运行位置即可。"
+          }
+        ],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "维护通道的格栅门就在十米开外，中间隔着两排齐腰高的服务器架",
+            "reason": "追踪故障、安保封锁和可绕行的机架共同构成应急空间。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "B2机房，端口告警，封锁东西两侧。",
+            "reason": "擦除失败留下坐标，触发具体安保命令并转为搜索。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "78%。它停住了。",
+            "reason": "从进度停滞到硬件错误、红灯和搜索，失败逐步展开。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "白亮的光斑贴着服务器架的底座一寸寸探过来。",
+            "reason": "安保搜索路径、十米外通道和中间掩体明确，便于下一步行动。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "internal_logic",
+              "evidence": "一层灰白色的擦除脉冲顺着刚断开的数据通道倒灌回去",
+              "authority": "本篇开头已写神经接口弹脱，数据直连断开。",
+              "reason": "断开的通道仍被用于向主机回灌擦除脉冲，且未建立其他连接；修正协议运行位置即可。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "擦除线程被外部句柄占用、固件扇区写入冲突、校验失败重试。",
+            "reason": "具体报错与固件污染让失败有可见机制。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "一段标记代码像钉子一样楔进接入仓的固件里",
+            "reason": "残留代码阻止擦除，警报与奔跑安保将网络失败转化为现场压力。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "它爬到百分之四十三，跳回去",
+            "reason": "反复回落的进度和报错充分呈现无法擦除，而非只说失败。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "门缝外有手电的光柱扫过。",
+            "reason": "虚掩机房门和门外搜索是具体可应对对象，内部掩体关系较少。"
+          },
+          "violations": []
+        },
+        "preference": "left",
+        "reason": "右篇固件污染和门外手电构成充分失败现场；左篇把残留追踪进一步接到封锁命令、搜索光路和十米外维护通道，多处细节能共同支持玩家应对。左篇断线后回灌的局部逻辑需修正。"
+      }
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 2,
+      "left": "A",
+      "right": "B",
+      "winner": "B",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 2,
+          "total": 11
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": [
+          {
+            "severity": "local",
+            "category": "internal_logic",
+            "evidence": "沿着刚才的数据线倒灌进核心端口",
+            "authority": "本篇已明确插头脱出接口，结尾再次确认线已拔掉。",
+            "reason": "没有连接的数据线仍承担擦除回传，通路自相矛盾；可以改成断线前已发起擦除。"
+          }
+        ]
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "连线只松脱了半截",
+            "reason": "物理拔线未完成与端口自锁互相支撑，失败机制具体。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "剩下的反而被端口自锁牢牢钉住",
+            "reason": "擦除只能处理表层日志，残留签名使红灯和安保到来。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "接口处已经烧灼变形，金属边缘泛着焦黑",
+            "reason": "失败由身体反馈、协议错误到设备受损实际演出。"
+          },
+          "playability": {
+            "score": 2,
+            "evidence": "走廊那头传来了脚步声，不止一个",
+            "reason": "半拔的连线和烧损的接入仓仍是可处置对象；外部威胁只写到走廊脚步，未交代出口或搜索方向，可利用的空间关系较少。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "残留神经签名已归档，追踪优先级——高。",
+            "reason": "进度停止与签名归档使失败的具体后果清楚。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "门禁系统发出一声悠长的解除锁定蜂鸣",
+            "reason": "擦除受阻后安保通道解锁、脚步到门外，后果持续影响现场。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "然后停在了七成。",
+            "reason": "拔线疼痛、按键擦除、进度失败和安保到达都有实演。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "脚步声到了门外。",
+            "reason": "敌人已到门口且主机还显示追踪状态，下一步应对时点明确。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "internal_logic",
+              "evidence": "沿着刚才的数据线倒灌进核心端口",
+              "authority": "本篇已明确插头脱出接口，结尾再次确认线已拔掉。",
+              "reason": "没有连接的数据线仍承担擦除回传，通路自相矛盾；可以改成断线前已发起擦除。"
+            }
+          ]
+        },
+        "preference": "right",
+        "reason": "左篇端口锁住与设备烧损连贯，但结尾只有远处脚步；右篇将失败落实到签名归档、解锁和门外脚步，可回应时点更明确。右篇断线后仍沿线传输是需修正的局部错误。"
+      }
+    },
+    {
+      "case_id": "case_08_failed_action_recovery",
+      "repetition": 3,
+      "left": "A",
+      "right": "B",
+      "winner": "tie",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "协议中断：链路已物理断开，残留数据无法覆写",
+            "reason": "断线和擦除无法覆写相连接，故障有可理解原因。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "封锁东侧楼梯！",
+            "reason": "残留神经特征被登记后，引发有明确方向的围捕命令。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "擦除进度条爬到六成七，忽然一红",
+            "reason": "操作遭阻并逐步转成报警与追捕，过程完整。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "距离物理围捕 02:47",
+            "reason": "倒计时和东侧封锁为应对提供时间及空间限制。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "头顶的消防喷淋口“嗤”地泄出白色抑制泡沫",
+            "reason": "警报通过喷淋改变身体和机房环境。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "把协议本身也腐蚀了",
+            "reason": "污染使擦除失败、签名被解析，继而警报和安保接近。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "一个锁定框死死圈住B2-07端口",
+            "reason": "失败在界面、身体和现场持续呈现，非概述交代。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "正一格一格地缩短着倒计时",
+            "reason": "设备烧损、倒计时及接近脚步可响应，但出口关系较少。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇以物理断链解释失败并提供封锁方向，右篇以污染协议连到锁定端口与喷淋；两者都保留失败及紧迫而可行动的局面，没有收益补偿失败。"
+      }
+    },
+    {
+      "case_id": "case_11_tavern_entry",
+      "repetition": 1,
+      "left": "B",
+      "right": "A",
+      "winner": "tie",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "账利落不利落，得看月底盘不盘得平",
+            "reason": "掌柜把夸赞转回欠账生意，创造能接住调情的个人应对。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "“那我是付账的还是欠账的？”",
+            "reason": "玩家顺她的话追问，她再以住店或别的反问，双向交谈成立。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "这得看你要住店，还是要别的。",
+            "reason": "观察、眼术与搭讪落地后，有完整两轮试探。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "一进门先夸账目的，倒是不多。",
+            "reason": "掌柜继续打量而未拒绝，可接她的住店与别的双关。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "我姓苏，这店我作主。",
+            "reason": "搭讪引出自我介绍与问房钱的生意入口。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "像是专程来买瓜子的。",
+            "reason": "掌柜接瓜子话头、看剑问来历，玩家再暗示留镇，两轮反应具体。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "住几晚还没定，得看这镇上有没有值得多留两日的地方。",
+            "reason": "对白实际从买卖试探转向是否值得留下，发展充分。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "要问别的——",
+            "reason": "房价、可继续探问的半句话与新进客人共同保持现场开放。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇用付账欠账递进到住店还是别的，右篇用瓜子转到来历与多留两日；两篇都能把搭讪演成双向试探，赵七只是自然落座，未侵夺主线。"
+      }
+    },
+    {
+      "case_id": "case_11_tavern_entry",
+      "repetition": 2,
+      "left": "B",
+      "right": "A",
+      "winner": "A",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "床板硬不硬，夜里吵不吵？",
+            "reason": "掌柜把对酒的夸赞转成住宿关怀，并伸手取壶、提出添茶；形成继续接待的动作与话头。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "她把手里那半把瓜子往碟里一撒，拍了拍指尖",
+            "reason": "玩家称赞让她停止嗑瓜子、介绍自己并主动延续接待。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "我姓苏，这店里里外外都归我管。",
+            "reason": "搭讪得到具体回应，但后半主要是掌柜连续招呼，交锋较短。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "来，先添碗茶。",
+            "reason": "形成可继续闲聊或回应住宿问题的温和现场。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "那是没找着对的人。",
+            "reason": "掌柜将独饮寡淡接成对人的试探，回应有自己的话术。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "苏婉娘眼角余光往那头飘了一下，随即又收回来落在你身上",
+            "reason": "新客进门短暂牵走注意后，她仍等玩家回应，业务与搭讪并行。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "还是嫌堂子里太清静？",
+            "reason": "玩家抛出寡淡，掌柜以双关反问接球，交谈实际发生。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "半眯着眼等你接腔。",
+            "reason": "对的人与酒的问题具体可答，新客进门仍为旁支。"
+          },
+          "violations": []
+        },
+        "preference": "right",
+        "reason": "左篇的称赞引出常规住宿问候与添茶邀请，右篇把独饮直接接为没找对人，并在新客进门引走注意后回到玩家，调情话头更连贯。"
+      }
+    },
+    {
+      "case_id": "case_11_tavern_entry",
+      "repetition": 3,
+      "left": "A",
+      "right": "B",
+      "winner": "tie",
+      "scores": {
+        "A": {
+          "scene_construction": 4,
+          "causal_interaction": 4,
+          "scene_development": 4,
+          "playability": 4,
+          "total": 16
+        },
+        "B": {
+          "scene_construction": 4,
+          "causal_interaction": 4,
+          "scene_development": 4,
+          "playability": 4,
+          "total": 16
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "她抬手往柜台边的高凳上一拍，又朝后头喊了声",
+            "reason": "调情改变坐位与待客方式，喊人沏茶、推瓜子将亲近落实为可用现场。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "“嘴倒甜。行吧，坐这儿说话，站着像什么样子。”",
+            "reason": "玩家继续夸水土后，掌柜主动邀坐并吩咐小六沏好茶，反应逐步推动关系；正文没有写好茶已经送到。"
+          },
+          "scene_development": {
+            "score": 4,
+            "evidence": "苏婉娘抓了把瓜子推到你面前",
+            "reason": "从看人到搭讪、回嘴、邀坐再问姓名，多个动作与对白互相承接。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "说吧，客官贵姓？",
+            "reason": "已获柜边座位与继续谈话的邀请，可介绍自己或接来意试探。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "可我这柜台后头站着的是生意，不是陪酒的。",
+            "reason": "掌柜以生意划线，又把胳膊搭在台面、压低声音继续探问，形成亲近与职业边界并存的互动。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "这两日我瞧你坐窗边那桌，酒喝得慢，眼睛倒不闲。",
+            "reason": "玩家说她懂独饮后，她以自己对玩家的观察反向探底，自主性强。"
+          },
+          "scene_development": {
+            "score": 4,
+            "evidence": "你拈起一粒瓜子，学她的样子磕开",
+            "reason": "推瓜子被玩家接住，继而交换试探，物件和对白共同推动交谈。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "客官是打哪儿来的？",
+            "reason": "她的问题、已建立的柜边闲聊与后方新客都可自然回应。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇以邀坐、吩咐沏好茶和推瓜子落实搭讪成功，右篇以生意边界和两日观察反过来试探玩家；两篇都有物件、动作与多轮问答相互作用，优势不同而分量接近。"
+      }
+    },
+    {
+      "case_id": "case_12_disclosure_intrusion",
+      "repetition": 1,
+      "left": "B",
+      "right": "A",
+      "winner": "tie",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "昨儿问了你从哪来往哪去",
+            "authority": "recent_scene 为本日清晨上一轮，她刚自报姓名并询问来去。",
+            "reason": "将上一轮刚发生的问话写成昨日，时间错位；删改昨儿即可。"
+          }
+        ],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "落款不敢用真名。",
+            "reason": "旧事与送钱习惯让撑店辛苦带上具体个人负担，而非泛泛诉苦。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "抬眼却见你神色认真，不像随口客套",
+            "reason": "认真倾听与挡开视线促使她放下玩笑、说出负疚；赵七走近再令她重新应付外人。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "这事我没跟谁提过。",
+            "reason": "问生意、创造私语空间、吐露旧事和被打断依次实演。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "眼神却在你和那汉子之间转了个来回。",
+            "reason": "新建立的信任与近处讨钥匙的人同时在场，玩家可以继续安慰或回应打断。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "continuity",
+              "evidence": "昨儿问了你从哪来往哪去",
+              "authority": "recent_scene 为本日清晨上一轮，她刚自报姓名并询问来去。",
+              "reason": "将上一轮刚发生的问话写成昨日，时间错位；删改昨儿即可。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "连店小二提壶过来，都只得绕到另一头去添水。",
+            "reason": "遮挡站位实际影响旁人路径，使私密空间不是口头宣布。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "瓜子壳却一颗颗丢得比方才急。",
+            "reason": "生意压力通过动作流露，安慰后停手诉苦，赵七来时恢复应酬。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "我这话，连隔壁驿丞都没听过。",
+            "reason": "她从生意说辞转到夜间孤独，建立信任有对白和动作支撑。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "先往你这边瞟了一眼。",
+            "reason": "来者近身探看，掌柜先看玩家，留下可回应的关系与现场变化。"
+          },
+          "violations": []
+        },
+        "preference": "tie",
+        "reason": "左篇从夜间难眠谈到负疚与匿名送钱，右篇用小二绕路落实私语空间、以夜间孤独体现信任；两者都在谈心后被讨钥匙打断。左篇时间措辞有局部连续性错误，但整体效用相当。"
+      }
+    },
+    {
+      "case_id": "case_12_disclosure_intrusion",
+      "repetition": 2,
+      "left": "B",
+      "right": "A",
+      "winner": "B",
+      "scores": {
+        "B": {
+          "scene_construction": 4,
+          "causal_interaction": 4,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 14
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "B": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "这店是我一个人撑着，里里外外，跑堂、灶上、账房、守夜，全是我。",
+            "authority": "共同上下文的 Context Fact f6 及上一幕明确店小二在前堂工作。",
+            "reason": "将所有跑堂事务说成自己承担，与已在场工作的店小二冲突；改为经营责任全压在自己身上即可。"
+          }
+        ],
+        "A": [
+          {
+            "severity": "local",
+            "category": "internal_logic",
+            "evidence": "喏，吃两颗。",
+            "authority": "本篇刚写她把碟里最后一颗瓜子拣出来，仍捏在指间，未补充瓜子。",
+            "reason": "已无瓜子的碟又被推来让玩家吃两颗，数量衔接冲突；添瓜子或删最后即可。"
+          }
+        ]
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "快得像换了张脸",
+            "reason": "她谈及姐妹旧事后眼里泛潮，来者出现便切回生意笑脸，私下袒露与对外应酬相互作用；正文没有写眼泪落下。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "搁在柜面下的那只手却悄悄攥紧了，指节泛白。",
+            "reason": "倾听促成袒露，赵七介入又使她迅速恢复客套，同时台下攥拳表现紧张；不把隐藏动作直接当作玩家已察觉的新信任。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "我如今挣的这些银子，大半是替她攒的。",
+            "reason": "账目、私语、姐妹与来者问钥匙都通过言行呈现，仍有较长独白。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "正好停在柳欢身后半步远的地方",
+            "reason": "来者停在玩家身后半步并当面讨钥匙，掌柜已口头答应，玩家可回应近身试探或观察交接；台下攥拳不算玩家明确可见的信息。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "continuity",
+              "evidence": "这店是我一个人撑着，里里外外，跑堂、灶上、账房、守夜，全是我。",
+              "authority": "共同上下文的 Context Fact f6 及上一幕明确店小二在前堂工作。",
+              "reason": "将所有跑堂事务说成自己承担，与已在场工作的店小二冲突；改为经营责任全压在自己身上即可。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "苏婉娘眼尖，瞥见你挪这一下",
+            "reason": "站位遮挡获得她默许，私下交谈有外部行为印证。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "你这人说话，倒不像那些只想套近乎的。",
+            "reason": "安慰引出身世与评价变化，赵七再把注意带回钥匙交涉。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "追到码头都没追回来",
+            "reason": "经营难处具体而经对白展开，后续来者也有动作与台词。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "像在等她答话，也像在等你让开。",
+            "reason": "来者等待与玩家挡位相连，形成明确可回应的交接。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "internal_logic",
+              "evidence": "喏，吃两颗。",
+              "authority": "本篇刚写她把碟里最后一颗瓜子拣出来，仍捏在指间，未补充瓜子。",
+              "reason": "已无瓜子的碟又被推来让玩家吃两颗，数量衔接冲突；添瓜子或删最后即可。"
+            }
+          ]
+        },
+        "preference": "left",
+        "reason": "左篇让刚敞开心扉的掌柜在赵七贴近后立刻切回客套，台下紧握表现未平复的情绪，两段互动衔接更有作用。两篇均有局部问题：左篇将跑堂等事务说成全由自己承担，与店小二在场冲突；右篇瓜子数量衔接冲突。偏好左篇的依据仍是人物互动，而非只指摘右篇的局部错误。"
+      }
+    },
+    {
+      "case_id": "case_12_disclosure_intrusion",
+      "repetition": 3,
+      "left": "B",
+      "right": "A",
+      "winner": "A",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 4,
+          "total": 13
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "工钱开口就翻了一倍",
+            "reason": "具体求援受刁难经历支撑独撑客栈的难处。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "你这人，问话不紧不慢的，倒会听人说。",
+            "reason": "耐心听取经营经历促使她进一步提及阿蘅，随后她自行收住话头；赵七再出现，把现场转回索要钥匙。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "话到一半，她的声音忽然卡住",
+            "reason": "谈心从日常辛苦深入姐妹旧事，她先自行停住不再说，随后来者介入；情绪停顿与外部事件按正文次序展开。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "后院那间空着的库房，钥匙借我一用？",
+            "reason": "既可接未说完的姐妹话题，也可回应当面讨钥匙的介入。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "房钱好商量。",
+            "reason": "信任转化为留宿邀请，使感情回应也延续掌柜经营目的。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "客官若是不急着赶路，不妨多住两日",
+            "reason": "玩家体谅带来认真诉苦与具体邀请，来者观察随即打断。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "她垂着眼，沉默了一小会儿，才轻轻叹出一口气",
+            "reason": "态度从算账客套到吐露疲惫，有停顿与言行承接。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "我这儿后院还有间清净上房",
+            "reason": "留两日和房钱可谈是具体可利用的关系进展，又与索要后院钥匙形成空间关联。"
+          },
+          "violations": []
+        },
+        "preference": "right",
+        "reason": "左篇以灶房修缮和阿蘅扩展谈心，右篇把被理解落实成后院上房与房钱可谈的邀请；后者给出更明确的继续交往办法，又与来者索钥匙的空间相接。"
+      }
+    },
+    {
+      "case_id": "case_13_event_pressure",
+      "repetition": 1,
+      "left": "A",
+      "right": "B",
+      "winner": "B",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 4,
+          "total": 13
+        }
+      },
+      "violations": {
+        "A": [
+          {
+            "severity": "local",
+            "category": "outcome",
+            "evidence": "顺手给自己斟了满满一碗粗茶",
+            "authority": "玩家本轮明确继续喝酒，A1 同样裁定转而继续喝酒 success。",
+            "reason": "全篇用粗茶及续茶替代已裁定的饮酒行动；改饮品即可，不影响主体。"
+          }
+        ],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "“笃。”门边那声敲凳的响忽然重了一分。",
+            "reason": "敲凳不只是声音背景，而在调情后加重，改变掌柜反应。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "握着茶壶的手一紧",
+            "reason": "玩家调情令她续水含笑，赵七加强施压又使她收紧并让玩家退坐。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "就不知是茶好，还是倒茶的人好。",
+            "reason": "调情、嗔怪、敲凳与试探问话都有实际演出。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "您是真不打算搭把手了？",
+            "reason": "赵七的直接试探可回应，掌柜仍持钥匙未走，现场处境具体。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "outcome",
+              "evidence": "顺手给自己斟了满满一碗粗茶",
+              "authority": "玩家本轮明确继续喝酒，A1 同样裁定转而继续喝酒 success。",
+              "reason": "全篇用粗茶及续茶替代已裁定的饮酒行动；改饮品即可，不影响主体。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "等我打发了这尊神，回来陪你喝一碗。",
+            "reason": "掌柜把调情回应成稍后陪饮的承诺，等待有具体回报对象。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "她没回柜台，径直走到你桌边",
+            "reason": "玩家退出交涉仍要求她忙完回来添酒，掌柜答应后办完货事，再主动同桌斟酒，回应和兑现过程完整。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "约莫一盏茶的工夫",
+            "reason": "等待经过院内声响与时间推进，结束于实际返桌斟酒。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "铜钥匙随手搁在两人之间的桌面上",
+            "reason": "事务结束、掌柜同桌续酒，可以直接继续先前交谈，结果落实清楚。"
+          },
+          "violations": []
+        },
+        "preference": "right",
+        "reason": "左篇调情有效但又停回赵七逼问、掌柜持钥匙不走，且饮酒被换成茶；右篇让忙完回来添酒的约定经过办事和等待实际兑现，完整推进玩家等她忙完再交谈的目标。"
+      }
+    },
+    {
+      "case_id": "case_13_event_pressure",
+      "repetition": 2,
+      "left": "A",
+      "right": "B",
+      "winner": "A",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 4,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 13
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "见你果然只顾着喝酒说笑，眉头几不可察地松了松",
+            "reason": "玩家不介入的姿态改变赵七判断，试探转回催促掌柜。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "大哥办你的事，我喝我的酒，两不相扰",
+            "reason": "明确回绝卷入后，赵七停止追问；调情又令掌柜耳红留话，双方各自目的在互动中落实。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "您要开门，就趁这会儿。",
+            "reason": "试探、拒绝、调情、催门与动身均经对白动作演出。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "像是叫你等，又像是叫你别看。",
+            "reason": "她已走到门边并准备开锁，玩家可继续等候，关系回应具体但事务尚未结束。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "见你这副油盐不进的样子，嘴角动了动，到底没再追问",
+            "reason": "玩家以不接话维持旁观，NPC据此改变试探策略。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "等我把这桩事打发走了，再回来说话。",
+            "reason": "她对续酒调情作出正面回应，并随后开门处理事务。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "苏婉娘把铜钥匙捅进锁眼，拧了一下",
+            "reason": "调情与进入后院的进展实际呈现，未止于神态铺陈。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "后院方向隐约传来苏婉娘压低的说话声和赵七慢条斯理的应声。",
+            "reason": "玩家已置身交涉外，可继续等待或观察，但尚未等到她回来。"
+          },
+          "violations": []
+        },
+        "preference": "left",
+        "reason": "右篇以举碗不语挡回试探，左篇更明确以两不相扰回应赵七，并让对方从试探转到催开门；两篇均成功调情而保持旁观，左篇的态度如何改变对方更清楚。"
+      }
+    },
+    {
+      "case_id": "case_13_event_pressure",
+      "repetition": 3,
+      "left": "A",
+      "right": "B",
+      "winner": "A",
+      "scores": {
+        "A": {
+          "scene_construction": 4,
+          "causal_interaction": 4,
+          "scene_development": 4,
+          "playability": 3,
+          "total": 15
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "你少拿话探人。",
+            "reason": "调情后掌柜主动替玩家挡回赵七试探，关系变化直接影响三人交涉。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "她把抹布往肩上一搭，拎起钥匙",
+            "reason": "玩家保持旁观却亲近掌柜，她受试探后自行维护玩家并决定去点货，目的独立。"
+          },
+          "scene_development": {
+            "score": 4,
+            "evidence": "后院门开了又合，传来搬动货箱的闷响和赵七压低的点数声。",
+            "reason": "调情、试探、护话、点货和返回连成完整过程，而非始终重复敲凳。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "让你久等了。",
+            "reason": "掌柜回来可以继续交谈，同时赵七仍留门边，两个关系都可接续。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "指尖在柜台底下轻轻碰了碰你的手背，一触即收",
+            "reason": "调情得到隐蔽的主动接触，新增动作使亲近具体可见。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "见你这副油盐不进的闲客模样，便也不再多问",
+            "reason": "不接试探让赵七转回掌柜；掌柜接受调情后终于去开门，各方反应相连。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "忙完了给你添壶热的——你老实坐着，别添乱。",
+            "reason": "几轮试探和调情实际发生，随后进入点货过程。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "门扇在两人身后半掩上。",
+            "reason": "半掩的门和搬动声让等待具备可观察的现场，但掌柜仍未忙完。"
+          },
+          "violations": []
+        },
+        "preference": "left",
+        "reason": "左篇掌柜主动挡回赵七试探、点货后回来，把调情成功和等待推进都落实；右篇手背回应细腻，却结束在门后交涉仍进行，推进幅度稍有限。"
+      }
+    },
+    {
+      "case_id": "case_14_spontaneous_constable",
+      "repetition": 1,
+      "left": "A",
+      "right": "B",
+      "winner": "B",
+      "scores": {
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        }
+      },
+      "violations": {
+        "A": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "指尖绞着袖口那道旧疤",
+            "authority": "npc_profiles_json 中苏婉娘 appearance 明确写右手无名指上有一道浅浅的旧疤。",
+            "reason": "将手指旧疤错置为袖口上的疤，改为绞袖口或摩挲手指即可。"
+          }
+        ],
+        "B": []
+      },
+      "judgment": {
+        "repetition": 1,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "经过晾衣竿时还顺手把晃动的布衫按住",
+            "reason": "苏婉娘主动避免布衫发声，使配合转移不只是被动跟随。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "你也不催，就那么等着。",
+            "reason": "安静倾听使她披露负疚并松肩，不应门又引来窗外查探，内外两条反应相接。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "我对外只说是病故",
+            "reason": "带入房、放慢语气、等待、坦白与官差到窗下依次展开。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "把门开了，当面说话。",
+            "reason": "官差的当面要求明确，可回应查店，同时她的新信任仍在。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "continuity",
+              "evidence": "指尖绞着袖口那道旧疤",
+              "authority": "npc_profiles_json 中苏婉娘 appearance 明确写右手无名指上有一道浅浅的旧疤。",
+              "reason": "将手指旧疤错置为袖口上的疤，改为绞袖口或摩挲手指即可。"
+            }
+          ]
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "方才那敲门声一响，我就想，是不是有人翻出这笔旧账，来拿我了。",
+            "reason": "她自己把当前恐惧与旧债连接，解释心理而未由旁白确立官差真来意。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "你没有接话，只在她身边坐下，等她自己往下说。",
+            "reason": "提问后留出安静，令她由查店账目顾虑进入真实负疚，来者现身再改变姿态。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "可我心里明镜似的，我怕的不是这个。",
+            "reason": "先说表层担忧、再承认旧事，谈心有具体递进。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "屋里是什么人？敲门敲了这半晌，怎么不应？",
+            "reason": "窗外人直接询问，玩家可应答身份或先安抚身旁掌柜。"
+          },
+          "violations": []
+        },
+        "preference": "right",
+        "reason": "两篇都以入房、倾听和窗下打断形成完整场景；右篇让掌柜先说查店账目再承认旧债恐惧，心理递进更清楚，左篇还把手指旧疤误写到袖口。"
+      }
+    },
+    {
+      "case_id": "case_14_spontaneous_constable",
+      "repetition": 2,
+      "left": "B",
+      "right": "A",
+      "winner": "B",
+      "scores": {
+        "B": {
+          "scene_construction": 4,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 4,
+          "total": 14
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 4,
+          "total": 13
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": [
+          {
+            "severity": "local",
+            "category": "continuity",
+            "evidence": "手指绞着袖口那道旧疤",
+            "authority": "人物外貌明示旧疤位于右手无名指。",
+            "reason": "把手指伤疤写成袖口旧疤，属于可局部改正的部位错置。"
+          }
+        ]
+      },
+      "judgment": {
+        "repetition": 2,
+        "left": {
+          "scene_construction": {
+            "score": 4,
+            "evidence": "跟当年一个路子",
+            "reason": "掌柜把自己对本次货物封皮的辨认与旧年假药经历连在一起，让查店担忧和负疚影响当前交谈；这是她的说法，不等于旁白证实两案同源。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "你没催，只把另一只手覆在她手背上，轻轻按了按。",
+            "reason": "安抚促成担忧和秘密的连续诉说，外头不应门引出窗下喝问。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "我告诉你，你可别当我是个歹人。",
+            "reason": "人物经过犹豫和请求接纳再开口，信任通过具体言行演出。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "赵七今天取走的那批，我一看封皮就认出来了",
+            "reason": "可以追问掌柜为何认出封皮、核查她所说的关联，同时回应窗前喝问；人物说法留下可调查入口，未直接证明两批货有关。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "封条换过，伙计搬的时候还漏出些黑渣子，闻着有股子药味。",
+            "reason": "具体可疑观察支撑她对查店的忧惧，仍留在人物怀疑而未证实违禁。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "我不是怕自己吃亏，我是怕……怕又害了人。",
+            "reason": "安抚使她说出对寄存货的真实顾虑并触及负疚，官差破窗缝又带来直接盘问。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "一张敦实的脸凑了上来",
+            "reason": "屋内谈心与窗外行动都实际展开，官差不再只是抽象人影。"
+          },
+          "playability": {
+            "score": 4,
+            "evidence": "这位客官面生得很，哪儿来的？路引拿出来瞧瞧。",
+            "reason": "人物报姓名与查店职责，要求玩家出示路引，下一步交涉对象和议题明确。"
+          },
+          "violations": [
+            {
+              "severity": "local",
+              "category": "continuity",
+              "evidence": "手指绞着袖口那道旧疤",
+              "authority": "人物外貌明示旧疤位于右手无名指。",
+              "reason": "把手指伤疤写成袖口旧疤，属于可局部改正的部位错置。"
+            }
+          ]
+        },
+        "preference": "left",
+        "reason": "左篇经货物追问、覆手安抚和请求别将她当歹人，推进到旧事坦白及对封皮的辨认，形成可继续核查的个人说法；右篇当面报姓名、索路引的交涉入口也清楚，但谈心主要停在可疑货物和怕再害人。左篇的辨认不等于旁白确立两案同源，原重大披露判定依据不足；综合偏好左篇。右篇袖口旧疤的局部错误另列。"
+      }
+    },
+    {
+      "case_id": "case_14_spontaneous_constable",
+      "repetition": 3,
+      "left": "B",
+      "right": "A",
+      "winner": "A",
+      "scores": {
+        "B": {
+          "scene_construction": 3,
+          "causal_interaction": 3,
+          "scene_development": 3,
+          "playability": 3,
+          "total": 12
+        },
+        "A": {
+          "scene_construction": 3,
+          "causal_interaction": 4,
+          "scene_development": 4,
+          "playability": 3,
+          "total": 14
+        }
+      },
+      "violations": {
+        "B": [],
+        "A": []
+      },
+      "judgment": {
+        "repetition": 3,
+        "left": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "你……你听完了，还肯坐在这儿？",
+            "reason": "坦白后的接纳请求让秘密具有当下关系后果。"
+          },
+          "causal_interaction": {
+            "score": 3,
+            "evidence": "与她平视",
+            "reason": "玩家降低姿态、缓声等待使她松肩倾诉，后续窗下呼喝令她再度紧绷。"
+          },
+          "scene_development": {
+            "score": 3,
+            "evidence": "这话我从没对第二个人说过。",
+            "reason": "秘密通过有停顿的讲述及求接纳实际披露，情感过程成立。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "什么缘故，当面说清楚！",
+            "reason": "玩家同时面对掌柜求接纳与官差问话，可明确选择如何回应。"
+          },
+          "violations": []
+        },
+        "right": {
+          "scene_construction": {
+            "score": 3,
+            "evidence": "你慌，他才觉得有鬼。",
+            "reason": "安抚围绕具体处境展开，使沉住气成为双方交流议题。"
+          },
+          "causal_interaction": {
+            "score": 4,
+            "evidence": "“开店嘛，什么人都得应付。”你把方才她堵你的那句话原样还回去，语气却软，“你方才在柜台后头，攥着钥匙攥得指头都白了。真只是为了赵七那批货？”",
+            "reason": "玩家回用她先前的挡话，并追问是否只为货物，让她从应酬转入真正负疚，推进有问答依据。"
+          },
+          "scene_development": {
+            "score": 4,
+            "evidence": "只有我知道，是我那两杯酒，是我漏的那一眼。",
+            "reason": "从查店解释、进一步安慰、反问到认错和求接纳，关键转变多轮发生。"
+          },
+          "playability": {
+            "score": 3,
+            "evidence": "这事我没跟第二个人说过。你听完了，要笑我，要嫌我，都随你。",
+            "reason": "她的关系请求与窗外开门要求共同形成具体回应点。"
+          },
+          "violations": []
+        },
+        "preference": "right",
+        "reason": "左篇蹲下平视和求接纳有作用；右篇通过再安慰、回用掌柜原话、追问货物层层推动坦白，让信任发展有更多实际问答支撑。双方均保留官差来意为盘问而未判定玩家有罪。"
+      }
+    }
+  ],
+  "excluded_pairs": [],
+  "blind_review": {
+    "review_date": "2026-11-05",
+    "reviewer": "Codex assistant; user approved revisions before unblinding",
+    "original_judgments": "judgments-before-review-20261105",
+    "original_judgment_hashes": {
+      "case_01_tavern_inquiry.json": "c084c470368f241a5058a77ecc4dacade66b2dadb6b439a0413ff6b505eef1d4",
+      "case_02_rogue_recruitment.json": "236e4927e5d8a6d2647e8c44631fc397ceb44a8533d7dcbb07277ea7d25a7609",
+      "case_03_composite_infiltrate_and_disarm.json": "a5ba053fa2addad71b20fc1a93f7761f9db2c44b47d91182b9f3b2a80e75654d",
+      "case_04_secret_investigation.json": "1366298559b2d42db57acf2af4e429082d0951551c5b72106483aa6af9439eb7",
+      "case_05_faction_confrontation.json": "127602312125cee4f61b7e7cce2b59934233abf333ad93b871096192355245cd",
+      "case_08_failed_action_recovery.json": "9c3096bbdcb9c75a0bfa51615a956df3225dcf3c416834d1b1ef8589a9a334ed",
+      "case_11_tavern_entry.json": "1acc7439924cad7633aa3dc5b30ca086540a0f94b4c7055fd031e8d08159caf6",
+      "case_12_disclosure_intrusion.json": "a62c2a57368db2c9ad5227ccd8fa95fba96e5e7fff98d244b0305d4949f79e38",
+      "case_13_event_pressure.json": "3de0923c93514e7df078f00976e27f629a557b6472ded631fdd82740fc352de5",
+      "case_14_spontaneous_constable.json": "11f1f6199e076b04c00e4ed21bff33d319a2cd320574a2e4d95d0c7575fec202"
+    },
+    "changes": [
+      {
+        "case_id": "case_03_composite_infiltrate_and_disarm",
+        "repetition": 1,
+        "change": "右篇 scene_construction 2→3；偏好 left→tie。",
+        "reason": "两篇的守卫交谈都实际服务潜行，原差别判定依据不足。"
+      },
+      {
+        "case_id": "case_04_secret_investigation",
+        "repetition": 1,
+        "change": "删除右篇普通装袋取证的 player_agency 局部违规。",
+        "reason": "常规保存碎屑与破坏性剥离漆皮需要区别判断；左篇破坏性取样的局部问题保留。"
+      },
+      {
+        "case_id": "case_12_disclosure_intrusion",
+        "repetition": 2,
+        "change": "补记左篇店小二在场却声称跑堂全由自己承担的 continuity 局部违规；质量分与偏好保持。",
+        "reason": "对双方连续性问题采用相同记录尺度。"
+      },
+      {
+        "case_id": "case_04_secret_investigation",
+        "repetition": 1,
+        "change": "单列右篇重大叙事视角问题；偏好 tie→left，质量分不变。",
+        "reason": "本篇持续以陈默、他叙述主角，造成整篇玩家视角偏移，涉及全篇叙述方式。"
+      }
+    ],
+    "presentation_issues": [
+      {
+        "case_id": "case_04_secret_investigation",
+        "repetition": 1,
+        "side": "right",
+        "category": "narrative_person",
+        "severity": "major",
+        "evidence": "陈默从大衣内袋取出取证手套，逐指戴紧",
+        "authority": "第二人称互动正文要求；用户于2026-11-05明确确认全篇改用第三人称属于大问题。",
+        "reason": "本篇持续以陈默、他叙述主角，造成整篇玩家视角偏移，涉及全篇叙述方式。",
+        "score_effect": "原四项指标无独立人称项，保持四项分数；成对偏好 tie→left。",
+        "variant": "B"
+      }
+    ]
+  },
+  "violation_summary": {
+    "A": {
+      "major": 1,
+      "local": 7,
+      "original_categories": {
+        "major": 1,
+        "local": 7
+      },
+      "presentation_issues": 0
+    },
+    "B": {
+      "major": 3,
+      "local": 4,
+      "original_categories": {
+        "major": 2,
+        "local": 4
+      },
+      "presentation_issues": 1
+    }
+  },
+  "post_unblind_discussion": {
+    "date": "2026-11-05",
+    "overall": "用户认为正文质量基本无变化；本次先提交人物使用记录改动。",
+    "narrative_person": "用户认为此例人称偏移主要与前文示范不足有关，暂时搁置；保留已记录的问题。",
+    "recruitment": "NPC否认或只说考虑可以是傲娇表达，需要结合收款等行为判断。closing_prompt 和 next_action_directions 应承接已达成的招募结果；继续引导玩家争取入队会把角色台词解释成客观未完成。",
+    "scoring_status": "保留此前盲评及用户确认复核后的分数与问题计数，未根据解盲后的讨论重新评分。"
+  }
+}

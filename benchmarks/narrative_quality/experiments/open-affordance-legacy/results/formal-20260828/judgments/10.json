@@ -1,0 +1,47 @@
+{
+    "case_id": "case_10_high_stakes_negotiation",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "谈判不是单向的。",
+            "right_evidence": "这是你们安全离开这里的唯一通行证。",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left在完成既定让步后，没有让维克多沦为单纯递交下一任务的NPC，而是用“谈判不是单向的”重新夺回议价主动，并追加对雷诺身后人员的施压，形成可反制、拖延、欺骗或继续交换的多重张力；工程师还主动低声提供判断，使场景中不止两个人机械对话。Right的执行清楚但明显更平直，“唯一通行证”把局势收束成近似单一交换条件，人物和环境都较少产生新的可利用信息。Left的控制台、遥控解锁、工程师反应和外围威胁也提供了更丰富的具体行动支点。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "谁都没有再动。",
+            "right_evidence": "你能握那枚引信多久？",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left更像一个可继续操作的战术局面：维克多手指悬在通讯器上方、卫兵枪口保留随时抬起的角度、控制台明确成为交换接口，结尾也维持双方僵持，因此玩家可以围绕通讯、卫兵、工程师、密钥和引信设计多种下一步。Right的人物表现更锋利，“你能握那枚引信多久？”让维克多主动攻击威慑的可持续性，是更自然且有记忆点的反制，因此意外性和NPC自主性胜出；但其Closing Prompt把后续明确压成“按下引信”或“发送公钥”的二择一，显著牺牲了开放行动空间。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "tie",
+            "left_evidence": "你我都清楚，这只是开始。",
+            "right_evidence": "这正是你手中唯一的筹码",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "两篇在动作落实和空间描写上高度接近，具体性难分明显高下。Left略胜在维克多的“这只是开始”以及“被逼到墙角却依然冷静”的状态，让他显得仍在谋划下一层博弈，同时控制台、工程师所处位置和十步距离共同保留了较好的战术场。Right则用“唯一的筹码”替玩家过早总结局势，实际上场上还有引信、手提箱、工程师、卫兵距离与控制台等多个可操作变量，这种措辞削弱了行动启发力，也使结尾比Left更像要求玩家围绕公钥作答。"
+        }
+    ]
+}

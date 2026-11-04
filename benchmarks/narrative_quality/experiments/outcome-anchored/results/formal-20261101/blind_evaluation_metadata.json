@@ -1,0 +1,27 @@
+{
+  "evaluation_date": "2026-11-01",
+  "timezone": "Asia/Shanghai",
+  "evaluator": "Codex",
+  "evaluator_model": "GPT-6 系列（依据当前会话角色说明）；具体部署型号不可核验",
+  "evaluation_mode": "当前 Codex 会话内逐题独立判断",
+  "web_judge_model": null,
+  "fresh_web_conversation_per_case": false,
+  "protocol_deviation": "当前环境未为每题创建新的网页对话，因此本结果属于单会话盲评，不满足题包要求的逐题新网页对话流程。",
+  "input_scope": [
+    "盲评说明.md",
+    "网页盲评题包.zip 内 eval_prompts/*.md",
+    "直接提供的 eval_prompts/case_01_tavern_inquiry.md"
+  ],
+  "unblinding_performed": false,
+  "mapping_or_generation_statistics_read": false,
+  "results": "judgments/<case_id>.json；仅含题包 Schema 字段，保留本次原始判断",
+  "validation": {
+    "schema_valid": true,
+    "cases": 10,
+    "pairs": 30,
+    "score_evidence_exact_matches": 240,
+    "violation_evidence_exact_matches": 10,
+    "all_repetitions_present": true,
+    "all_prompt_instructions_identical": true
+  }
+}

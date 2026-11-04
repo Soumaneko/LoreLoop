@@ -1,0 +1,53 @@
+{
+    "case_id": "case_04_secret_investigation",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "tie",
+            "specificity": "right",
+            "left_evidence": "碎屑表面刻着一串激光蚀刻的编码",
+            "right_evidence": "后跟中央有一个内凹的菱形标记",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Right把既定的靴印与金属碎屑进一步做成可操作的辨识特征：后跟菱形标记、警用或军用级别、工业编码，并以“谁撬门、什么工具、为何留下这种等级痕迹”同时打开身份、工具来源和现场目的三条追查方向。Left的合金断面、编码和受力分析也扎实，但“仿佛握着一枚钥匙”偏抽象收束，后续行动支点不如Right鲜明。两篇均无NPC，世界环境的自主性也都较弱，因此该项持平。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "tie",
+            "specificity": "right",
+            "left_evidence": "像一个没说完的句子",
+            "right_evidence": "表面刻着一行极细的工业编码——「HY-77」",
+            "left_violations": [],
+            "right_violations": [
+                "陈默使用了Current State库存中不存在的放大镜、证据封袋和镊子，属于无授权赋予玩家额外资源。"
+            ],
+            "reason": "Left较克制地围绕已授权的靴印和工业编码展开，结尾把两件物证都保持为开放谜团，既可查鞋纹、查编码，也可继续勘验现场。Right在“HY-77”、泥屑采样、封袋记录等细节上更具体，但其具体性依赖凭空出现的放大镜、证据袋和镊子，直接破坏资源连续性；此外“为什么会被刻意留在”也略早地诱导出人为留线索的假设。没有NPC登场，世界自主性难分高下。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "left",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "left",
+            "left_evidence": "后跟处一块特殊的六边形凸起",
+            "right_evidence": "印痕边缘的灰尘被挤压出放射状裂纹",
+            "left_violations": [
+                "陈默使用了Current State库存中不存在的手机、镊子和证物袋，属于无授权赋予玩家额外资源。"
+            ],
+            "right_violations": [
+                "陈默使用了Current State库存中不存在的透明物证袋，属于无授权赋予玩家额外资源。"
+            ],
+            "reason": "两篇都有额外取证装备的资源违规，但Right的现场因果更有戏剧性：由放射状裂纹反推出撬门时全力蹬踏，再用管道呜咽和虚掩铁门维持车间仍在“运作”的压迫感，因此沉浸感和意外性更强。Left则给出了六边形鞋底特征、照片、激光蚀刻等更多可检索细节，而且明确保留“靴纹”和“编码”两条调查路径，所以开放性和具体性略胜；不过“先追查哪一个”带有明显菜单化收束。Right虽无NPC，其环境表现比Left更有自主存在感。"
+        }
+    ]
+}

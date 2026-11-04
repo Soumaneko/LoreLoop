@@ -1,0 +1,19 @@
+{
+  "case_id": "case_11_tavern_entry",
+  "file": "input.json",
+  "kind": "curated_play_trace",
+  "source": {
+    "turn_index": 1,
+    "trace_id": "c126c15a-4580-4499-8ef1-6d01fb86e097",
+    "director_call_id": "f748f90439234f068778c25e0ba2dd0e",
+    "composer_call_id": "318a70a806af45b39333e24fb62d641d",
+    "original_fixture_sha256": "327b03d7100b7cf8ddea47be96659e619503ad2277e33643365f9b30189d9c40"
+  },
+  "changes": [
+    "Normalized innkeeper to 苏婉娘 and inn name to 悦来客栈 across profiles, stage materials and engaged-event resources."
+  ],
+  "previous_scene_chars": {
+    "source": 343,
+    "curated": 343
+  }
+}

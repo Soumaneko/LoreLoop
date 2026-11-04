@@ -1,0 +1,48 @@
+{
+  "experiment": "npc_usages",
+  "seed": 42,
+  "repetitions": 3,
+  "baseline_revision": "7adb0398f4d7fa4d1475c8b0d85879321a88e1b9",
+  "fixed_case_ids": [
+    "case_11_tavern_entry",
+    "case_12_disclosure_intrusion",
+    "case_13_event_pressure",
+    "case_14_spontaneous_constable",
+    "case_01_tavern_inquiry",
+    "case_02_rogue_recruitment"
+  ],
+  "sampling_pool": [
+    "case_03_composite_infiltrate_and_disarm",
+    "case_04_secret_investigation",
+    "case_05_faction_confrontation",
+    "case_06_dungeon_puzzle",
+    "case_07_partial_success_alchemy",
+    "case_08_failed_action_recovery",
+    "case_09_critical_failure_ambush",
+    "case_10_composite_mixed_outcomes"
+  ],
+  "drawn_case_ids": [
+    "case_03_composite_infiltrate_and_disarm",
+    "case_04_secret_investigation",
+    "case_05_faction_confrontation",
+    "case_08_failed_action_recovery"
+  ],
+  "case_ids": [
+    "case_01_tavern_inquiry",
+    "case_02_rogue_recruitment",
+    "case_03_composite_infiltrate_and_disarm",
+    "case_04_secret_investigation",
+    "case_05_faction_confrontation",
+    "case_08_failed_action_recovery",
+    "case_11_tavern_entry",
+    "case_12_disclosure_intrusion",
+    "case_13_event_pressure",
+    "case_14_spontaneous_constable"
+  ],
+  "variants": {
+    "A": "新增 npc_usages 前的 Composer",
+    "B": "当前姓名版 npc_usages Composer"
+  },
+  "temperature": 0.8,
+  "max_retries": 1
+}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "timestamp": "2026-08-28T02:03:43Z",
+  "model": "deepseek-v4-flash",
+  "task_a": "narrative_compose",
+  "task_b": "narrative_compose_open_affordance",
+  "fixtures_hash": "3e9a377241764067",
+  "prompt_a_fingerprint": "bbd6474e8a9d6965",
+  "prompt_b_fingerprint": "4208480d3937403f",
+  "case_ids": [
+    "case_10_high_stakes_negotiation"
+  ],
+  "repetitions": 3,
+  "temperature": 0.8,
+  "total_calls": 54,
+  "recorded_case_ids": [
+    "case_01_tavern_inquiry",
+    "case_02_rogue_recruitment",
+    "case_04_secret_investigation",
+    "case_05_faction_confrontation",
+    "case_06_dungeon_puzzle",
+    "case_07_inn_rest_overhear",
+    "case_08_moral_dilemma",
+    "case_09_failed_action_recovery",
+    "case_10_high_stakes_negotiation"
+  ],
+  "recorded_outputs": 54
+}

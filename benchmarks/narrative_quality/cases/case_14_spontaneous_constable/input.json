@@ -1,0 +1,322 @@
+{
+  "case_id": "case_14_spontaneous_constable",
+  "category": "spontaneous_introduce_npc",
+  "title": "即兴差役入场",
+  "description": "由历史场景改编的非露骨交谈用例；保留导演技能、行动顺序及给定结果档位。",
+  "turn_index": 6,
+  "user_input": "巡检司为什么绕到后门查店？我让苏婉娘放轻声音，转身将她带入厢房，低声安抚她对查店的担忧，耐心听她说自己的难处，让她放下戒备说出心里话。",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "core_world_identity",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "当前世界名为「天元大陆」，世界风格为：武侠\n能力体系为：低超自然"
+      },
+      {
+        "id": "core_player_identity",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角是柳欢，男性。\n人物介绍：秘密掌握早已失传的合欢派秘术的独行剑客，英俊潇洒，善于交游，在江湖冒险中结识同伴并提升实力。"
+      },
+      {
+        "id": "core_story_expectation",
+        "kind": "narrative_preference",
+        "strength": "strong_preference",
+        "source": "player",
+        "content": "玩家期望的长期故事体验：在冒险中邂逅各色人物，发展信任与情谊，并逐步提升。"
+      },
+      {
+        "id": "core_failure_severity",
+        "kind": "narrative_preference",
+        "strength": "strong_preference",
+        "source": "player",
+        "content": "失败后果尺度：宽容"
+      },
+      {
+        "id": "core_player_abilities",
+        "kind": "ability_rule",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角的特殊能力：\n- 合欢之眼：合欢派失传秘术，能察觉对方愿意接近和交谈的微妙神态\n- 合欢剑法：合欢派失传秘术，剑招阴柔灵活"
+      },
+      {
+        "id": "core_currency_system",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "默认货币单位：银两"
+      },
+      {
+        "id": "core_public_power_baseline",
+        "kind": "ability_rule",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "公开力量来源：内力修炼\n社会普及率：少数人掌握\n学习难度：困难\n公开限制：内力无法突破人体经脉承受的极限，强行超越必致经脉俱损。"
+      },
+      {
+        "id": "core_peoples_and_beings",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界中的主要存在主体：人类"
+      },
+      {
+        "id": "core_major_world_conflicts",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "长期塑造世界的主要冲突：\n- 正道名门与邪道散修之间长期对立，彼此争夺武林话语权\n- 各派武学传承封闭，寒门武者难获上乘功法"
+      },
+      {
+        "id": "core_dominant_powers",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "能够影响普通人命运的主导势力：正道盟、邪道散修、朝廷"
+      },
+      {
+        "id": "core_civilization_baseline",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "文明与技术基准：以农耕与手工业为主，城镇间靠驿道与马车往来，江湖门派与官府并存于同一片土地。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_002",
+      "location": "临江镇·悦来客栈后院",
+      "participants": [
+        {
+          "name": "柳欢",
+          "attitude_to_player": null
+        },
+        {
+          "name": "苏婉娘",
+          "attitude_to_player": "亲近"
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "清晨"
+    },
+    "player": {
+      "name": "柳欢",
+      "visible_status": "男性"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "长剑",
+          "quantity": 1
+        },
+        {
+          "name": "换洗衣物",
+          "quantity": 1
+        },
+        {
+          "name": "干粮",
+          "quantity": 2
+        },
+        {
+          "name": "水囊",
+          "quantity": 1
+        }
+      ],
+      "money": 12,
+      "money_unit": "银两",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "A1",
+      "sequence": 1,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "signal_ally",
+      "action_text": "让苏婉娘放轻声音",
+      "resolution_source": "automatic",
+      "dice": null,
+      "roll_value": null,
+      "raw_value": null,
+      "dice_sides": null,
+      "outcome_band": "success",
+      "risk_level": "low"
+    },
+    {
+      "action_id": "A2",
+      "sequence": 2,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "move",
+      "action_text": "将苏婉娘带入厢房",
+      "resolution_source": "automatic",
+      "dice": null,
+      "roll_value": null,
+      "raw_value": null,
+      "dice_sides": null,
+      "outcome_band": "success",
+      "risk_level": "low"
+    },
+    {
+      "action_id": "A3",
+      "sequence": 3,
+      "actor": [
+        "柳欢"
+      ],
+      "action_type": "speak",
+      "action_text": "安抚苏婉娘对查店的担忧，耐心倾听并建立信任，让她愿意说出心里话",
+      "resolution_source": "roll",
+      "dice": "3d20kh",
+      "roll_value": 20,
+      "raw_value": 18,
+      "dice_sides": 20,
+      "outcome_band": "critical_success",
+      "risk_level": "medium"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "即兴差役入场",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "柳欢、苏婉娘已知(亲眼观察): 后院门被急敲三下，门外陌生男子自称巡检司查店。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f2",
+        "fact": "苏婉娘已知(本人经历): 苏婉娘听到巡检司查店后浑身一僵，揪紧柳欢衣襟惊望院门。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f3",
+        "fact": "柳欢、苏婉娘已知(苏婉娘告知): 赵七替黑水泽几位老棚主取走早先寄存在客栈的货物，字据画押、货款两讫，此事已了结。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f4",
+        "fact": "柳欢、苏婉娘已知(苏婉娘告知): 苏婉娘本不愿应承赵七，因忌惮对方记仇才应下。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f5",
+        "fact": "柳欢、苏婉娘已知(亲眼观察): 赵七已独自离店，后院确认四下无人。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f6",
+        "fact": "柳欢已知(亲眼观察): 苏婉娘愿意继续私下交谈，但突然响起的查店敲门声让她紧张。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f7",
+        "fact": "柳欢已知(既有认知): 柳欢善于察言观色，掌握灵活的江湖剑法。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f8",
+        "fact": "创作者已知(既有剧情): 苏婉娘隐藏着当年因醉酒漏看掺假药材、致结拜姐妹阿蘅身亡的旧事，从未对任何人提起。",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "f9",
+        "fact": "创作者已知(既有剧情): 巡检司敲门者的具体来意与身份尚未确认。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [
+    {
+      "name": "苏婉娘",
+      "aliases": [],
+      "role": "临江镇「悦来客栈」的老板娘兼女掌柜",
+      "appearance": "三十出头的妇人，身段丰腴，常穿一件洗得发软的靛青布衫，袖口挽到小臂；头发松松挽个髻，斜插一根磨旧的银簪；说话时爱半眯着眼，嘴角总像含着笑意，右手无名指上有一道浅浅的旧疤。",
+      "personality_trait": "总靠在柜台边嗑瓜子，看似不上心，却把每张桌坐的是谁、谁欠房钱记得分明。",
+      "known_abilities": [
+        {
+          "name": "客栈人脉",
+          "description": "在临江镇经营多年，与驿馆驿丞、镖局分号、码头脚行都有交情，能打听到驿道上往来的商队消息与镇上风声；但涉及官府隐秘或正道盟内部的事，她探不到也不敢深问。"
+        },
+        {
+          "name": "察言观色",
+          "description": "常年迎客练出的眼力，能从客人的衣着、口音与点菜方式判断其来历与荷包厚薄，据此决定房钱与态度；遇上刻意伪装的高手则容易看走眼。"
+        },
+        {
+          "name": "粗浅拳脚",
+          "description": "早年跑江湖时学过几手防身的拳脚，能对付一两个醉汉泼皮，遇到真正练家子只能拖延几步喊人；内力修为极浅，从不在人前显露。"
+        },
+        {
+          "name": "算账管库",
+          "description": "一手账目清楚利落，客栈的粮菜酒肉、房钱赊欠全记在脑子里，能迅速盘出存货与银钱去向；但只限小本经营，大宗货栈的账她做不来。"
+        }
+      ],
+      "faction": null,
+      "last_known_location": "临江镇·悦来客栈后院",
+      "attitude_to_player": "亲近",
+      "last_scene_summary": "苏婉娘送赵七离店，随后在后院向柳欢说明取货和结账经过；两人交谈时听到巡检司查店的敲门声，她紧张地望向院门。",
+      "last_scene_turn": 5,
+      "disclosure_level": null,
+      "core_motivation": "把客栈经营成临江镇最稳当的落脚处，攒够银两后赎清当年因自己贪杯误事而害死结拜姐妹的那笔旧债——给姐妹的寡母养老送终。",
+      "hidden_secret": "她当年在邻镇帮人看管货栈时，因醉酒漏看一批掺假的药材，导致结拜姐妹阿蘅误用假药身亡；此事她从未对任何人提起，只谎称阿蘅病故，如今暗中托人往阿蘅老家送钱，落款用的是假名。",
+      "conflict_style": "先赔笑打圆场，把争执往酒菜和银钱上引，实在压不住才搬出巡检司或镖局的人情来镇场；从不正面动手，事后却会把账算得清清楚楚。",
+      "social_style": "对谁都懒洋洋地搭话，靠一壶茶、一句闲话把客人的底细摸个七七八八；对熟客热络却不亲昵，对生客客气里带着打量，极少主动透露自己的事。",
+      "director_notes": null,
+      "source_director_npc_id": "director_npc_c7cae4ddd23e",
+      "source_setting_ids": [],
+      "created_turn": 0,
+      "introduced_turn": 1
+    }
+  ],
+  "director_stage": {
+    "reasoning": "玩家暂不应门，带苏婉娘去厢房私下交谈。她已有 intimate 披露，无需升级；门外差役久敲不应，安排即兴人物周德海按查店章程继续查探。",
+    "materials": [
+      {
+        "kind": "npc",
+        "resource_id": "spontaneous_npc_402350566003",
+        "guidance": "巡检司差役周德海在后院门外久敲不应，按查店章程翻墙或绕到厢房窗下探看，以皂衣差役身份当面撞见柳欢与苏婉娘在厢房内的情形。他的来意是查店验引、追查可疑人等，态度先硬后看情形，可被银钱或人情软化。请让他的出现形成现实压力，但具体是否起冲突、是否被搪塞过去，交由下游按骰子裁决。",
+        "payload": {
+          "npc_id": "spontaneous_npc_402350566003",
+          "source": "spontaneous",
+          "name": "周德海",
+          "role": "临江镇巡检司差役，奉命查店",
+          "appearance": "三十五六岁的汉子，身量敦实，穿一身洗得发白的皂衣，腰挎一把半旧的朴刀，帽檐压得低；脸上横肉不多，却有一双总在打量人的细眼，右手虎口有常年握刀磨出的厚茧。",
+          "personality_trait": "办事讲规矩也讲实惠，敲门前先掂量院里有没有油水可捞，遇硬则软、遇软则硬。",
+          "known_abilities": [
+            {
+              "name": "巡检盘查",
+              "description": "熟悉巡检司查店、验引、搜赃的章程，能凭口供与行李破绽看出可疑之处；但只限镇内小案，遇上真正的高手或大势力便不敢深究。"
+            },
+            {
+              "name": "朴刀粗手",
+              "description": "练过几年军中朴刀，能对付寻常泼皮与逃役的流民；内力浅薄，遇上正经武者只能撑几招并呼喝同伴。"
+            }
+          ],
+          "faction": "",
+          "view_mode": "face_to_face"
+        }
+      }
+    ]
+  },
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_002",
+    "turn_index": 5,
+    "user_input": "",
+    "scene_text": "你也不急着动，把空碗往桌角一搁，扬声又跟苏婉娘要了一壶热水。她横你一眼，到底还是提了壶过来，给你续上。赵七在门边坐着，草鞋尖一下一下点地，像是在跟谁较劲，可堂里再没第二个人理会他。茶又喝过两巡，他终于坐不住，站起身来，草鞋在青砖上蹭出长长一声，什么话也没撂，抬脚便出了客栈大门，背影拐过街角就不见了。\n\n苏婉娘送到门边便停了步，回身时正撞上你的目光。你起身绕到柜台后头，一把攥住她的手腕。她“哎”了一声，压着嗓子嗔：“你这人，大白天的——”话没说完，人已经被你带着往里走，脚下竟也没真挣，半推半就随你跨进了后院那道门。\n\n后院比前堂静得多。货棚下堆着几口旧木箱，柴房的门半掩着，晾衣竿上挂着两件洗旧的布衫，风一吹轻轻晃。你扫了一圈，墙角、棚后、柴房里外，确无旁人，这才把声音放低：“方才赵七找你，到底是何来意？”\n\n苏婉娘靠着柴房那面土墙，抬手把散下来的碎发别到耳后，呼出一口气：“还能有什么，替黑水泽那几个老棚主取一批早先寄在这儿的货。字据画了押，货款也两讫了，货搬走，这桩事就算翻篇。”她说着顿了顿，眼风往你脸上一撩，“我原不想应，可那号人记仇，惹不起。”\n\n“翻篇就好。”你往前半步，把声音放得更低：“方才你在柜台后，手一直没松开过。这些人来来往往，怕不只是多卖两壶茶的生意吧？”苏婉娘抬眼看你，原本挂在嘴边的打趣停了停。她背靠着墙，把袖口往手腕下拉了一点，指尖还捏着那把铜钥匙。“开店嘛，什么人都得应付。”她先拿一句惯常的话挡了挡，目光却没再转开，“你一个赶路的客人，问这些做什么？”她说着，手指无意识地攥住你衣襟，又松开一点，抬眼等你作答。你没有催她，只等着她把没说完的话接下去。\n\n就在这时候，后院门忽然传来笃、笃、笃三下敲门声，又急又重，跟着一个陌生男人的粗嗓门隔着一进院子飘进来：“开门！巡检司的，查店！”\n\n苏婉娘整个人一僵，揪着你衣襟的手猛地收紧，眼睛睁大了望向那道门。",
+    "closing_prompt": "",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

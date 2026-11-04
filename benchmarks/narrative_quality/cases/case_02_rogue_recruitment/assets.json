@@ -1,0 +1,44 @@
+{
+  "draft": {
+    "draft_id": "benchmark_draft_alice",
+    "core_motivation": "靠可靠的委托收入摆脱拮据，同时维护自己作为天才元素使的自尊。",
+    "hidden_secret": "手头拮据，却不愿主动承认自己急需这份报酬。",
+    "conflict_style": "用挑剔与嘴硬维护自尊。",
+    "social_style": "嘴硬心软、容易害羞",
+    "role": "精灵族天才元素使",
+    "faction": null,
+    "personality_trait": "极度傲娇、口嫌体正直、自尊心强",
+    "known_abilities": [
+      {
+        "name": "爆裂魔法",
+        "description": "高阶火焰范围轰炸法术"
+      },
+      {
+        "name": "冰霜新星",
+        "description": "迅速冻结周围敌人的控制法术"
+      }
+    ],
+    "appearance": "金发双马尾，身着星纹深蓝法袍，身形娇小，眼神透着一股傲气。",
+    "name": "艾莉丝",
+    "source_setting_ids": [],
+    "status": "prepared",
+    "created_turn": 3,
+    "introduced_turn": null,
+    "created_at": "",
+    "updated_at": ""
+  },
+  "director_decision": {
+    "reasoning": "本轮以艾莉丝的人物资料承接招募交谈，让她对定金和战利品条件作出符合性格的回应。",
+    "requests": [
+      {
+        "request_id": "introduce_alice",
+        "skill": "introduce_npc",
+        "arguments": {
+          "npc_id": "benchmark_draft_alice",
+          "view_mode": "face_to_face"
+        },
+        "guidance": "让艾莉丝结合手头拮据、挑剔队友和自尊心强的特点回应招募。围绕定金、委托与队友配合展开具体交流，表达她的顾虑和诉求，保持嘴硬心软的说话方式。"
+      }
+    ]
+  }
+}

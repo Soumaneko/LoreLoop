@@ -1,0 +1,47 @@
+{
+    "case_id": "case_02_rogue_recruitment",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "tie",
+            "npc_world_agency": "left",
+            "specificity": "left",
+            "left_evidence": "瘴气防护、应急药剂、斥候路线，一样都不能少",
+            "right_evidence": "补给、解毒剂、防瘴面罩，还有一套靠谱的遭遇战方案",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "两篇都准确兑现了招募成功与艾莉丝傲娇应允。Right的防瘴面罩、遭遇战方案同样具体，但Left把准备拆成防护、药剂、斥候路线三个不同策略轴，既能引向采购，也能引向情报、路线勘察或继续招募，后续行动空间更宽。Left还通过“烛火跳了跳”“指尖轻轻敲了两下”等细节让谈判停顿更有戏剧感，艾莉丝“不容商量”的要求也显得更像主动设定合作底线，而不只是向玩家提问。两篇意外性均有限，主要靠合理的人物反应推进，因此该项持平。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "tie",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "可别指望我拿命陪你赌",
+            "right_evidence": "魔瘴的应对、伏击的预案，一样都不能少",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的人物口吻有力度，“拿命陪你赌”很好地表现了艾莉丝的自保意识，但它只笼统要求“充足准备”，没有真正落实判定中要求的具体筹备方向。Right明确给出“防护药剂”“魔瘴的应对”“伏击的预案”，玩家马上可以选择采购装备、制定阵型、搜集森林情报或安排侦察，因此行动启发力和可利用信息明显更强。Right里敲杯沿、敲桌面、竖起手指等动作也使艾莉丝从单纯傲娇模板变成正在认真审核队伍风险的专业施法者。两篇都没有特别出人意料但又改变局势的新转折，因此意外性持平。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "left",
+            "continue_desire": "left",
+            "open_affordance": "left",
+            "surprising_but_coherent": "left",
+            "npc_world_agency": "left",
+            "specificity": "right",
+            "left_evidence": "我劝你现在就把钱拿回去",
+            "right_evidence": "三天之内五脏六腑都会烂透",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Left的优势在于把既定成功结果继续转化成新的关系张力：艾莉丝虽然已经加入，却用“把钱拿回去”的反向施压明确表示合作仍有条件，这个小转折既符合她的自尊和专业判断，又能逼玩家证明队长能力。酒馆远处碰杯与醉汉哼唱形成的背景声也让谈判角落更有空间感。Right提供了更具体的“抗瘴药剂、防护装备”和明确的毒害时间尺度，所以specificity更高；但“三天之内五脏六腑都会烂透”属于突然加入的极端定量设定，虽不构成事实冲突，却略显为了制造危险而夸张。Right最后把问题集中到“什么时候去准备”，相比Left的条件性对峙，策略出口稍窄。"
+        }
+    ]
+}

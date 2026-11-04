@@ -1,0 +1,138 @@
+{
+  "case_id": "case_02_rogue_recruitment",
+  "category": "rogue_recruitment",
+  "title": "公会酒馆招募傲娇女魔法师",
+  "description": "检验招募伙伴时，NPC 是否有自身性格顾虑与诉求表达，并在达成意向后自然打开准备环节的策略空间。",
+  "turn_index": 4,
+  "user_input": "我将一袋沉甸甸的金币推到艾莉丝面前，认真看着她：“这只是定金。队伍里正缺一名顶尖的元素使，只要你答应加入我们讨伐魔物的委托，之后的战利品你优先挑选，如何？”",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「艾尔文王国」，风格为：日式王道西幻\n能力体系为：冒险者职业等级、剑与魔法"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角里欧，男性。初出茅庐的持剑冒险者，正要在王都招募可靠队员建立固定小队。"
+      },
+      {
+        "id": "c3",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "货币单位为金币（G）。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_002",
+      "location": "王都·星辰公会酒馆角落",
+      "participants": [
+        {
+          "name": "里欧",
+          "attitude_to_player": null
+        },
+        {
+          "name": "艾莉丝",
+          "attitude_to_player": "半信半疑但心动"
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 3,
+      "phase": "晚上"
+    },
+    "player": {
+      "name": "里欧",
+      "visible_status": "背着轻便钢剑的年轻剑士"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "金币袋",
+          "quantity": 1
+        }
+      ],
+      "money": 300,
+      "money_unit": "G",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "里欧"
+      ],
+      "action_type": "speak",
+      "action_text": "将金币定金推到艾莉丝面前并承诺战利品优先挑选权以招募其入队",
+      "resolution_source": "automatic",
+      "outcome_band": "success",
+      "risk_level": "medium"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "招募独行魔法师艾莉丝",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "艾莉丝是公会里有名的独行法师，因为嫌弃笨拙队友而一直单独行动，近期正好手头拮据。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [],
+  "director_stage": {
+    "reasoning": "本轮以艾莉丝的人物资料承接招募交谈，让她对定金和战利品条件作出符合性格的回应。",
+    "materials": [
+      {
+        "kind": "npc",
+        "resource_id": "benchmark_draft_alice",
+        "guidance": "让艾莉丝结合手头拮据、挑剔队友和自尊心强的特点回应招募。围绕定金、委托与队友配合展开具体交流，表达她的顾虑和诉求，保持嘴硬心软的说话方式。",
+        "payload": {
+          "source": "director_npc",
+          "draft_id": "benchmark_draft_alice",
+          "conflict_style": "用挑剔与嘴硬维护自尊。",
+          "social_style": "嘴硬心软、容易害羞",
+          "role": "精灵族天才元素使",
+          "personality_trait": "极度傲娇、口嫌体正直、自尊心强",
+          "known_abilities": [
+            {
+              "name": "爆裂魔法",
+              "description": "高阶火焰范围轰炸法术"
+            },
+            {
+              "name": "冰霜新星",
+              "description": "迅速冻结周围敌人的控制法术"
+            }
+          ],
+          "appearance": "金发双马尾，身着星纹深蓝法袍，身形娇小，眼神透着一股傲气。",
+          "name": "艾莉丝",
+          "view_mode": "face_to_face"
+        }
+      }
+    ]
+  },
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_002",
+    "turn_index": 3,
+    "user_input": "走到角落艾莉丝桌前坐下",
+    "scene_text": "你走到昏暗的角落，拉开木椅坐在了艾莉丝对面。她正用小勺子搅着面前的浆果冰沙，红宝石般的眼睛警惕地瞥了你一眼：“干嘛？我可是很挑队友的，没实力的笨蛋别来烦我。”",
+    "closing_prompt": "艾莉丝等待着你的下文，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "case_id": "case_03_composite_infiltrate_and_disarm",
+  "pairs": [
+    {
+      "repetition": 1,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "回头时只看见空荡荡的回廊",
+          "reason": "守卫回头、队友回应使潜行发生在有反应的现场。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "今晚这廊里好像太安静了？",
+          "reason": "切断阵法后的寂静引起守卫疑虑，成功之后的现场反应有可理解联系。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "开锁器的尖端一挑一旋",
+          "reason": "靠近、断线、熄光、闪号与回光逐步演出，关键动作完整。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "今晚这廊里好像太安静了？",
+          "reason": "警报已停且队友收到信号，玩家可针对尚未发现自己的守卫作应对。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "衣料擦过石面的细响被他们的嗓音盖住",
+          "reason": "守卫抱怨形成行动掩护，环境细节有实际作用。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "远处树影深处回了两点短光",
+          "reason": "切线使震颤停止，信号促使队友响应并行动，因果链完整。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "第二股藏在更深处，你微微旋腕，将它整根剔出",
+          "reason": "拆除过程有具体阻力与处理，不只宣告成功。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "队友收到了，也已经动了",
+          "reason": "形成警报关闭、同伴开始配合的窗口，但守卫蹭地未增加明确事件。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇让异常寂静引出守卫疑问，右篇让交谈掩盖潜行、队友接号行动。两篇均完整演出三项成功，左篇的疑虑尚未削弱潜行结果。"
+    },
+    {
+      "repetition": 2,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "两名守卫的交谈戛然而止",
+          "reason": "新脚步让守卫同时转头按腰，现场人物反应有实际作用。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "几乎同时转头望向声音来处",
+          "reason": "新增动静改变守卫注意方向，同时不撤销既有成功。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "确认没有第二道反噬纹路亮起",
+          "reason": "潜行、切断、确认、发送与收到回号形成完整行动过程。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "其中一人下意识地伸手按向腰间",
+          "reason": "玩家可利用守卫转移注意或判断来人，队友接号和禁警报状态明确。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "每隔一息就微微搏动一次",
+          "reason": "回路的节律决定切线时机；守卫争执持续提供掩护。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "屏息数到第三次搏动的间隙",
+          "reason": "观测节律导致具体操作，停光后确认无反噬，再传号接应。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "轻轻一挑",
+          "reason": "细分了找接点、卡入、挑断与等待确认，成功并未只被概述。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "两短一长，是队友的应答",
+          "reason": "警报已关、接应已到且守卫不知，可继续潜入或配合同伴。"
+        },
+        "violations": [
+          {
+            "severity": "local",
+            "category": "internal_logic",
+            "evidence": "光点在夜色里明灭三次",
+            "authority": "本篇紧邻前文明确逐次发送“短、短、短，长”，即四次闪光。",
+            "reason": "把三短一长写成总共明灭三次，局部计数不一致，改计数即可。"
+          }
+        ]
+      },
+      "preference": "tie",
+      "reason": "左篇脚步引起守卫动作，右篇阵纹搏动决定切断时机；两者都把完整成功落实为可继续行动的窗口。右篇闪光计数有局部错误，但场景主体不受影响，整体差距不足以确定偏好。"
+    },
+    {
+      "repetition": 3,
+      "left": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "其中一人拍了下大腿，笑声未落",
+          "reason": "守卫的笑声给移动时机，第三根灵丝闪光也成为可见的拆除反馈。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "那光只是徒劳地跳了跳",
+          "reason": "分段切断导致阵法最终失效，再发信并获得回应，行动与反馈明确。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "第二根略硬些，你手腕一沉一旋",
+          "reason": "多根灵丝的不同处理实际展开拆除过程。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "你的队友收到了",
+          "reason": "隐蔽、禁警报与通信均完成，后续有配合窗口，具体下一目标尚未展开。"
+        },
+        "violations": []
+      },
+      "right": {
+        "scene_construction": {
+          "score": 3,
+          "evidence": "回廊尽头通往中枢的暗门轮廓",
+          "reason": "把已清除警报的现场与可继续潜入的空间相接。"
+        },
+        "causal_interaction": {
+          "score": 3,
+          "evidence": "正好把你的脚步声吞了个干净",
+          "reason": "守卫交谈掩护移动，切线停止震颤，同伴回号，因果清楚。"
+        },
+        "scene_development": {
+          "score": 3,
+          "evidence": "引信回路断了，报警阵法彻底哑了火",
+          "reason": "通过找槽、触节点、挑断与光色变化演出成功，未再设置补做条件。"
+        },
+        "playability": {
+          "score": 3,
+          "evidence": "重新伏低",
+          "reason": "玩家仍隐蔽且同伴收到信号，暗门提供下一步可利用的方向。"
+        },
+        "violations": []
+      },
+      "preference": "tie",
+      "reason": "左篇以笑声掩护和三根灵丝的不同反馈展开操作，右篇以地板震颤停止和暗门接续空间。两者完成度相近，新增暗门不足以单独构成显著质量优势。"
+    }
+  ]
+}

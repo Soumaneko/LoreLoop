@@ -1,0 +1,112 @@
+{
+  "case_id": "case_04_secret_investigation",
+  "category": "secret_investigation",
+  "title": "废弃化工厂现场勘查",
+  "description": "检验现代刑侦探索调查时，正文是否给出具象物证线索，并为下一步排查留出多分支策略。",
+  "turn_index": 5,
+  "user_input": "我戴上手套，蹲下身打开紫外线手电，顺着被撬坏的铁门门框一路扫视到水泥地面，仔细寻找对方留下的脚印或金属碎屑。",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「新海市」，风格为：现代都市悬疑刑侦\n能力体系为：法证科学、逻辑推理与现代侦查工具"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角陈默，男性。前刑警出身的私家侦探，行事沉稳细致。"
+      },
+      {
+        "id": "c3",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "货币单位为人民币（元）。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_004",
+      "location": "东区·废弃化工厂第3车间门前",
+      "participants": [
+        {
+          "name": "陈默",
+          "attitude_to_player": null
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 2,
+      "phase": "深夜"
+    },
+    "player": {
+      "name": "陈默",
+      "visible_status": "穿着黑色风衣的独行侦探"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "紫外线手电",
+          "quantity": 1
+        },
+        {
+          "name": "取证勘查手套",
+          "quantity": 1
+        }
+      ],
+      "money": 1500,
+      "money_unit": "元",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "陈默"
+      ],
+      "action_type": "inspect_object",
+      "action_text": "戴上手套打开紫外线手电顺着门框与地面勘查脚印与金属残渣",
+      "resolution_source": "roll",
+      "dice": "1d20",
+      "dice_sides": 20,
+      "roll_value": 20,
+      "raw_value": 20,
+      "outcome_band": "critical_success",
+      "risk_level": "medium"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "化工厂犯罪现场物证勘查",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "两天前化工厂发生过不明纠纷，现场大范围痕迹被清理过，但此处的铁门是事后被暴力撬开的。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [],
+  "director_stage": null,
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_004",
+    "turn_index": 4,
+    "user_input": "走近车间大门",
+    "scene_text": "夜风掠过空旷的车间，带来一阵铁锈与机油的气味。第3车间的铁门虚掩着，门锁被外力粗暴破坏，地上散落着剥落的漆皮与细碎残渣。",
+    "closing_prompt": "面对破坏的门，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

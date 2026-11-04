@@ -1,0 +1,1382 @@
+[
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 23139.19,
+    "ttft_ms": 17279.46,
+    "token_usage": {
+      "prompt_tokens": 7608,
+      "completion_tokens": 1913,
+      "total_tokens": 9521
+    },
+    "char_count": 443,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 443
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 14955.53,
+    "ttft_ms": 9118.66,
+    "token_usage": {
+      "prompt_tokens": 4088,
+      "completion_tokens": 1189,
+      "total_tokens": 5277
+    },
+    "char_count": 381,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 381
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 22516.94,
+    "ttft_ms": 17038.99,
+    "token_usage": {
+      "prompt_tokens": 7649,
+      "completion_tokens": 2003,
+      "total_tokens": 9652
+    },
+    "char_count": 409,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 409
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 13876.76,
+    "ttft_ms": 8458.24,
+    "token_usage": {
+      "prompt_tokens": 4111,
+      "completion_tokens": 1119,
+      "total_tokens": 5230
+    },
+    "char_count": 444,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 444
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 25355.58,
+    "ttft_ms": 18029.2,
+    "token_usage": {
+      "prompt_tokens": 7745,
+      "completion_tokens": 2190,
+      "total_tokens": 9935
+    },
+    "char_count": 542,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 542
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 15872.35,
+    "ttft_ms": 8658.94,
+    "token_usage": {
+      "prompt_tokens": 4148,
+      "completion_tokens": 1360,
+      "total_tokens": 5508
+    },
+    "char_count": 499,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 499
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 26320.22,
+    "ttft_ms": 18347.36,
+    "token_usage": {
+      "prompt_tokens": 7265,
+      "completion_tokens": 2241,
+      "total_tokens": 9506
+    },
+    "char_count": 669,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 669
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 16270.65,
+    "ttft_ms": 9491.06,
+    "token_usage": {
+      "prompt_tokens": 3905,
+      "completion_tokens": 1388,
+      "total_tokens": 5293
+    },
+    "char_count": 654,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 654
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 22628.58,
+    "ttft_ms": 15940.84,
+    "token_usage": {
+      "prompt_tokens": 7574,
+      "completion_tokens": 1865,
+      "total_tokens": 9439
+    },
+    "char_count": 476,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 476
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 14994.13,
+    "ttft_ms": 7784.6,
+    "token_usage": {
+      "prompt_tokens": 4070,
+      "completion_tokens": 1296,
+      "total_tokens": 5366
+    },
+    "char_count": 635,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 635
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 21925.35,
+    "ttft_ms": 15597.05,
+    "token_usage": {
+      "prompt_tokens": 7236,
+      "completion_tokens": 1800,
+      "total_tokens": 9036
+    },
+    "char_count": 487,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 487
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 12278.82,
+    "ttft_ms": 7351.91,
+    "token_usage": {
+      "prompt_tokens": 3897,
+      "completion_tokens": 957,
+      "total_tokens": 4854
+    },
+    "char_count": 436,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 436
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 22383.77,
+    "ttft_ms": 15538.85,
+    "token_usage": {
+      "prompt_tokens": 7039,
+      "completion_tokens": 1903,
+      "total_tokens": 8942
+    },
+    "char_count": 609,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 609
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 14532.38,
+    "ttft_ms": 7976.06,
+    "token_usage": {
+      "prompt_tokens": 3805,
+      "completion_tokens": 1254,
+      "total_tokens": 5059
+    },
+    "char_count": 607,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 607
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 22350.83,
+    "ttft_ms": 15425.27,
+    "token_usage": {
+      "prompt_tokens": 7189,
+      "completion_tokens": 1875,
+      "total_tokens": 9064
+    },
+    "char_count": 528,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 528
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 13792.1,
+    "ttft_ms": 8308.12,
+    "token_usage": {
+      "prompt_tokens": 3870,
+      "completion_tokens": 1161,
+      "total_tokens": 5031
+    },
+    "char_count": 337,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 337
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 25079.66,
+    "ttft_ms": 17362.9,
+    "token_usage": {
+      "prompt_tokens": 7320,
+      "completion_tokens": 2111,
+      "total_tokens": 9431
+    },
+    "char_count": 532,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 532
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 17709.32,
+    "ttft_ms": 8874.63,
+    "token_usage": {
+      "prompt_tokens": 3927,
+      "completion_tokens": 1519,
+      "total_tokens": 5446
+    },
+    "char_count": 635,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 635
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "A",
+    "repetition": 1,
+    "latency_ms": 24591.85,
+    "ttft_ms": 17456.06,
+    "token_usage": {
+      "prompt_tokens": 7300,
+      "completion_tokens": 2270,
+      "total_tokens": 9570
+    },
+    "char_count": 547,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 547
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "B",
+    "repetition": 1,
+    "latency_ms": 15751.56,
+    "ttft_ms": 8671.93,
+    "token_usage": {
+      "prompt_tokens": 3920,
+      "completion_tokens": 1456,
+      "total_tokens": 5376
+    },
+    "char_count": 591,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 591
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 25656.42,
+    "ttft_ms": 18200.56,
+    "token_usage": {
+      "prompt_tokens": 7603,
+      "completion_tokens": 2058,
+      "total_tokens": 9661
+    },
+    "char_count": 528,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 528
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 13751.26,
+    "ttft_ms": 8172.27,
+    "token_usage": {
+      "prompt_tokens": 4088,
+      "completion_tokens": 1134,
+      "total_tokens": 5222
+    },
+    "char_count": 381,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 381
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 21066.4,
+    "ttft_ms": 15438.43,
+    "token_usage": {
+      "prompt_tokens": 7660,
+      "completion_tokens": 1831,
+      "total_tokens": 9491
+    },
+    "char_count": 450,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 450
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 13826.13,
+    "ttft_ms": 7835.36,
+    "token_usage": {
+      "prompt_tokens": 4111,
+      "completion_tokens": 1160,
+      "total_tokens": 5271
+    },
+    "char_count": 507,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 507
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 30095.09,
+    "ttft_ms": 21948.71,
+    "token_usage": {
+      "prompt_tokens": 7729,
+      "completion_tokens": 2518,
+      "total_tokens": 10247
+    },
+    "char_count": 719,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 719
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 15854.7,
+    "ttft_ms": 8760.75,
+    "token_usage": {
+      "prompt_tokens": 4148,
+      "completion_tokens": 1421,
+      "total_tokens": 5569
+    },
+    "char_count": 582,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 582
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 25455.14,
+    "ttft_ms": 18330.73,
+    "token_usage": {
+      "prompt_tokens": 7248,
+      "completion_tokens": 2080,
+      "total_tokens": 9328
+    },
+    "char_count": 595,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 595
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 18143.34,
+    "ttft_ms": 7051.29,
+    "token_usage": {
+      "prompt_tokens": 3905,
+      "completion_tokens": 1901,
+      "total_tokens": 5806
+    },
+    "char_count": 441,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 441
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 22107.13,
+    "ttft_ms": 16332.74,
+    "token_usage": {
+      "prompt_tokens": 7578,
+      "completion_tokens": 1739,
+      "total_tokens": 9317
+    },
+    "char_count": 409,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 409
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 16071.79,
+    "ttft_ms": 8663.17,
+    "token_usage": {
+      "prompt_tokens": 4070,
+      "completion_tokens": 1300,
+      "total_tokens": 5370
+    },
+    "char_count": 509,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 509
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 22156.27,
+    "ttft_ms": 15650.45,
+    "token_usage": {
+      "prompt_tokens": 7212,
+      "completion_tokens": 1777,
+      "total_tokens": 8989
+    },
+    "char_count": 478,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 478
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 14092.22,
+    "ttft_ms": 8804.0,
+    "token_usage": {
+      "prompt_tokens": 3897,
+      "completion_tokens": 1132,
+      "total_tokens": 5029
+    },
+    "char_count": 433,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 433
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 24379.8,
+    "ttft_ms": 17666.83,
+    "token_usage": {
+      "prompt_tokens": 7033,
+      "completion_tokens": 1897,
+      "total_tokens": 8930
+    },
+    "char_count": 489,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 489
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 16016.6,
+    "ttft_ms": 9425.78,
+    "token_usage": {
+      "prompt_tokens": 3805,
+      "completion_tokens": 1281,
+      "total_tokens": 5086
+    },
+    "char_count": 533,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 533
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 22855.43,
+    "ttft_ms": 16237.34,
+    "token_usage": {
+      "prompt_tokens": 7170,
+      "completion_tokens": 1715,
+      "total_tokens": 8885
+    },
+    "char_count": 587,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 587
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 14794.89,
+    "ttft_ms": 8709.36,
+    "token_usage": {
+      "prompt_tokens": 3870,
+      "completion_tokens": 1144,
+      "total_tokens": 5014
+    },
+    "char_count": 425,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 425
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 27140.51,
+    "ttft_ms": 17142.26,
+    "token_usage": {
+      "prompt_tokens": 7296,
+      "completion_tokens": 2250,
+      "total_tokens": 9546
+    },
+    "char_count": 749,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 749
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 16772.94,
+    "ttft_ms": 8574.2,
+    "token_usage": {
+      "prompt_tokens": 3927,
+      "completion_tokens": 1386,
+      "total_tokens": 5313
+    },
+    "char_count": 603,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 603
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "A",
+    "repetition": 2,
+    "latency_ms": 25355.25,
+    "ttft_ms": 17964.88,
+    "token_usage": {
+      "prompt_tokens": 7335,
+      "completion_tokens": 2194,
+      "total_tokens": 9529
+    },
+    "char_count": 519,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 519
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "B",
+    "repetition": 2,
+    "latency_ms": 16160.41,
+    "ttft_ms": 8768.21,
+    "token_usage": {
+      "prompt_tokens": 3920,
+      "completion_tokens": 1367,
+      "total_tokens": 5287
+    },
+    "char_count": 528,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 528
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 22859.03,
+    "ttft_ms": 16425.63,
+    "token_usage": {
+      "prompt_tokens": 7608,
+      "completion_tokens": 1939,
+      "total_tokens": 9547
+    },
+    "char_count": 480,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 480
+  },
+  {
+    "case_id": "case_01_tavern_inquiry",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 15389.57,
+    "ttft_ms": 9035.65,
+    "token_usage": {
+      "prompt_tokens": 4088,
+      "completion_tokens": 1363,
+      "total_tokens": 5451
+    },
+    "char_count": 504,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 504
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 21533.26,
+    "ttft_ms": 15338.6,
+    "token_usage": {
+      "prompt_tokens": 7660,
+      "completion_tokens": 1779,
+      "total_tokens": 9439
+    },
+    "char_count": 505,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 505
+  },
+  {
+    "case_id": "case_02_rogue_recruitment",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 14894.57,
+    "ttft_ms": 8281.61,
+    "token_usage": {
+      "prompt_tokens": 4111,
+      "completion_tokens": 1328,
+      "total_tokens": 5439
+    },
+    "char_count": 564,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 564
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 25351.86,
+    "ttft_ms": 18225.52,
+    "token_usage": {
+      "prompt_tokens": 7747,
+      "completion_tokens": 2154,
+      "total_tokens": 9901
+    },
+    "char_count": 487,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 487
+  },
+  {
+    "case_id": "case_03_composite_infiltrate_and_disarm",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 15457.62,
+    "ttft_ms": 9279.26,
+    "token_usage": {
+      "prompt_tokens": 4148,
+      "completion_tokens": 1286,
+      "total_tokens": 5434
+    },
+    "char_count": 542,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 542
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 24081.9,
+    "ttft_ms": 17374.6,
+    "token_usage": {
+      "prompt_tokens": 7231,
+      "completion_tokens": 2004,
+      "total_tokens": 9235
+    },
+    "char_count": 476,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 476
+  },
+  {
+    "case_id": "case_04_secret_investigation",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 18604.89,
+    "ttft_ms": 9389.02,
+    "token_usage": {
+      "prompt_tokens": 3905,
+      "completion_tokens": 1500,
+      "total_tokens": 5405
+    },
+    "char_count": 728,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 728
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 21742.8,
+    "ttft_ms": 14747.15,
+    "token_usage": {
+      "prompt_tokens": 7574,
+      "completion_tokens": 1822,
+      "total_tokens": 9396
+    },
+    "char_count": 499,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 499
+  },
+  {
+    "case_id": "case_05_faction_confrontation",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 19620.48,
+    "ttft_ms": 6597.5,
+    "token_usage": {
+      "prompt_tokens": 4070,
+      "completion_tokens": 1819,
+      "total_tokens": 5889
+    },
+    "char_count": 553,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 553
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 19311.5,
+    "ttft_ms": 13871.22,
+    "token_usage": {
+      "prompt_tokens": 7233,
+      "completion_tokens": 1577,
+      "total_tokens": 8810
+    },
+    "char_count": 466,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 466
+  },
+  {
+    "case_id": "case_06_dungeon_puzzle",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 12690.27,
+    "ttft_ms": 7487.97,
+    "token_usage": {
+      "prompt_tokens": 3897,
+      "completion_tokens": 979,
+      "total_tokens": 4876
+    },
+    "char_count": 403,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 403
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 21049.16,
+    "ttft_ms": 14960.2,
+    "token_usage": {
+      "prompt_tokens": 7029,
+      "completion_tokens": 1697,
+      "total_tokens": 8726
+    },
+    "char_count": 429,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 429
+  },
+  {
+    "case_id": "case_07_partial_success_alchemy",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 14160.35,
+    "ttft_ms": 7875.84,
+    "token_usage": {
+      "prompt_tokens": 3805,
+      "completion_tokens": 1177,
+      "total_tokens": 4982
+    },
+    "char_count": 440,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 440
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 24006.5,
+    "ttft_ms": 15875.67,
+    "token_usage": {
+      "prompt_tokens": 7175,
+      "completion_tokens": 1908,
+      "total_tokens": 9083
+    },
+    "char_count": 626,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 626
+  },
+  {
+    "case_id": "case_08_failed_action_recovery",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 16252.81,
+    "ttft_ms": 8690.4,
+    "token_usage": {
+      "prompt_tokens": 3870,
+      "completion_tokens": 1260,
+      "total_tokens": 5130
+    },
+    "char_count": 550,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 550
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 23088.23,
+    "ttft_ms": 15654.46,
+    "token_usage": {
+      "prompt_tokens": 7295,
+      "completion_tokens": 1920,
+      "total_tokens": 9215
+    },
+    "char_count": 404,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 404
+  },
+  {
+    "case_id": "case_09_critical_failure_ambush",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 17365.4,
+    "ttft_ms": 9383.37,
+    "token_usage": {
+      "prompt_tokens": 3927,
+      "completion_tokens": 1467,
+      "total_tokens": 5394
+    },
+    "char_count": 597,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 597
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "A",
+    "repetition": 3,
+    "latency_ms": 25047.78,
+    "ttft_ms": 16695.84,
+    "token_usage": {
+      "prompt_tokens": 7297,
+      "completion_tokens": 2159,
+      "total_tokens": 9456
+    },
+    "char_count": 560,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 560
+  },
+  {
+    "case_id": "case_10_composite_mixed_outcomes",
+    "variant": "B",
+    "repetition": 3,
+    "latency_ms": 16349.68,
+    "ttft_ms": 9111.52,
+    "token_usage": {
+      "prompt_tokens": 3920,
+      "completion_tokens": 1398,
+      "total_tokens": 5318
+    },
+    "char_count": 599,
+    "error": null,
+    "invariant_check": {
+      "passed": true,
+      "schema_valid": true,
+      "all_outcomes_linked": true,
+      "stopping_point_respected": true,
+      "no_forbidden_phrases": true,
+      "details": []
+    },
+    "scene_chars": 599
+  }
+]

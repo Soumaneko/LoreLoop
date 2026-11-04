@@ -1,0 +1,20 @@
+{
+  "case_id": "case_13_event_pressure",
+  "file": "input.json",
+  "kind": "curated_play_trace",
+  "source": {
+    "turn_index": 4,
+    "trace_id": "fe5a9f5a-92d7-46eb-ba77-f414216783b7",
+    "director_call_id": "d056da5f9f0d41e0a90a29ae6cfce2ff",
+    "composer_call_id": "d1c419a1d2404b509f4224b56f3a300a",
+    "original_fixture_sha256": "97bf2e8fe5d34b9ad10b7a0217da41226532a28c931e365dadbdc40695fd3b12"
+  },
+  "changes": [
+    "Normalized innkeeper to 苏婉娘 and inn name to 悦来客栈 across profiles, stage materials and engaged-event resources.",
+    "Removed duplicate CurrentState participant 中年汉子; fact f9 identifies that man as 赵七."
+  ],
+  "previous_scene_chars": {
+    "source": 837,
+    "curated": 837
+  }
+}

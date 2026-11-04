@@ -1,0 +1,51 @@
+{
+    "case_id": "case_09_failed_action_recovery",
+    "pairs": [
+        {
+            "repetition": 1,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "你无处可退，也无处可藏",
+            "right_evidence": "夹杂着对讲机里碎片化的指令声",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Right更强。Left的“你无处可退，也无处可藏”未经场景事实支持就把空间可能性叙述性封死，虽未达到硬违规，却显著削弱玩家寻找掩体、欺骗探头、利用设备或反向突围等行动启发。Right则用“对讲机里碎片化的指令声”、黄灯扫描、大门距离和逼近脚步同时构成多个可响应要素，安保也因通讯行为显得更像自主行动者，而非单纯倒计时威胁；结尾保持开放提问，因此更能促使玩家立刻构思下一步。"
+        },
+        {
+            "repetition": 2,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "right",
+            "npc_world_agency": "right",
+            "specificity": "right",
+            "left_evidence": "B2机房有异常，确认通道，立刻过去",
+            "right_evidence": "门把手传来金属转动前的细微摩擦声",
+            "left_violations": [
+                "Closing Prompt将V表述为已处于“藏身的机柜阴影”中，擅自把玩家尚未选择的躲藏行动写成既成事实。"
+            ],
+            "right_violations": [
+                "正文写明V“身体靠在冰冷的服务器机柜侧面，屏住呼吸”，并在Closing Prompt确认“你仍藏在机柜阴影中”，擅自替玩家执行了输入之外的躲藏行动。"
+            ],
+            "reason": "两篇都越过了玩家行动边界，但Right的越界更明确。撇开这一硬伤，Right仍在叙事质量上占优：从至少三组急促脚步，到门把手即将转动，把威胁推进成一个具体、连续且可感知的现场过程；Left虽有清晰的安保通讯对白，世界自主性不错，但结尾直接列出“通风管道／机柜夹层／另寻他路”，明显菜单化，且突然出现的通风管道、机柜夹层主要作为选项服务于提示。Right的开放式结尾更能支持欺骗、伏击、断电、再入侵、制造声源等不同策略，因此总体行动启发力更高。"
+        },
+        {
+            "repetition": 3,
+            "overall_preference": "right",
+            "continue_desire": "right",
+            "open_affordance": "right",
+            "surprising_but_coherent": "tie",
+            "npc_world_agency": "tie",
+            "specificity": "right",
+            "left_evidence": "警报声没有停",
+            "right_evidence": "静默烟幕的残余数据仍在网络中挣扎",
+            "left_violations": [],
+            "right_violations": [],
+            "reason": "Right的优势主要在密度与可利用细节：它把强制断连后的神经痛、擦除失败、探头扫描、机柜投影、多人脚步和仍未彻底消散的网络痕迹串成同一压力链，因此玩家既能考虑物理逃脱，也能考虑继续利用网络状态。Left准确而利落，但信息较单薄，结尾又收束成“寻找掩体”或“冲向出口”的二选一，明显压缩策略空间。两篇都没有真正超出既定失败结果的意外转折，NPC也都只通过未具名脚步存在，因此意外性与NPC自主性更适合判为平手。"
+        }
+    ]
+}

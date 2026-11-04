@@ -1,0 +1,117 @@
+{
+  "case_id": "case_10_composite_mixed_outcomes",
+  "category": "composite_mixed",
+  "title": "宴会厅飞刀灭灯与趁乱破门突围",
+  "description": "检验多动作复合且成败档位不同（A1 success + A2 partial_success）的混合场景，验证正文是否准确呈现各分项结果。",
+  "turn_index": 3,
+  "user_input": "我甩出两把飞刀精准切断水晶吊灯的悬索制造全场黑暗与混乱，随后趁乱撞开侧厅木门向后花园突围！",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「法兰领地」，风格为：宫廷剑术与刺客传奇\n能力体系为：精准飞刀、近身格斗与敏捷脱身"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角伊文，男性。遭贵族陷害的皇家剑客。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_010",
+      "location": "公爵府邸·一层宴会大厅侧门",
+      "participants": [
+        {
+          "name": "伊文",
+          "attitude_to_player": null
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "深夜"
+    },
+    "player": {
+      "name": "伊文",
+      "visible_status": "手持飞刀与佩剑的剑客"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "柳叶飞刀",
+          "quantity": 2
+        }
+      ],
+      "money": 0,
+      "money_unit": "金币",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "伊文"
+      ],
+      "action_type": "attack",
+      "action_text": "甩出两把飞刀切断水晶吊灯的悬索制造混乱",
+      "resolution_source": "roll",
+      "dice": "1d20",
+      "dice_sides": 20,
+      "roll_value": 17,
+      "raw_value": 17,
+      "outcome_band": "success",
+      "risk_level": "medium"
+    },
+    {
+      "action_id": "act_02",
+      "sequence": 2,
+      "actor": [
+        "伊文"
+      ],
+      "action_type": "move",
+      "action_text": "趁乱撞开侧厅木门向后花园突围",
+      "resolution_source": "roll",
+      "dice": "1d20",
+      "dice_sides": 20,
+      "roll_value": 10,
+      "raw_value": 10,
+      "outcome_band": "partial_success",
+      "risk_level": "high"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "宴会厅突发混乱与脱身",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "公爵府后花园连通着外城护城河，只要跳入水中即可摆脱追兵。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [],
+  "director_stage": null,
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_010",
+    "turn_index": 2,
+    "user_input": "退至侧门附近拔刀戒备",
+    "scene_text": "大厅两侧的卫队已拔剑合围，金碧辉煌的水晶吊灯下，公爵指着你厉声下令：“拿下刺客！”",
+    "closing_prompt": "卫兵剑锋逼近，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}

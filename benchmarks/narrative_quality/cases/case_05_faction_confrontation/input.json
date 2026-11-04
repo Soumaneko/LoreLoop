@@ -1,0 +1,136 @@
+{
+  "case_id": "case_05_faction_confrontation",
+  "category": "faction_confrontation",
+  "title": "沙漠废土哨站应对军阀盘查",
+  "description": "检验高压交锋后化解阻力、顺利通过关卡时的心理质感与后续路线抉择空间。",
+  "turn_index": 2,
+  "user_input": "我没有去碰腰间的猎枪，而是从大衣口袋里摸出一张带印章的通行证和半包过滤嘴香烟递过去，冷静地说：“长官，净水芯片出了点毛病，红蝎老大让我回镇上找配件，耽误了供水大家都得挨渴。”",
+  "core_memory": {
+    "version": 2,
+    "items": [
+      {
+        "id": "c1",
+        "kind": "world_invariant",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "世界名为「辐射荒原」，风格为：废土末日生存\n能力体系为：枪械改装、载具生存与荒原求生技能"
+      },
+      {
+        "id": "c2",
+        "kind": "protagonist_invariant",
+        "strength": "hard_constraint",
+        "source": "player",
+        "content": "主角猎人，男性。常年在各方军阀势力夹缝中求生的废土拾荒者，带着一辆旧摩托与自制猎枪。"
+      },
+      {
+        "id": "c3",
+        "kind": "system_convention",
+        "strength": "hard_constraint",
+        "source": "campaign_setup",
+        "content": "交易货币为瓶盖。"
+      }
+    ]
+  },
+  "current_state": {
+    "scene": {
+      "scene_id": "scene_005",
+      "location": "荒原·血狼军阀控制的公路哨卡",
+      "participants": [
+        {
+          "name": "猎人",
+          "attitude_to_player": null
+        },
+        {
+          "name": "哨兵队长",
+          "attitude_to_player": "傲慢且多疑"
+        }
+      ]
+    },
+    "world_clock": {
+      "day": 1,
+      "phase": "上午"
+    },
+    "player": {
+      "name": "猎人",
+      "visible_status": "满身风沙的拾荒猎人"
+    },
+    "resources": {
+      "inventory": [
+        {
+          "name": "伪造商会通行证",
+          "quantity": 1
+        },
+        {
+          "name": "半包香烟",
+          "quantity": 1
+        }
+      ],
+      "money": 20,
+      "money_unit": "瓶盖",
+      "fixed_assets": [],
+      "temporary_assets": []
+    }
+  },
+  "action_judgments": [
+    {
+      "action_id": "act_01",
+      "sequence": 1,
+      "actor": [
+        "猎人"
+      ],
+      "action_type": "speak",
+      "action_text": "出示通行证并附带香烟行贿以说服哨兵队长放行",
+      "resolution_source": "automatic",
+      "outcome_band": "success",
+      "risk_level": "medium"
+    }
+  ],
+  "context_facts": {
+    "turn_focus": "公路哨卡应对盘查",
+    "facts": [
+      {
+        "fact_id": "f1",
+        "fact": "血狼军阀纪律涣散，底层士兵极度贪图烟酒等战前稀缺物资。",
+        "evidence_ids": []
+      }
+    ]
+  },
+  "npc_profiles": [
+    {
+      "name": "哨兵队长",
+      "aliases": [],
+      "role": "血狼军阀底层哨卡军官",
+      "appearance": "头戴破损护目镜，脖子上挂着兽齿项链，手持一把锈迹斑斑的自动步枪。",
+      "personality_trait": "暴躁贪婪、见利忘义、欺软怕硬",
+      "known_abilities": [],
+      "faction": null,
+      "last_known_location": null,
+      "attitude_to_player": "怀疑与贪婪",
+      "last_scene_summary": null,
+      "last_scene_turn": null,
+      "disclosure_level": "face_to_face",
+      "core_motivation": null,
+      "hidden_secret": null,
+      "conflict_style": null,
+      "social_style": "满嘴粗口，习惯性索贿",
+      "director_notes": null,
+      "source_director_npc_id": null,
+      "source_setting_ids": [],
+      "created_turn": null,
+      "introduced_turn": null
+    }
+  ],
+  "director_stage": null,
+  "engaged_events": [],
+  "recent_scene": {
+    "scene_id": "scene_005",
+    "turn_index": 1,
+    "user_input": "停下载具走向哨卡",
+    "scene_text": "你将摩托车停在路边，迎着哨卡上黑洞洞的枪口走上前。哨兵队长粗鲁地拉了下枪栓，恶狠狠地盯视着你：“站住！哪来的拾荒鬼，想过卡子先拿买路财！”",
+    "closing_prompt": "哨兵队长用枪指着你，你会怎么做？",
+    "action_preview": null,
+    "player_resolution": null,
+    "token_usage": null,
+    "created_at": null
+  }
+}
