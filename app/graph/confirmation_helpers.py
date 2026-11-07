@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -93,10 +92,8 @@ def prepare_used_npc_profiles(
     core_memory,
 ) -> tuple[list[str], list[DirectorNPCDraft]]:
     # Edited prose and legacy results have no usable receipt for this confirmation.
-    text_hash = hashlib.sha256(scene_text.encode("utf-8")).hexdigest()
-    if scene_result.npc_usages_text_hash != text_hash:
-        return [], []
-    used_names = {normalize_compact_key(item.name) for item in scene_result.npc_usages}
+    usages = scene_result.usages_for_text(scene_text)
+    used_names = {normalize_compact_key(item.name) for item in usages}
     if not used_names:
         return [], []
     confirmations = promote_staged_director_npc_profile(
@@ -194,60 +191,17 @@ def ensure_director_npc_profile(
         return DirectorNPCConfirmation(npc_id=npc_id, draft=draft)
 
 
-def project_scene_text_with_staged_director_npc(
-    scene_text: str,
-    *,
-    pending,
-    confirmed_director_npc_drafts: list[DirectorNPCDraft] | None,
-) -> str:
-    stage = getattr(pending, "director_stage", None)
-    materials = [
-        item
-        for item in (stage.materials if stage is not None else [])
-        if item.kind == "npc"
-        and item.payload.get("source") in ("director_npc", "spontaneous")
+def project_scene_text_with_used_npcs(scene_text: str, *, used_npcs) -> str:
+    entries = [
+        f"- {npc['name']}（{npc['role']}），正文称呼：{'、'.join(npc['surfaces'])}；参与方式：{npc['presence']}。"
+        for npc in used_npcs
     ]
-    if not materials:
-        return scene_text
-
-    draft_by_id = {
-        draft.draft_id: draft
-        for draft in (confirmed_director_npc_drafts or [])
-    }
-    entries: list[str] = []
-    for material in materials:
-        draft = draft_by_id.get(material.resource_id)
-        name = (
-            draft.name
-            if draft is not None
-            else str(material.payload.get("name") or "")
-        )
-        if not name:
-            continue
-        role = draft.role if draft is not None else material.payload.get("role")
-        role_note = f"（{role}）" if role else ""
-        selected_id = (
-            draft.draft_id
-            if draft is not None
-            else material.resource_id
-        )
-        entries.append(
-            f"- {name}{role_note}，系统 ID：{selected_id}。"
-        )
     if not entries:
         return scene_text
-    mapping = "；".join(entries)
-
     return (
-        "【确认用系统注记】\n"
-        f"本回合 Director Agent 引入了以下导演 NPC：{mapping}\n"
-        "如果正文中出现未透露姓名、临时称呼、只以外貌/位置描述出现的新增角色，"
-        "且其出场与本回合导演 NPC 调度相符，确认流程应在内部状态、NPC档案和摘要中"
-        "将其视为对应姓名。\n"
-        "该注记只用于确认流程；不代表玩家知道TA的姓名；不得写成角色已自报姓名；"
-        "不得泄露 hidden_secret、core_motivation 或其他幕后信息。\n"
-        "【正文】\n"
-        f"{scene_text}"
+        "【确认用人物对应关系】\n" + "\n".join(entries)
+        + "\n以上是本轮正文人物与档案姓名的对应关系。摘要使用档案姓名记录其公开行为；称呼对应不表示人物已向玩家自报姓名。\n【正文】\n"
+        + scene_text
     )
 
 
@@ -286,9 +240,7 @@ def prepare_confirmation_state(
                 stores=stores,
             )
         ),
-        project_scene_text_with_staged_director_npc=(
-            project_scene_text_with_staged_director_npc
-        ),
+        project_scene_text_with_used_npcs=project_scene_text_with_used_npcs,
         runtime_services=runtime_services,
     )
     return ConfirmationPreparer(services).prepare(

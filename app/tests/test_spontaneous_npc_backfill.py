@@ -11,6 +11,7 @@ from app.domain.npc_profile.director_promotion import npc_profile_from_spontaneo
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.npc_profile.workflows import auto_backfill_spontaneous_npc_profiles
 from app.domain.scene_facts.schemas import SceneFact, SceneFactSet, SceneNpcMention
+from app.domain.scene_writer.schemas import NPCUsage
 
 
 class _MockGateway:
@@ -70,7 +71,6 @@ def test_draw_desire_pattern_returns_valid_string():
 def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
     process_result = SimpleNamespace(
         saved_ids=["npc_batch", "npc_shared"],
-        new_npc_candidates=[],
         warnings=[],
     )
 
@@ -91,6 +91,7 @@ def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
         npc_store=object(),
         gateway=object(),
         scene_facts=SceneFactSet(scene_focus="本轮场景。"),
+        npc_usages=[],
         current_state=object(),
         user_input="前进。",
         scene_text="主角走进客栈。",
@@ -312,6 +313,7 @@ def test_preparation_backfills_before_npc_profile_update(monkeypatch):
     monkeypatch.setattr(confirmation_nodes, "_gateway_for", lambda _state: gateway)
 
     state = {
+        "npc_usages": [NPCUsage(name="孙百草", surfaces=["掌柜"], presence="appeared")],
         "pipeline_input": SimpleNamespace(turn_index=1, user_input="", pending=pending),
         "pending": pending,
         "trace_id": "trace-1",

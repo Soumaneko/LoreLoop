@@ -17,23 +17,17 @@
 - facts：0-12 条 SceneText 中已经发生、已经展示、已经确认的新事实。
   - fact：只写一个事实簇，必须由 scene_text 明确支持。
   - 不要输出 fact_id；fact_id 由程序自动填写。
-- npc_mentions：正文出现的 NPC 人物簇，每人一条（最多 12 条，不含玩家）。
-  - primary_surface：姓名、稳定称号或足以区分人物的具体描述。
-  - presence：appeared＝该人物在本轮正文中实际说话、行动，或处于直接可观察状态；
-    即使回合结束前离场仍为 appeared。mentioned_only＝只被谈论、回忆、转述或远程
-    引用，没有实际参与本场景。同一人物既被提及又实际参与，合并为 appeared。
-  - alias_relations：正文表达「两个称呼是同一人」的别名关系；只陈述同一人，
-    不判定是否已有档案；其 surface 不得与 primary_surface 相同。
-  - evidence_fact_ids：该人物出现所依据的事实序号。事实按位置编号：
-    **facts 数组第 0 条是 f1，第 1 条是 f2，以此类推**（没有 f0）。
-  - evidence_paragraph_ids：该人物出现所依据的本轮段落 document_id，必须来自
-    SceneParagraphs。
+- npc_mentions：为 UsedNPCs 中的人物寻找本轮事实与原文证据，每人一条。
+  - primary_surface：填写输入人物的档案姓名。
+  - evidence_fact_ids：相关事实序号，facts 数组第 0 条是 f1，第 1 条是 f2，以此类推。
+  - evidence_paragraph_ids：相关原文段落的 document_id，来自 SceneParagraphs。
+  - 尚无相关事实或段落时，相应列表为空。
 
 
 # 核心规则
 
 1. 提取“后续确认模块可能需要知道的本回合新事实”，包括：行动结果、地点/在场者变化、人物身体或精神状态变化、态度或关系的公开变化、物品/资源获得或失去、公开透露的信息、场景结尾状态。
-2. SceneText 是事实的唯一来源；CoreMemory 和 CurrentState 只用于识别人物、地点、状态边界，不得作为新增事实来源。
+2. SceneText 是事实的唯一来源；CoreMemory 和 CurrentState 只用于理解既有背景与状态边界，不得作为新增事实来源。
 3. fact 必须与本段 SceneText 的行动结果、涉及人物、地点、物品、组织、关系、资源、信息边界或结尾状态有关。
 4. fact 必须是已成立事实，不要写计划、猜测、建议、下一步安排或可能性。
 5. 如果某个事实涉及“谁知道什么”，必须写明已知者。例如“萧云痕刚刚得知……”“沈忘忧尚未在正文中说出……”。
@@ -42,16 +36,9 @@
 8. 合并同类过程：连续动作、重复动作、逐步描写应合并为一个结果事实，除非某一步造成了独立的后续状态、资源或信息变化。
 9. 优先提取对状态、记忆、人物互动、资源、地点连续性可能复用的事实；纯镜头、修辞、身体细节、普通动作过程通常不提取。
 10. 应当准确提取时间流逝：正文明确出现“第二天”“次日”“清晨醒来”、具体时段、经过若干小时/天或其他跨日与时段变化时，必须在 fact 中保留原有时间含义，不得压缩成只描述早餐、出发、抵达等事件而丢失时间变化。
-11. npc_mentions 只提取正文明确出现、且有具体身份称呼的人物；同一人物的多个有意义称呼合并为一条，最核心的写入 primary_surface，其余写入 alias_relations。不要记录“他”“她”“对方”“那人”等普通代词；同场代词消解只用于判断人物簇，不作为输出称呼。
-12. 每条 mention 至少给出一条 evidence_fact_id 或 evidence_paragraph_id。fact 引用严格按位置（facts[0]→f1…），越界或重复引用会被拒。
-13. alias_relations.basis：explicit_fixed_alias＝明确固定别名（“人称沈二爷”）；temporary_address＝临时头衔或称谓（“这位少侠”）；same_scene_coreference＝两个有区分度的称呼在同场明确指向同一人。普通代词本身不输出。只提取正文有依据的，不猜测；explicit_fixed_alias 必须带证据。
-14. 不要把玩家写成 npc_mention。
-15. presence 只看本轮正文证据：实际说话、行动、直接可观察的状态、与在场者直接互动才算 appeared；被其他人谈论、回忆、转述或远程引用的为 mentioned_only。不要仅凭名字出现在正文或转述内容推断 appeared。
-16. 导演本轮引入角色对齐：
-    - 该区块列出了本轮由导演系统刚刚引入的角色。当正文中出现使用外貌、职业、位置或临时称呼描写的人物，且其特征/行为与本轮引入角色高度一致时，应当准确识别出正文中的该人物就是该引入角色：
-      - 在 `npc_mentions` 中，`primary_surface` 直接使用该角色的标准姓名，并将正文出现的代称记录在 `alias_relations` 中；
-      - 在 `facts` 中，直接以该角色标准姓名记录其确凿事实；
-      - 从而确保下游身份解析与 NPC/State 更新能够精准对接该角色档案。
+11. UsedNPCs 已提供本轮使用人物、档案资料、正文称呼和参与方式。按这份对应关系理解正文，在 facts 中使用档案姓名记录人物事实。
+12. 为每位输入人物寻找支持其本轮行为或被提及内容的事实与原文段落。连续以代词指代该人物的段落也属于其相关证据；同一段可以涉及多个人物。
+13. 事实引用按位置编号（facts[0]→f1），段落引用使用 SceneParagraphs 中的 document_id。
 
 
 # 禁止事项
@@ -65,8 +52,6 @@
 7. 不要提取纯细节描写，除非该细节改变了状态、关系、资源、位置、已知信息或场景结尾局面。
 8. 不要输出 fact_id。
 9. 不要输出任何 schema 外字段。
-10. 不要给玩家或未在正文明确出现称呼的人物建 npc_mention。
-11. 不要把 CoreMemory/CurrentState 里的旧称呼、旧别名当成本轮证据。
 
 
 # 示例
@@ -90,15 +75,11 @@
   "npc_mentions": [
     {{
       "primary_surface": "顾晚棠",
-      "presence": "appeared",
-      "alias_relations": [],
       "evidence_fact_ids": ["f1", "f2", "f3"],
       "evidence_paragraph_ids": ["turn_12_p001"]
     }},
     {{
       "primary_surface": "沈忘忧",
-      "presence": "appeared",
-      "alias_relations": [],
       "evidence_fact_ids": ["f3"],
       "evidence_paragraph_ids": ["turn_12_p001"]
     }}
@@ -121,10 +102,10 @@
 {current_state_json}
 ```
 
-## StagedDirectorNPCs
+## UsedNPCs
 
 ```json
-{staged_director_npcs_json}
+{used_npcs_json}
 ```
 
 

@@ -279,6 +279,7 @@ def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(
     ("npc", "unknown", "appeared", False),
     ("npc", "legacy", "appeared", False),
     ("npc", "edited", "appeared", False),
+    ("npc", "dry_run", "appeared", False),
     ("event", "existing", "appeared", False),
 ])
 def test_staged_director_npc_promotes_without_preadding_participants(
@@ -366,7 +367,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
             turn_index=2,
             stale_message="stale",
         ),
-        write_db=True,
+        write_db=receipt != "dry_run",
         scene_text="你独自离开。" if receipt == "edited" else None,
     )
 
@@ -374,8 +375,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
     assert {p.name for p in prepared["state_before_update"].scene.participants} == {
         "主角"
     }
-    if material_kind == "npc":
-        assert "林澈" in prepared["confirmation_scene_text"]
+    assert ("林澈" in prepared["confirmation_scene_text"]) == (expected or receipt in {"existing", "dry_run"})
     with services.stores.director_npc as store:
         saved = store.get_by_id(draft.draft_id)
     assert saved.status == ("introduced" if expected else "prepared")
@@ -387,148 +387,20 @@ def test_staged_director_npc_promotes_without_preadding_participants(
             assert profiles[0].disclosure_level == "intimate"
 
 
-@pytest.mark.parametrize("actor_storage", ["profiles", "prepared-drafts"])
-def test_staged_npc_materials_fold_every_director_skill(tmp_path, actor_storage):
-    from app.domain.director import DirectorStageMaterial, DirectorStageResult
-    from app.domain.director_event.schemas import (
-        DirectorActorRef,
-        DirectorEvent,
-        DirectorResourceRef,
-        WorldClock,
-    )
+def test_used_npc_projection_includes_old_profiles_and_omits_unused():
+    from app.domain.npc_profile.identity_resolver import project_used_npcs
     from app.domain.npc_profile.schemas import NPCProfile
-    from app.graph.confirmation_nodes import _extract_staged_npc_materials
-    from app.runtime.paths import CampaignPaths
-    from app.runtime.session import PendingTurn
-    from app.runtime.uow import CampaignUnitOfWork
-
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    samuel = NPCProfile(
-        name="萨缪尔·灰潮",
-        role="走私联络人",
-        appearance="深灰色旧风衣，袖口褪色铜徽章。",
-    )
-    trevor = NPCProfile(name="特雷弗·石巷", role="跑腿小贼", appearance="瘦高。")
-    edgar = NPCProfile(name="埃德加·莫尔顿", role="药草师", appearance="深灰短袍。")
-    from app.tests.factories.director import make_director_npc
-
-    with stores.npc_profile as store:
-        store.upsert(edgar)
-        if actor_storage == "profiles":
-            store.upsert(samuel)
-            store.upsert(trevor)
-    actor_id = samuel.npc_id
-    if actor_storage == "prepared-drafts":
-        with stores.director_npc as store:
-            for profile in (samuel, trevor):
-                draft = make_director_npc().model_copy(update={
-                    "name": profile.name, "role": profile.role,
-                    "appearance": profile.appearance,
-                })
-                store.save(draft)
-                if profile is samuel:
-                    actor_id = draft.draft_id
-    event = DirectorEvent(
-        title="走私暗流",
-        subject="走私网络退潮",
-        intent="把货物送入市场。",
-        method="利用特许印签。",
-        macro_intent="扩大地下流通。",
-        deadline_clock=WorldClock(),
-        created_turn=1,
-        updated_turn=1,
-        stage="engaged",
-        actors=[
-            DirectorActorRef(
-                name=samuel.name,
-                ref=DirectorResourceRef(
-                    kind="npc", resource_id=actor_id
-                ),
-            )
-        ],
-    )
-    pending = make_pending_turn(
-        turn_id="turn-mix",
-        group_id="turn-mix",
-        version_index=1,
-        user_input="观察门口。",
-        difficulty="困难",
-        max_chars=1500,
-        experience_mode="creator",
-        state_before=CurrentState(
-            scene=SceneState(scene_id="scene_1", location="码头", participants=[]),
-            player=PlayerState(name="阿尔文"),
-        ),
-        scene_result=SceneWriterResult(scene_text="灰衣人朝门口走来。"),
-        director_stage=DirectorStageResult(
-            reasoning="调度。",
-            materials=[
-                DirectorStageMaterial(
-                    kind="engaged_event",
-                    resource_id=event.event_id,
-                    guidance="以萨缪尔推动事件。",
-                    payload=event.semantic_view(),
-                ),
-                DirectorStageMaterial(
-                    kind="event",
-                    resource_id="event_present",
-                    guidance="通过传闻带出特雷弗。",
-                    payload={
-                        "event_id": "event_present",
-                        "title": "传闻",
-                        "stage": "hidden",
-                        "hook": {},
-                        "actors": [trevor.name],
-                    },
-                ),
-                DirectorStageMaterial(
-                    kind="npc",
-                    resource_id="director_npc_draft1",
-                    guidance="引入新角色。",
-                    payload={
-                        "source": "director_npc",
-                        "name": "柯岚·铁印",
-                        "role": "文书吏",
-                        "appearance": "灰制服。",
-                        "personality_trait": "谨慎",
-                    },
-                ),
-                DirectorStageMaterial(
-                    kind="npc",
-                    resource_id=edgar.npc_id,
-                    guidance="提升透露。",
-                    payload={
-                        "source": "npc_profile",
-                        "npc_id": edgar.npc_id,
-                        "disclosure_upgrade": True,
-                        "new_disclosure_level": "face_to_face",
-                        "name": edgar.name,
-                        "role": edgar.role,
-                        "appearance": edgar.appearance,
-                    },
-                ),
-            ],
-        ),
-    )
-
-    with stores.npc_profile as npc_store:
-        clues = _extract_staged_npc_materials(pending, npc_store, stores.director_npc)
-
-    by_name = {clue["name"]: clue for clue in clues}
-    assert set(by_name) == {
-        "萨缪尔·灰潮", "特雷弗·石巷", "柯岚·铁印", "埃德加·莫尔顿",
-    }
-    assert by_name["萨缪尔·灰潮"]["source"] == "intrude_engaged_event"
-    assert by_name["萨缪尔·灰潮"]["appearance"] == "深灰色旧风衣，袖口褪色铜徽章。"
-    assert by_name["萨缪尔·灰潮"]["guidance"] == "以萨缪尔推动事件。"
-    assert by_name["特雷弗·石巷"]["source"] == "present_event"
-    assert by_name[trevor.name]["role"] == trevor.role
-    assert by_name[trevor.name]["appearance"] == trevor.appearance
-    assert by_name["柯岚·铁印"]["source"] == "director_npc"
-    assert by_name["柯岚·铁印"]["role"] == "文书吏"
-    assert by_name["埃德加·莫尔顿"]["source"] == "upgrade_disclosure"
-
-    with stores.npc_profile as npc_store:
-        assert _extract_staged_npc_materials(
-            SimpleNamespace(director_stage=None), npc_store, stores.director_npc
-        ) == []
+    from app.domain.scene_writer.schemas import NPCUsage
+    profiles = [NPCProfile(name="赵七", role="行商", appearance="灰衣", personality_trait="寡言"),
+                NPCProfile(name="苏婉娘", role="掌柜"), NPCProfile(name="未使用人物")]
+    usages = [NPCUsage(name=name, surfaces=[surface], presence=presence) for name, surface, presence in [
+        ("赵七", "中年汉子", "appeared"), ("苏婉娘", "掌柜", "mentioned_only"),
+        ("未匹配人物", "路人", "appeared"),
+    ]]
+    projected = project_used_npcs(usages, profiles)
+    assert [item["name"] for item in projected] == ["赵七", "苏婉娘"]
+    assert projected[0]["role"] == "行商"
+    assert projected[0]["appearance"] == "灰衣"
+    assert projected[0]["personality_trait"] == "寡言"
+    assert projected[0]["surfaces"] == ["中年汉子"]
+    assert projected[1]["presence"] == "mentioned_only"

@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from app.core.llm.token_usage import get_trace_token_usage
 from app.domain.continuity import ContinuityApplyResult, ContinuityService
+from app.domain.npc_profile.identity_resolver import project_used_npcs
 from app.runtime.serialization import model_data
 from app.runtime.session import CampaignRuntime, PendingTurn
 from app.runtime.services import RuntimeServices
@@ -31,7 +32,7 @@ class ConfirmationPreparationServices:
     core_memory_store: Callable
     prepare_used_npc_profiles: Callable
     apply_staged_disclosure_upgrades: Callable
-    project_scene_text_with_staged_director_npc: Callable
+    project_scene_text_with_used_npcs: Callable
     runtime_services: RuntimeServices | None = None
 
 class ConfirmationPreparer:
@@ -69,8 +70,8 @@ class ConfirmationPreparer:
                 raise ValueError(pipeline_input.stale_message)
 
         core_memory = services.core_memory_store.load_required()
-        director_npc_profile_ids = cache.result("director_npc_profile_ids")
-        confirmed_director_npc_drafts = cache.result("confirmed_director_npc_drafts")
+        director_npc_profile_ids = cache.result("director_npc_profile_ids") or []
+        confirmed_director_npc_drafts = cache.result("confirmed_director_npc_drafts") or []
         if write_db:
             director_npc_profile_ids, confirmed_director_npc_drafts = cache.atomic(
                 "director_npc_profile_ids", "confirmed_director_npc_drafts",
@@ -88,25 +89,25 @@ class ConfirmationPreparer:
         if write_db:
             services.apply_staged_disclosure_upgrades(pending)
 
-        # The staged Director NPC is NOT pre-added to CurrentState participants
-        # here: whether they are actually present is decided by StateUpdater
-        # from the confirmed Scene Facts. The confirmation system note still
-        # maps an unnamed in-scene figure to the introduced NPCs for extraction.
         state_before_update = pipeline_input.state_before
-        confirmation_scene_text = (
-            services.project_scene_text_with_staged_director_npc(
-            effective_scene_text,
-            pending=pending,
-            confirmed_director_npc_drafts=confirmed_director_npc_drafts,
-            )
-        )
-
+        npc_usages = pipeline_input.scene_result.usages_for_text(effective_scene_text)
         existing_npc_profiles = cache.result("existing_npc_profiles") or []
-        if write_db and not cache.produced("existing_npc_profiles"):
+        if not cache.produced("existing_npc_profiles"):
             with services.npc_profile_store as npc_store:
                 existing_npc_profiles = npc_store.list_all()
-            cache.set_result("existing_npc_profiles", existing_npc_profiles)
+            if write_db:
+                cache.set_result("existing_npc_profiles", existing_npc_profiles)
 
+        context = getattr(pending, "context", None)
+        stage = getattr(pending, "director_stage", None)
+        used_npcs = project_used_npcs(
+            npc_usages, existing_npc_profiles,
+            context_profiles=getattr(context, "npc_profiles", []),
+            materials=stage.materials if stage else [],
+        )
+        confirmation_scene_text = services.project_scene_text_with_used_npcs(
+            effective_scene_text, used_npcs=used_npcs,
+        )
         return {
             "runtime_services": services.runtime_services,
             "events": [{
@@ -131,6 +132,8 @@ class ConfirmationPreparer:
             "state_before_update": state_before_update,
             "confirmation_scene_text": confirmation_scene_text,
             "existing_npc_profiles": existing_npc_profiles,
+            "npc_usages": npc_usages,
+            "used_npcs": used_npcs,
             "core_memory": core_memory,
         }
 

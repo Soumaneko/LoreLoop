@@ -37,14 +37,13 @@ from app.domain.npc_profile.change_admission import admit_npc_batch_update
 from app.domain.npc_profile.changes import (
     NPCBatchCoverage,
     AcceptedNPCFieldChange,
-    AcceptedNPCAliasChange,
     NPCChangeAdmissionResult,
     NPCChangeAdmissionWarning,
 )
 from app.domain.npc_profile.identity_resolver import (
-    NpcCandidate,
     NpcIdentityResolution,
     ResolvedNpc,
+    archive_alias_surfaces,
     resolve_npc_identities,
     surface_is_known,
 )
@@ -66,6 +65,7 @@ from app.domain.npc_profile.turn_contract import (
     NPC_SCENE_SUMMARY_SOFT_LIMIT,
 )
 from app.domain.scene_facts.schemas import SceneFactSet
+from app.domain.scene_writer.schemas import NPCUsage
 
 _SOURCE_SCENE_PARAGRAPH = "scene_paragraph"
 
@@ -88,10 +88,8 @@ class ParsedBatch:
 @dataclass
 class NPCBatchProcessResult:
     saved_ids: list[str]
-    new_npc_candidates: list[NpcCandidate]
     warnings: list[NPCChangeAdmissionWarning]
     accepted_changes: list[AcceptedNPCFieldChange]
-    accepted_alias_changes: list[AcceptedNPCAliasChange]
     coverage: NPCBatchCoverage | None
     resolution: NpcIdentityResolution
 
@@ -525,8 +523,7 @@ def build_npc_batch_input(
         if profile is None:
             continue
         identity_surfaces = [
-            *item.primary_surfaces,
-            *(relation.surface for relation in item.alias_relations),
+            item.canonical_name, *item.primary_surfaces,
         ]
         surface_keys = [
             normalize_compact_key(surface) for surface in identity_surfaces
@@ -563,6 +560,7 @@ def build_npc_batch_input(
         entries.append({
             "npc_id": item.npc_id,
             "name": item.canonical_name,
+            "surfaces": list(item.primary_surfaces),
             "current": {
                 "role": profile.role,
                 "appearance": profile.appearance,
@@ -600,6 +598,7 @@ def apply_npc_batch_update(
     npc_store: NPCProfileStore,
     gateway: LLMGateway,
     scene_facts: SceneFactSet,
+    npc_usages: list[NPCUsage],
     evidence_documents: dict[str, HistoryDocument],
     current_state: CurrentState,
     turn_index: int,
@@ -607,15 +606,7 @@ def apply_npc_batch_update(
     admitted_at: str,
     trace_id: str | None = None,
 ) -> NPCBatchProcessResult:
-    """完整管线：确定性解析 → 单次 batch 调用 → per-field 容错 admission → 应用。
-
-    - 统一 ``current_scene_evidence``：身份扫描、Prompt 投影与 admission 同源；
-    - snapshot 唯一 mutation 源：admission 的 ``updated_profiles``（字段 + 解析层
-      待接受 alias 一并派生），store 只 ``upsert`` 它们；
-    - mention hit：已解析 npc 的 observed surface 与已接受 alias surface 命中
-      canonical / 永久 alias 才记（``surface_is_known``）；
-    - 解析层的最小候选（未连接有名人物）交给确认 Director，不落库。
-    """
+    """按使用记录关联档案和证据，批量更新字段；不发现新人物。"""
     if scene_id is None:
         scene_id = current_state.scene.scene_id
 
@@ -629,11 +620,26 @@ def apply_npc_batch_update(
     resolution = resolve_npc_identities(
         profiles=profiles,
         npc_mentions=scene_facts.npc_mentions,
-        paragraph_texts=[
-            document.text for document in current_evidence.values()
-        ],
+        npc_usages=npc_usages,
         player_name=current_state.player.name,
     )
+
+    saved_ids: list[str] = []
+    by_id = {profile.npc_id: profile for profile in profiles}
+    for item in resolution.resolved:
+        profile = by_id[item.npc_id]
+        aliases = list(profile.aliases)
+        known = {normalize_compact_key(value) for value in [profile.name, *aliases]}
+        for surface in archive_alias_surfaces(item.primary_surfaces):
+            key = normalize_compact_key(surface)
+            if key and key not in known:
+                aliases.append(surface.strip())
+                known.add(key)
+        if aliases != profile.aliases:
+            profile = profile.model_copy(update={"aliases": aliases})
+            saved_ids.append(npc_store.upsert(profile))
+            by_id[item.npc_id] = profile
+    profiles = list(by_id.values())
 
     parsed = NPCBatchUpdater(gateway).process(
         resolved=[
@@ -648,17 +654,6 @@ def apply_npc_batch_update(
         trace_id=trace_id,
     )
 
-    alias_changes = [
-        AcceptedNPCAliasChange(
-            npc_id=change.npc_id,
-            canonical_name=change.canonical_name,
-            alias=change.surface,
-            turn_index=turn_index,
-            evidence_fact_ids=change.evidence_fact_ids,
-            evidence_paragraph_ids=change.evidence_paragraph_ids,
-        )
-        for change in resolution.pending_alias_changes
-    ]
     admission = admit_npc_batch_update(
         updates=parsed.entries,
         entry_warnings=parsed.entry_warnings,
@@ -667,7 +662,6 @@ def apply_npc_batch_update(
             item.npc_id for item in resolution.resolved
             if item.presence == "appeared"
         ],
-        alias_changes=alias_changes,
         profiles=profiles,
         evidence_documents=current_evidence,
         current_state=current_state,
@@ -676,7 +670,6 @@ def apply_npc_batch_update(
         admitted_at=admitted_at,
     )
 
-    saved_ids: list[str] = []
     for profile in admission.updated_profiles:
         saved_ids.append(npc_store.upsert(profile))
 
@@ -684,9 +677,6 @@ def apply_npc_batch_update(
     profile_view.update(
         {profile.npc_id: profile for profile in admission.updated_profiles}
     )
-    pending_by_npc: dict[str, list[str]] = {}
-    for change in resolution.pending_alias_changes:
-        pending_by_npc.setdefault(change.npc_id, []).append(change.surface)
     for item in resolution.resolved:
         profile = profile_view.get(item.npc_id)
         if profile is None:
@@ -694,8 +684,6 @@ def apply_npc_batch_update(
         seen_surfaces: set[str] = set()
         for surface in [
             *item.primary_surfaces,
-            *(relation.surface for relation in item.alias_relations),
-            *pending_by_npc.get(item.npc_id, []),
         ]:
             surface_key = normalize_compact_key(surface)
             if not surface_key or surface_key in seen_surfaces:
@@ -705,11 +693,9 @@ def apply_npc_batch_update(
                 npc_store.record_mention(item.npc_id, surface)
 
     return NPCBatchProcessResult(
-        saved_ids=saved_ids,
-        new_npc_candidates=list(resolution.candidates),
+        saved_ids=list(dict.fromkeys(saved_ids)),
         warnings=list(admission.warnings),
         accepted_changes=list(admission.accepted_profile_changes),
-        accepted_alias_changes=list(admission.accepted_alias_changes),
         coverage=admission.coverage,
         resolution=resolution,
     )

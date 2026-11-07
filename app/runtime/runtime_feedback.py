@@ -2,7 +2,7 @@
 
 NOTICE_MESSAGES = {
     "scene_facts_degraded": "场景事实整理未完成，本轮世界状态和人物档案更新可能不完整。",
-    "npc_mentions_degraded": "人物出场识别未完成，部分人物档案可能更新失败。可在左侧【人物档案】手动补充。",
+    "npc_mentions_degraded": "部分人物的原文证据提取不完整，档案更新可能不完整。可在左侧【人物档案】手动补充。",
     "canon_query_fallback": "历史查询规划未完成，正文质量可能受到影响。如有问题可【编辑正文】或重新尝试。",
     "rewrite_strategy_fallback": "自动修文未完成，原文已保留。如有需要可【编辑正文】或重新尝试。",
     "confirmation_maintenance_schedule_failed": "回合已确认，但后台摘要整理未能安排；下次确认回合时会再次尝试安排。",

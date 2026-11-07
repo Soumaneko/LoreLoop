@@ -28,7 +28,6 @@ from app.domain.npc_profile.changes import (
     NPCTurnAdmissionError,
     NPCBatchCoverage,
     AcceptedNPCAbilityAddChange,
-    AcceptedNPCAliasChange,
     AcceptedNPCFieldChange,
     AcceptedNPCScalarChange,
     NPCChangeAdmissionResult,
@@ -51,7 +50,6 @@ def admit_npc_batch_update(
     entry_warnings: list[NPCChangeAdmissionWarning] | None = None,
     resolved_npc_ids: Iterable[str],
     mutable_npc_ids: Iterable[str],
-    alias_changes: list[AcceptedNPCAliasChange],
     profiles: list[NPCProfile],
     evidence_documents: dict[str, HistoryDocument],
     current_state: CurrentState,
@@ -61,7 +59,7 @@ def admit_npc_batch_update(
 ) -> NPCChangeAdmissionResult:
     """审理 NPC batch field updater 的输出，per-field 容错（宁漏勿错）。
 
-    ``resolved_npc_ids`` 为全部确定性解析成功的 NPC（alias 校验、mention hit 使用）；
+    ``resolved_npc_ids`` 为全部确定性解析成功的 NPC（mention hit 使用）；
     ``mutable_npc_ids`` 为 presence==appeared 的 NPC，字段 mutation 只对它们生效，
     必须显式传入（缺失会静默恢复 mentioned-only 字段 mutation，故不可选填）。
 
@@ -104,35 +102,6 @@ def admit_npc_batch_update(
             "mutable npc_ids must be a subset of resolved npc_ids: "
             f"{sorted(mutable_ids - resolved_ids)}"
         )
-
-    alias_npc_ids = {change.npc_id for change in alias_changes}
-    if alias_npc_ids - resolved_ids:
-        raise ValueError(
-            "alias changes reference npc_ids outside the resolved set: "
-            f"{sorted(alias_npc_ids - resolved_ids)}"
-        )
-
-    # alias mutation 自身校验（确定性输入损坏 → ValueError）：
-    # canonical_name 必须与档案一致、alias 不得为空白。
-    for change in alias_changes:
-        profile = profile_by_id[change.npc_id]
-        if change.canonical_name != profile.name:
-            raise ValueError(
-                f"alias change canonical_name {change.canonical_name!r} "
-                f"does not match profile name {profile.name!r}"
-            )
-        if not normalize_compact_key(change.alias):
-            raise ValueError(
-                f"alias change for {profile.npc_id!r} has a blank alias"
-            )
-
-    # 已是目标档案 name / 既有 alias / transient alias 的 alias → no-op 过滤
-    # （不写入、不计入 updated）。
-    alias_changes = [
-        change
-        for change in alias_changes
-        if not _alias_already_known(profile_by_id[change.npc_id], change.alias)
-    ]
 
     valid_evidence = _batch_valid_evidence(
         evidence_documents,
@@ -242,15 +211,11 @@ def admit_npc_batch_update(
     updated_profiles = _apply_accepted_changes(
         profiles,
         accepted_changes,
-        alias_changes,
         scene_id,
         admitted_at,
     )
 
     updated_npc_ids = {change.npc_id for change in accepted_changes}
-    # 已接受的确定性 alias 同样写入档案（``_apply_accepted_changes`` 应用），
-    # 因此 alias-only 的 npc 计入 updated、排除出 no-op。
-    updated_npc_ids.update(change.npc_id for change in alias_changes)
     warnings = sorted(
         warnings,
         key=lambda warning: (
@@ -263,7 +228,6 @@ def admit_npc_batch_update(
 
     return NPCChangeAdmissionResult(
         accepted_profile_changes=accepted_changes,
-        accepted_alias_changes=list(alias_changes),
         warnings=warnings,
         coverage=NPCBatchCoverage(
             resolved_npcs=len(resolved_ids),
@@ -274,17 +238,6 @@ def admit_npc_batch_update(
         ),
         updated_profiles=updated_profiles,
     )
-
-
-def _alias_already_known(profile: NPCProfile, alias: str) -> bool:
-    """alias 已是目标档案的 name / 永久 alias / transient alias → no-op。"""
-    key = normalize_compact_key(alias)
-    if not key:
-        return True
-    return key == normalize_compact_key(profile.name) or key in {
-        normalize_compact_key(value)
-        for value in [*profile.aliases, *profile.transient_aliases]
-    }
 
 
 def _batch_valid_evidence(
@@ -583,11 +536,10 @@ def _sync_profile_aggregated(
 def _apply_accepted_changes(
     profiles: list[NPCProfile],
     accepted_changes: list[AcceptedNPCFieldChange],
-    accepted_alias_changes: list[AcceptedNPCAliasChange],
     scene_id: str,
     admitted_at: str,
 ) -> list[NPCProfile]:
-    """snapshot 只由 accepted mutations 派生；draft 候选由调用方单独处理。"""
+    """从当前档案和已接受的字段变化生成快照。"""
     profile_by_id = _profile_index(profiles)
     mutated: dict[str, NPCProfile] = {}
 
@@ -608,16 +560,6 @@ def _apply_accepted_changes(
                 *profile.known_abilities,
                 *change.additions,
             ]
-        _touch_profile(profile, scene_id, admitted_at)
-        mutated[profile.npc_id] = profile
-
-    for alias in accepted_alias_changes:
-        if alias.npc_id not in profile_by_id:
-            continue
-        profile = mutated.get(alias.npc_id) or profile_by_id[alias.npc_id].model_copy(
-            deep=True
-        )
-        profile.aliases = [*profile.aliases, alias.alias]
         _touch_profile(profile, scene_id, admitted_at)
         mutated[profile.npc_id] = profile
 

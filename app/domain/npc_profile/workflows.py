@@ -21,6 +21,7 @@ from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_facts import SceneFactSet
+from app.domain.scene_writer.schemas import NPCUsage
 
 
 @dataclass(frozen=True)
@@ -137,6 +138,7 @@ def apply_confirmed_npc_turn(
     npc_store: NPCProfileStore,
     gateway,
     scene_facts: SceneFactSet,
+    npc_usages: list[NPCUsage],
     current_state: CurrentState,
     user_input: str,
     scene_text: str,
@@ -160,6 +162,7 @@ def apply_confirmed_npc_turn(
         npc_store=npc_store,
         gateway=gateway,
         scene_facts=scene_facts,
+        npc_usages=npc_usages,
         evidence_documents=evidence_documents,
         current_state=current_state,
         turn_index=turn_index,

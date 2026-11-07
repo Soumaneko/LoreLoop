@@ -1,11 +1,16 @@
 # NPC Pipeline Baseline Micro-benchmark
 
-This benchmark measures the production NPC pipeline (`batch` backend:
-deterministic identity resolution + a single `npc_batch_update` LLM call)
-against recorded LLM outputs. It runs the real deterministic pipeline (identity
-resolution, single-call batch field update, per-field fault-tolerant admission,
-CurrentState sync, store mutation, warning order) with a stub gateway. It does
-not call an LLM during `--check`.
+The v4 runner follows the Composer usage roster. Synthetic fixtures now explicitly
+provide `npc_usages`; their old identity annotations were converted into fixture
+inputs, not inferred by the runtime. Scene Facts supplies evidence for these known
+people. Surfaces are merged into aliases without fixed/temporary classification.
+
+The 25-case replay is runnable with the existing recordings. Its replay adapter
+flattens the historical nested scene-summary wire shape without changing raw
+recordings. Existing gold, recorded outputs and the v3 accepted baseline remain
+historical; v4 has no accepted baseline yet. The old weighted score below does not
+measure the new identity contract. Review gold expectations before accepting a new
+baseline; this change did not run a new formal NPC benchmark.
 
 The input/gold contract and the recorded LLM outputs are deliberately split:
 
@@ -16,7 +21,7 @@ The input/gold contract and the recorded LLM outputs are deliberately split:
   usage, and attempts. A `--record` run changes this file but NOT the contract,
   so comparison proceeds instead of being refused.
 
-## Current checkpoint
+## Historical checkpoint (v3)
 
 Accepted with 25 cases covering the ticket-01 categories plus 8
 `last_scene_summary` contracts re-scored for the batch architecture

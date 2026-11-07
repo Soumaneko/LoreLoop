@@ -30,8 +30,8 @@ from app.domain.npc_profile.changes import NPCBatchCoverage
 from app.domain.npc_profile.identity_resolver import ResolvedNpc
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.npc_profile.turn_contract import NPCBatchUpdateEntry, NPCSceneSummaryDraft, ScalarStableChange
+from app.domain.scene_writer.schemas import NPCUsage
 from app.domain.scene_facts.schemas import (
-    AliasRelation,
     NpcPresence,
     SceneFact,
     SceneFactSet,
@@ -87,23 +87,8 @@ def _facts(*, mentions=None, fact_text="沈孤鸿让沈二关门。") -> SceneFa
     )
 
 
-def _relation(surface, basis, evidence=None, paragraph_evidence=None) -> AliasRelation:
-    return AliasRelation(
-        surface=surface,
-        basis=basis,
-        evidence_fact_ids=list(evidence or []),
-        evidence_paragraph_ids=list(paragraph_evidence or []),
-    )
-
-
-def _mention(primary, *, relations=None, presence: NpcPresence = "appeared") -> SceneNpcMention:
-    relations = list(relations or [])
-    return SceneNpcMention(
-        primary_surface=primary,
-        presence=presence,
-        alias_relations=relations,
-        evidence_fact_ids=["f1"],
-    )
+def _mention(primary, *, presence: NpcPresence = "appeared") -> SceneNpcMention:
+    return SceneNpcMention(primary_surface=primary, presence=presence, evidence_fact_ids=["f1"])
 
 
 def _entry(npc_id, *, stable_changes=None, scene_summary=None) -> NPCBatchUpdateEntry:
@@ -136,7 +121,6 @@ def _admit(
     entry_warnings=None,
     resolved=("npc_001",),
     mutable=None,
-    alias_changes=None,
     profiles=None,
     evidence_documents=None,
     current_state=None,
@@ -148,7 +132,6 @@ def _admit(
         mutable_npc_ids=(
             list(resolved) if mutable is None else list(mutable)
         ),
-        alias_changes=list(alias_changes or []),
         profiles=profiles or [_profile()],
         evidence_documents=evidence_documents or _evidence(),
         current_state=current_state or _state(),
@@ -215,14 +198,7 @@ def test_parse_batch_updates_rejects_known_abilities_but_keeps_other_fields():
 
 
 def test_workflow_resolves_and_applies_to_store():
-    mentions = [
-        _mention(
-            "沈孤鸿",
-            relations=[
-                _relation("沈二爷", "explicit_fixed_alias", evidence=["f1"]),
-            ],
-        )
-    ]
+    mentions = [_mention("沈孤鸿")]
     gateway = _gateway({
         "updates": [
             {
@@ -234,11 +210,12 @@ def test_workflow_resolves_and_applies_to_store():
         ]
     })
     with open_npc_profile_store(":memory:") as store:
-        store.upsert(_profile(aliases=["沈二"]))
+        store.upsert(_profile(aliases=["沈二", "沈二爷"]))
         result = apply_npc_batch_update(
             npc_store=store,
             gateway=gateway,  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
+            npc_usages=[NPCUsage(name="沈孤鸿", surfaces=["沈孤鸿", "沈二爷", "他"], presence=mentions[0].presence)],
             evidence_documents=_evidence(),
             current_state=_state(),
             turn_index=_TURN_INDEX,
@@ -246,7 +223,6 @@ def test_workflow_resolves_and_applies_to_store():
         )
 
         assert result.saved_ids == ["npc_001"]
-        assert result.accepted_alias_changes[0].alias == "沈二爷"
         profile = store.get_by_id("npc_001")
         assert profile is not None
         assert profile.role == "醉花楼主"
@@ -254,7 +230,6 @@ def test_workflow_resolves_and_applies_to_store():
         assert "沈二爷" in profile.aliases
         assert profile.name_hit_count == 1
         assert profile.alias_hit_counts.get("沈二爷") == 1
-        assert result.new_npc_candidates == []
 
 
 def test_mentioned_only_npc_excluded_from_batch_and_field_output():
@@ -276,6 +251,7 @@ def test_mentioned_only_npc_excluded_from_batch_and_field_output():
             npc_store=store,
             gateway=gateway,  # type: ignore[arg-type]
             scene_facts=_facts(mentions=mentions),
+            npc_usages=[NPCUsage(name="沈孤鸿", surfaces=["沈孤鸿", "沈二爷", "他"], presence=mentions[0].presence)],
             evidence_documents=_evidence(),
             current_state=_state(),
             turn_index=_TURN_INDEX,
@@ -288,9 +264,12 @@ def test_mentioned_only_npc_excluded_from_batch_and_field_output():
         profile = store.get_by_id("npc_001")
         assert profile is not None
         assert profile.role is None
+        assert "沈二爷" in profile.aliases
+        assert "他" not in profile.aliases
+        assert result.saved_ids == [profile.npc_id]
 
 
-def test_scan_union_records_mention_hit_but_never_enters_batch():
+def test_no_usage_never_scans_prose_into_batch():
     response = {
         "updates": [
             {
@@ -308,6 +287,7 @@ def test_scan_union_records_mention_hit_but_never_enters_batch():
             npc_store=store,
             gateway=gateway,  # type: ignore[arg-type]
             scene_facts=_facts(mentions=[]),
+            npc_usages=[],
             evidence_documents=_evidence(),
             current_state=_state(),
             turn_index=_TURN_INDEX,
@@ -315,14 +295,13 @@ def test_scan_union_records_mention_hit_but_never_enters_batch():
         )
 
         assert result.resolution.diagnostics is not None
-        assert result.resolution.diagnostics.scan_union_added == 1
-        assert result.resolution.resolved[0].presence == "mentioned_only"
+        assert result.resolution.resolved == ()
         assert all(
             change.field != "role" for change in result.accepted_changes
         )
         profile = store.get_by_id("npc_001")
         assert profile is not None
-        assert profile.name_hit_count == 1
+        assert profile.name_hit_count == 0
         assert profile.role is None
 
 
@@ -518,53 +497,3 @@ def test_admission_drops_scene_summary_when_all_evidence_invalid():
     assert "scene_summary_evidence_dropped" in {
         warning.code for warning in result.warnings
     }
-
-
-def test_unmatched_candidate_reaches_npc_update_feedback(
-    monkeypatch,
-):
-    from app.domain.npc_profile.identity_resolver import NpcCandidate
-
-    candidate = NpcCandidate(
-        primary_surface="练气巅峰采药女",
-        presence="appeared",
-        evidence_fact_ids=("f1",),
-    )
-
-    def _apply(**kwargs):
-        return NPCConfirmedTurnResult(
-            process_result=SimpleNamespace(
-                saved_ids=[],
-                new_npc_candidates=[candidate],
-                warnings=[],
-            ),
-            updated_npc_profile_ids=[],
-        )
-
-    monkeypatch.setattr(confirmation_nodes, "apply_confirmed_npc_turn", _apply)
-    npc_store = open_npc_profile_store(":memory:")
-    state = {
-        "write_db": True,
-        "pipeline_input": SimpleNamespace(
-            turn_index=3,
-            user_input="",
-        ),
-        "trace_id": "trace-npc",
-        "cache": {},
-        "scene_facts": SceneFactSet(scene_focus="药山。"),
-        "effective_scene_text": "药山上有个练气巅峰的采药女。",
-        "updated_state": make_current_state(),
-        "core_memory": CoreMemory(items=[]),
-        "existing_npc_profiles": [],
-        "runtime_services": SimpleNamespace(
-            gateway=lambda **kw: object(),
-            stores=SimpleNamespace(npc_profile=npc_store),
-        ),
-    }
-
-    result = confirmation_nodes.npc_profile_update_node(state)
-
-    assert result["updated_npc_profile_ids"] == []
-    feedback = next(event["data"] for event in result["events"] if "new_npc_candidates" in event["data"])
-    assert [item["name"] for item in feedback["new_npc_candidates"]] == [candidate.primary_surface]
-    npc_store.close()

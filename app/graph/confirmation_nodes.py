@@ -20,7 +20,8 @@ from app.domain.director_event.workflows import (
     review_engaged_events_workflow,
     review_hidden_events_workflow,
 )
-from app.domain.director.scheduled import collect_scheduled_npcs
+from app.core.text import normalize_compact_key
+from app.domain.npc_profile.identity_resolver import archive_alias_surfaces, project_used_npcs
 from app.domain.npc_profile.workflows import (
     apply_confirmed_npc_turn,
 )
@@ -99,45 +100,12 @@ def continuity_project_node(state: ConfirmationState) -> ConfirmationState:
     }
 
 
-def _extract_staged_npc_materials(
-    pending,
-    npc_store,
-    director_npc_store,
-) -> list[dict[str, Any]]:
-    """Identity clues for the NPCs the Director arranged into this turn.
-
-    Uses the same ``collect_scheduled_npcs`` fold as Composer, so engaged-event
-    actors, ``present_event`` actors, introduced drafts, and upgraded profiles
-    all become one uniform clue list. That lets scene-fact extraction bind a
-    prose-only description (e.g. "灰衣人") to the true NPC without leaking the
-    name into prose.
-    """
-    stage = getattr(pending, "director_stage", None)
-    if stage is None or not getattr(stage, "materials", None):
-        return []
-    return [
-        {
-            "name": entry.name,
-            "role": entry.role or "",
-            "appearance": entry.appearance or "",
-            "personality_trait": entry.personality_trait or "",
-            "guidance": entry.guidance or "",
-            "source": entry.source,
-        }
-        for entry in collect_scheduled_npcs(stage.materials, npc_store, director_npc_store)
-    ]
-
-
 def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     trace_id = state["trace_id"]
     cache = ConfirmationCache(state["cache"])
     core_memory = state["core_memory"]
-    pending = state.get("pending") or getattr(pipeline_input, "pending", None)
-    with state["runtime_services"].stores.npc_profile as npc_store:
-        staged_npcs = _extract_staged_npc_materials(
-            pending, npc_store, state["runtime_services"].stores.director_npc,
-        )
+    used_npcs = state["used_npcs"]
     scene_paragraphs = [
         SceneParagraphInput(
             document_id=document.document_id,
@@ -163,7 +131,7 @@ def scene_fact_extract_node(state: ConfirmationState) -> ConfirmationState:
                 current_state=state["state_before_update"],
                 core_memory=core_memory,
                 scene_paragraphs=scene_paragraphs,
-                staged_npcs=staged_npcs,
+                used_npcs=used_npcs,
             ),
             trace_id=trace_id,
         )
@@ -224,6 +192,15 @@ def state_update_node(state: ConfirmationState) -> ConfirmationState:
             if profile.name
             and (profile.aliases or profile.transient_aliases)
         }
+        profiles_by_name = {
+            normalize_compact_key(profile.name): profile for profile in state["existing_npc_profiles"]
+        }
+        for usage in state.get("npc_usages", []):
+            profile = profiles_by_name.get(normalize_compact_key(usage.name))
+            if profile is not None:
+                npc_aliases[profile.name] = list(dict.fromkeys([
+                    *npc_aliases.get(profile.name, []), *archive_alias_surfaces(usage.surfaces),
+                ]))
         paragraph_texts = {
             document.document_id: document.text
             for document in build_turn_documents(
@@ -461,6 +438,7 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
                 npc_store=npc_store,
                 gateway=_gateway_for(state),
                 scene_facts=state["scene_facts"],
+                npc_usages=state.get("npc_usages", []),
                 current_state=state["updated_state"],
                 user_input=pipeline_input.user_input,
                 scene_text=state["effective_scene_text"],
@@ -501,18 +479,6 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
             "step": "npc_profile_updated",
             "data": {
                 "updated_npc_profile_ids": node_result.updated_npc_profile_ids,
-                "new_npc_candidates": [
-                    {
-                        "name": candidate.primary_surface,
-                        "alias_surfaces": [
-                            relation.surface
-                            for relation in candidate.alias_relations
-                        ],
-                    }
-                    for candidate in (
-                        node_result.process_result.new_npc_candidates
-                    )
-                ],
                 "warnings": warning_summary,
             },
         }]

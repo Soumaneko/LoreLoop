@@ -1,3 +1,4 @@
+import hashlib
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -22,3 +23,8 @@ class SceneWriterResult(BaseModel):
     npc_usages_text_hash: str | None = None
     closing_prompt: str = ""
     next_action_directions: list[NextActionDirection] = Field(default_factory=list, max_length=5)
+
+    def usages_for_text(self, scene_text: str) -> list[NPCUsage]:
+        if self.npc_usages_text_hash != hashlib.sha256(scene_text.encode("utf-8")).hexdigest():
+            return []
+        return self.npc_usages

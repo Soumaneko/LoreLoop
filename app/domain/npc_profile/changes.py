@@ -10,9 +10,7 @@
   proposal 来源的稳定字段（含 ``last_scene_summary``）必须携带 evidence；
 - ``add``：``known_abilities`` append-only 追加，``additions`` 非空且去重。
 
-alias 以显式 ``AcceptedNPCAliasChange`` 表达（携带 fact + paragraph 证据），与字段
-变化同属 accepted mutation 单一来源；snapshot application 只消费这两类变化与
-``new_npc_candidates``。
+人物称呼由 Composer 使用记录合并进档案 aliases；此处仅处理字段变化。
 """
 
 from __future__ import annotations
@@ -139,18 +137,6 @@ AcceptedNPCFieldChange = Annotated[
 
 
 @dataclass(frozen=True)
-class AcceptedNPCAliasChange:
-    npc_id: str
-    canonical_name: str
-    alias: str
-    turn_index: int | None = None
-    #: 支持该 alias 关系的 Scene Fact 证据（fact 引用与正文段落引用可独立并存，
-    #: 供未来 alias/field log bridge）。
-    evidence_fact_ids: tuple[str, ...] = ()
-    evidence_paragraph_ids: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class NPCChangeAdmissionWarning:
     npc_name: str
     field_name: str
@@ -173,8 +159,6 @@ class NPCBatchCoverage:
 @dataclass
 class NPCChangeAdmissionResult:
     accepted_profile_changes: list[AcceptedNPCFieldChange] = field(default_factory=list)
-    accepted_alias_changes: list[AcceptedNPCAliasChange] = field(default_factory=list)
-    new_npc_candidates: list[NPCProfile] = field(default_factory=list)
     warnings: list[NPCChangeAdmissionWarning] = field(default_factory=list)
     coverage: NPCBatchCoverage | None = None
     updated_profiles: list[NPCProfile] = field(default_factory=list)

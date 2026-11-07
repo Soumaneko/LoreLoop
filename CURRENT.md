@@ -1013,25 +1013,31 @@ NPC Profiles separate:
 - public identity and continuity fields used by player-facing narrative;
 - Director-only motivation, secret, behavior, provenance, and note fields.
 
-Ordinary public extraction and updates are grounded in Scene Facts. Scene Facts
-additionally emit `npc_mentions` — one identity-bearing `primary_surface` plus
-explicit alias relations (`explicit_fixed_alias` / `temporary_address` /
-`same_scene_coreference`) with fact and scene-paragraph evidence. Generic pronouns are used only for local coreference while extracting and never enter
-the downstream identity contract, so the NPC pipeline avoids both a separate
-extraction call and pronoun-driven evidence expansion. Newly introduced spontaneous NPCs
-from the generation Director (`introduce_npc(spontaneous=...)`) are automatically
-backfilled in confirmation via `auto_backfill_spontaneous_npc_profiles` with deep
-character motivations anchored to a drawn `desire_pattern`, while locking their
-public name and shell.
+Ordinary public extraction and updates are grounded in Scene Facts. Composer's
+`npc_usages` supplies the complete used-person roster, archive names, in-prose
+surfaces and `appeared`/`mentioned_only` presence. Confirmation preparation first
+promotes used prepared drafts and backfills used spontaneous cards. Existing
+profiles are read without rebuilding them.
 
-Per turn the pipeline is: deterministic identity resolution
-(`resolve_npc_identities`) maps mention clusters to existing profiles (unique
-name/alias hits, alias-relation joins, and unambiguous text-scan union fallback;
-unmatched named people in prose remain unpromoted ephemeral scene mentions; the player
-cluster is always skipped; ambiguous groups are omitted rather than risk mis-attribution),
-then a single batch field-updater LLM call (`npc_batch_update`) emits only `npc_id → field
-changes` for already-resolved NPCs — it never judges mention/alias/new/ignore and
-never fabricates full new profiles.
+Scene Facts receives these used people projected to name, role, appearance,
+personality, surfaces and presence. Its model emits `npc_mentions` containing only
+`primary_surface` (the supplied archive name), `evidence_fact_ids` and
+`evidence_paragraph_ids`. The program restores presence and surfaces from the
+receipt, including people whose evidence entry was omitted or invalid; Scene Facts
+no longer discovers people, classifies aliases, or decides participation.
+
+`resolve_npc_identities` associates archive names directly with formal profiles
+and attaches the extracted evidence. It does not match surfaces to other profiles,
+scan prose for additional people, or create unmatched candidates. The NPC updater
+merges reported surfaces into profile aliases for both presence types (common
+pronouns remain in the receipt but are excluded from the archive name index).
+The batch model's existing npc_id/name/current/facts/evidence projection is retained,
+with `surfaces` added to make the identity mapping explicit. Only appeared people
+enter the existing field-update call; its output and paragraph evidence rules are
+unchanged. StateUpdater retains its name-to-alias input, augmented from the same
+usage records; scene-summary identity notes also use these records instead of
+Director scheduling candidates. Neither participation nor archive creation implies
+that the person remains present at the scene's ending.
 
 The batch updater splits existing-profile changes into two channels:
 
@@ -1617,9 +1623,10 @@ parsing remains in place. Records travel with `SceneWriterResult` and
 pending variants; a program-generated text hash identifies their source prose.
 Older saved results default to an empty list. Confirmation preparation consumes
 these records for draft promotion and spontaneous backfill, with identical
-creation eligibility for `appeared` and `mentioned_only`. Scene Facts, identity
-resolution, state updates and event review have not yet migrated to these records;
-`director_reason` and its position remain unchanged.
+creation eligibility for `appeared` and `mentioned_only`. All downstream identity
+and evidence projections now use the same valid usage roster, including already
+formal NPCs. Facts, state and summary projections carry that identity into later
+event review and Director observation. `director_reason` and its position remain unchanged.
 
 Rephrase reruns the entire Composer with the saved authoritative context; prior
 resolution facts, events, and prose are not frozen as an intermediate contract.

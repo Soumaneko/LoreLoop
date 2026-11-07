@@ -8,7 +8,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿走进醉花楼，环顾四周。沈二在他身后站定。\n\n沈二爷低声道：「把门关上。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿一行进入醉花楼。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿进入醉花楼。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二随行。\"}, {\"fact_id\": \"f3\", \"fact\": \"沈二爷命人关门。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [{\"surface\": \"沈二\", \"basis\": \"same_scene_coreference\", \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"surface\": \"沈二爷\", \"basis\": \"same_scene_coreference\", \"evidence_fact_ids\": [\"f3\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}], \"evidence_fact_ids\": [\"f1\", \"f2\", \"f3\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿一行进入醉花楼。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿进入醉花楼。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二随行。\"}, {\"fact_id\": \"f3\", \"fact\": \"沈二爷命人关门。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\", \"沈二\", \"沈二爷\"], \"evidence_fact_ids\": [\"f1\", \"f2\", \"f3\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -97,7 +97,18 @@
             "importance": "must"
           }
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿",
+            "沈二",
+            "沈二爷"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "near_name_no_alias",
@@ -106,7 +117,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "林川在茶馆坐下。陆川推门而入，径直走向他。",
-      "scene_facts": "{\"scene_focus\": \"林川与陆川在茶馆相遇。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林川在茶馆坐下。\"}, {\"fact_id\": \"f2\", \"fact\": \"陆川推门而入。\"}], \"npc_mentions\": [{\"primary_surface\": \"林川\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"陆川\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"林川与陆川在茶馆相遇。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林川在茶馆坐下。\"}, {\"fact_id\": \"f2\", \"fact\": \"陆川推门而入。\"}], \"npc_mentions\": [{\"primary_surface\": \"林川\", \"presence\": \"appeared\", \"surfaces\": [\"林川\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "茶馆",
       "participants": [
@@ -166,7 +177,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "林川",
+          "surfaces": [
+            "林川"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "new_persistent_vs_ignore_oneoff",
@@ -175,7 +195,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "江晚晴提灯而来，说要留在镇上查案。一个路人甲在旁看热闹后离开。",
-      "scene_facts": "{\"scene_focus\": \"江晚晴受命查案，路人甲短暂停留。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江晚晴受命查案并留在镇上。\"}, {\"fact_id\": \"f2\", \"fact\": \"路人甲短暂看热闹后离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"江晚晴\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"路人甲\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"江晚晴受命查案，路人甲短暂停留。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江晚晴受命查案并留在镇上。\"}, {\"fact_id\": \"f2\", \"fact\": \"路人甲短暂看热闹后离开。\"}], \"npc_mentions\": []}",
       "player_name": "萧云痕",
       "scene_location": "镇口",
       "participants": [
@@ -217,7 +237,8 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": []
     },
     {
       "case_id": "player_identity_protected",
@@ -226,7 +247,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "萧云痕独自站在城楼上，望着远处的灯火。",
-      "scene_facts": "{\"scene_focus\": \"萧云痕在城楼瞭望。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"萧云痕在城楼瞭望。\"}], \"npc_mentions\": [{\"primary_surface\": \"萧云痕\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"萧云痕在城楼瞭望。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"萧云痕在城楼瞭望。\"}], \"npc_mentions\": []}",
       "player_name": "萧云痕",
       "scene_location": "城楼",
       "participants": [
@@ -250,7 +271,8 @@
         ],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": []
     },
     {
       "case_id": "org_place_ignored",
@@ -285,7 +307,8 @@
         ],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": []
     },
     {
       "case_id": "current_fields_snapshot",
@@ -294,7 +317,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿在醉花楼大堂踱步，目光始终不离门口，低声说：「我要查明信物来历。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿在醉花楼大堂观察门口。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿在醉花楼大堂踱步。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈孤鸿要查明信物来历。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿在醉花楼大堂观察门口。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿在醉花楼大堂踱步。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈孤鸿要查明信物来历。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -340,7 +363,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "attitude_change_explicit",
@@ -349,7 +381,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿原本戒备地盯着萧云痕，忽然收剑，沉声道：「我可以信你。此事拜托了。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿对萧云痕放下戒备。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿当面向萧云痕表示信任。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿对萧云痕放下戒备。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿当面向萧云痕表示信任。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -388,7 +420,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "departed_direction",
@@ -397,7 +438,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿已不在堂内。小二道：「沈公子往城南去了。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿已离开大堂。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿已不在堂内。\"}, {\"fact_id\": \"f2\", \"fact\": \"小二称沈孤鸿往城南去了。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"mentioned_only\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿已离开大堂。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿已不在堂内。\"}, {\"fact_id\": \"f2\", \"fact\": \"小二称沈孤鸿往城南去了。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"mentioned_only\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [],
@@ -429,7 +470,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "mentioned_only"
+        }
+      ]
     },
     {
       "case_id": "transient_emotion_not_recorded",
@@ -438,7 +488,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿猛地一拍桌子，满脸怒容，随后又叹了口气。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿短暂动怒。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿拍桌动怒，旋即平复。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿短暂动怒。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿拍桌动怒，旋即平复。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -477,7 +527,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "stable_fields_with_evidence",
@@ -486,7 +545,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿拂袖道：「我乃合欢宗宗主，此事由我一肩担起。」",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿自承身份。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿自称合欢宗宗主。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿自承身份。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿自称合欢宗宗主。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -533,7 +592,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "stable_appearance_with_evidence",
@@ -542,7 +610,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿掀开斗篷。灯下，他左眼横着一条旧疤，据说是少年时留下的。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿左眼的旧疤。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿左眼有一条旧疤，据说是少年时留下的。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿左眼的旧疤。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿左眼有一条旧疤，据说是少年时留下的。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -583,7 +651,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "stable_personality_with_evidence",
@@ -592,7 +669,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿遇险时把身旁的弟子护到身后，沉声道：「都退开。」众人皆道他为人沉稳、重情重义。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿的性格口碑。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿遇险先护旁人。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人认为沈孤鸿沉稳重情。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿的性格口碑。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿遇险先护旁人。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人认为沈孤鸿沉稳重情。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -632,7 +709,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "ability_append_dedup_cap",
@@ -641,7 +727,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "沈孤鸿露了一手剑法，又使出一招隐匿身法。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿展示武艺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿展示剑法与隐匿身法。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿展示武艺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿展示剑法与隐匿身法。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "演武场",
       "participants": [
@@ -690,7 +776,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "large_roster",
@@ -699,7 +794,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "npc000走进殿内。一名无名老者立在阶下。",
-      "scene_facts": "{\"scene_focus\": \"npc000入殿，无名老者立阶下。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"npc000走进殿内。\"}, {\"fact_id\": \"f2\", \"fact\": \"一名无名老者立在阶下。\"}], \"npc_mentions\": [{\"primary_surface\": \"npc000\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"无名老者\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"npc000入殿，无名老者立阶下。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"npc000走进殿内。\"}, {\"fact_id\": \"f2\", \"fact\": \"一名无名老者立在阶下。\"}], \"npc_mentions\": [{\"primary_surface\": \"npc000\", \"presence\": \"appeared\", \"surfaces\": [\"npc000\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "大殿",
       "participants": [
@@ -742,7 +837,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "npc000",
+          "surfaces": [
+            "npc000"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "alias_fixed_title",
@@ -751,7 +855,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "江湖上都称沈孤鸿一声「沈二爷」。沈二爷便是沈孤鸿的别号。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿的江湖别号。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江湖称沈孤鸿为沈二爷。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二爷是沈孤鸿的别号。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"mentioned_only\", \"alias_relations\": [{\"surface\": \"沈二爷\", \"basis\": \"explicit_fixed_alias\", \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿的江湖别号。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"江湖称沈孤鸿为沈二爷。\"}, {\"fact_id\": \"f2\", \"fact\": \"沈二爷是沈孤鸿的别号。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"mentioned_only\", \"surfaces\": [\"沈孤鸿\", \"沈二爷\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -796,7 +900,17 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿",
+            "沈二爷"
+          ],
+          "presence": "mentioned_only"
+        }
+      ]
     },
     {
       "case_id": "companion_is_distinct",
@@ -805,7 +919,7 @@
       "turn_index": 0,
       "user_input": "",
       "scene_text": "一名青衣客紧随沈孤鸿进门，正是他多年的旧友。",
-      "scene_facts": "{\"scene_focus\": \"沈孤鸿与一名青衣客同行。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"一名青衣客紧随沈孤鸿进门。\"}, {\"fact_id\": \"f2\", \"fact\": \"青衣客是沈孤鸿多年的旧友。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}, {\"primary_surface\": \"青衣客\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"沈孤鸿与一名青衣客同行。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"一名青衣客紧随沈孤鸿进门。\"}, {\"fact_id\": \"f2\", \"fact\": \"青衣客是沈孤鸿多年的旧友。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_0_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -850,7 +964,16 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "mixed_turn",
@@ -859,7 +982,7 @@
       "turn_index": 5,
       "user_input": "",
       "scene_text": "沈孤鸿走进醉花楼，吩咐关门。众人皆知他是合欢宗宗主。林川也在这里。陆川推门而入。路人甲在门口张望片刻后离开。",
-      "scene_facts": "{\"scene_focus\": \"醉花楼一夜，众人进出。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿走进醉花楼，吩咐关门。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人皆知他是合欢宗宗主。\"}, {\"fact_id\": \"f3\", \"fact\": \"林川在场。\"}, {\"fact_id\": \"f4\", \"fact\": \"陆川推门而入。\"}, {\"fact_id\": \"f5\", \"fact\": \"路人甲短暂停留后离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"alias_relations\": [{\"surface\": \"合欢宗宗主\", \"basis\": \"temporary_address\", \"evidence_fact_ids\": [\"f2\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}, {\"primary_surface\": \"林川\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f3\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}, {\"primary_surface\": \"陆川\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f4\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}, {\"primary_surface\": \"路人甲\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f5\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"醉花楼一夜，众人进出。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"沈孤鸿走进醉花楼，吩咐关门。\"}, {\"fact_id\": \"f2\", \"fact\": \"众人皆知他是合欢宗宗主。\"}, {\"fact_id\": \"f3\", \"fact\": \"林川在场。\"}, {\"fact_id\": \"f4\", \"fact\": \"陆川推门而入。\"}, {\"fact_id\": \"f5\", \"fact\": \"路人甲短暂停留后离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"沈孤鸿\", \"presence\": \"appeared\", \"surfaces\": [\"沈孤鸿\", \"合欢宗宗主\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}, {\"primary_surface\": \"林川\", \"presence\": \"appeared\", \"surfaces\": [\"林川\"], \"evidence_fact_ids\": [\"f3\"], \"evidence_paragraph_ids\": [\"turn_5_p001\"]}]}",
       "player_name": "萧云痕",
       "scene_location": "醉花楼",
       "participants": [
@@ -977,7 +1100,24 @@
         "forbidden_new_names": [],
         "warning_expectations": [],
         "no_op_expectations": []
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "沈孤鸿",
+          "surfaces": [
+            "沈孤鸿",
+            "合欢宗宗主"
+          ],
+          "presence": "appeared"
+        },
+        {
+          "name": "林川",
+          "surfaces": [
+            "林川"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "appeared_action_summary",
@@ -985,7 +1125,7 @@
       "scene_id": "scene_action",
       "turn_index": 20,
       "scene_text": "秦霜推开库房木门，逐一核对货架上的药箱。\n\n她发现三箱灵药短缺，当即封住库门，决定天亮后查问守夜弟子。",
-      "scene_facts": "{\"scene_focus\": \"秦霜清点库房并发现灵药短缺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜逐一核对库房药箱。\"}, {\"fact_id\": \"f2\", \"fact\": \"秦霜发现三箱灵药短缺，封住库门并决定天亮后查问守夜弟子。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_20_p001\", \"turn_20_p002\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"秦霜清点库房并发现灵药短缺。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜逐一核对库房药箱。\"}, {\"fact_id\": \"f2\", \"fact\": \"秦霜发现三箱灵药短缺，封住库门并决定天亮后查问守夜弟子。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"surfaces\": [\"秦霜\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_20_p001\", \"turn_20_p002\"]}]}",
       "player_name": "萧欢",
       "scene_location": "宗门库房",
       "participants": [
@@ -1031,7 +1171,16 @@
         "expected_batch_npc_ids": [
           "npc-qin"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "秦霜",
+          "surfaces": [
+            "秦霜"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "appeared_dialogue_plan_summary",
@@ -1039,7 +1188,7 @@
       "scene_id": "scene_plan",
       "turn_index": 21,
       "scene_text": "苏念薇收刀入鞘，对萧欢说道：“明日拜师之后，我陪你去山下坊市探听周姓修士的风声。”",
-      "scene_facts": "{\"scene_focus\": \"苏念薇提出拜师后陪萧欢下山探听消息。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"苏念薇提出明日拜师后陪萧欢去山下坊市探听周姓修士的风声。\"}], \"npc_mentions\": [{\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_21_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"苏念薇提出拜师后陪萧欢下山探听消息。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"苏念薇提出明日拜师后陪萧欢去山下坊市探听周姓修士的风声。\"}], \"npc_mentions\": [{\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"surfaces\": [\"苏念薇\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_21_p001\"]}]}",
       "player_name": "萧欢",
       "scene_location": "陷空山合欢宗驻地",
       "participants": [
@@ -1091,7 +1240,16 @@
         "expected_batch_npc_ids": [
           "npc-su"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "苏念薇",
+          "surfaces": [
+            "苏念薇"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "mentioned_only_no_overwrite",
@@ -1099,7 +1257,7 @@
       "scene_id": "scene_mention",
       "turn_index": 22,
       "scene_text": "姚沉璧压低声音说：“苏念薇如今还在陷空山上。”",
-      "scene_facts": "{\"scene_focus\": \"姚沉璧谈到苏念薇的位置。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"姚沉璧称苏念薇仍在陷空山。\"}], \"npc_mentions\": [{\"primary_surface\": \"姚沉璧\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_22_p001\"]}, {\"primary_surface\": \"苏念薇\", \"presence\": \"mentioned_only\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_22_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"姚沉璧谈到苏念薇的位置。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"姚沉璧称苏念薇仍在陷空山。\"}], \"npc_mentions\": [{\"primary_surface\": \"姚沉璧\", \"presence\": \"appeared\", \"surfaces\": [\"姚沉璧\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_22_p001\"]}, {\"primary_surface\": \"苏念薇\", \"presence\": \"mentioned_only\", \"surfaces\": [\"苏念薇\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_22_p001\"]}]}",
       "player_name": "萧欢",
       "scene_location": "落雁渡",
       "participants": [
@@ -1176,7 +1334,23 @@
         "excluded_batch_npc_ids": [
           "npc-su"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "姚沉璧",
+          "surfaces": [
+            "姚沉璧"
+          ],
+          "presence": "appeared"
+        },
+        {
+          "name": "苏念薇",
+          "surfaces": [
+            "苏念薇"
+          ],
+          "presence": "mentioned_only"
+        }
+      ]
     },
     {
       "case_id": "appeared_then_departed",
@@ -1184,7 +1358,7 @@
       "scene_id": "scene_departed",
       "turn_index": 23,
       "scene_text": "林舟把密信交给萧欢，说明北门守卫已被调走，随即告辞离开。",
-      "scene_facts": "{\"scene_focus\": \"林舟送来密信后离场。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林舟把密信交给萧欢并说明北门守卫已被调走。\"}, {\"fact_id\": \"f2\", \"fact\": \"林舟随后告辞离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"林舟\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_23_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"林舟送来密信后离场。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"林舟把密信交给萧欢并说明北门守卫已被调走。\"}, {\"fact_id\": \"f2\", \"fact\": \"林舟随后告辞离开。\"}], \"npc_mentions\": [{\"primary_surface\": \"林舟\", \"presence\": \"appeared\", \"surfaces\": [\"林舟\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_23_p001\"]}]}",
       "player_name": "萧欢",
       "scene_location": "合欢宗正殿",
       "participants": [],
@@ -1228,7 +1402,16 @@
         "expected_batch_npc_ids": [
           "npc-lin"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "林舟",
+          "surfaces": [
+            "林舟"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "same_summary_next_turn",
@@ -1236,7 +1419,7 @@
       "scene_id": "scene_watch",
       "turn_index": 24,
       "scene_text": "秦霜仍守在库房门前，逐一核验每名出入弟子的腰牌。",
-      "scene_facts": "{\"scene_focus\": \"秦霜继续守卫库房。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜守在库房门前并核验出入弟子的腰牌。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_24_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"秦霜继续守卫库房。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜守在库房门前并核验出入弟子的腰牌。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"surfaces\": [\"秦霜\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_24_p001\"]}]}",
       "player_name": "萧欢",
       "scene_location": "宗门库房",
       "participants": [
@@ -1283,7 +1466,16 @@
         "expected_batch_npc_ids": [
           "npc-qin"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "秦霜",
+          "surfaces": [
+            "秦霜"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "summary_does_not_accumulate",
@@ -1291,7 +1483,7 @@
       "scene_id": "scene_new_action",
       "turn_index": 25,
       "scene_text": "苏念薇在演武场演示御风术，绕过三根木桩后稳稳落地。",
-      "scene_facts": "{\"scene_focus\": \"苏念薇演示御风术。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"苏念薇在演武场演示御风术并绕过三根木桩落地。\"}], \"npc_mentions\": [{\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_25_p001\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"苏念薇演示御风术。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"苏念薇在演武场演示御风术并绕过三根木桩落地。\"}], \"npc_mentions\": [{\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"surfaces\": [\"苏念薇\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_25_p001\"]}]}",
       "player_name": "萧欢",
       "scene_location": "合欢宗演武场",
       "participants": [
@@ -1343,7 +1535,16 @@
         "expected_batch_npc_ids": [
           "npc-su"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "苏念薇",
+          "surfaces": [
+            "苏念薇"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "stable_role_with_scene_summary",
@@ -1351,7 +1552,7 @@
       "scene_id": "scene_join",
       "turn_index": 26,
       "scene_text": "姚沉璧立在茶棚门口，扬声说：「苏念薇很快就会过来。」\n\n片刻后，苏念薇走进茶棚，当众抱拳道：“今日起我加入合欢宗门下，往后听宗主安排。”",
-      "scene_facts": "{\"scene_focus\": \"苏念薇被提前提及，随后到场并正式加入合欢宗。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"姚沉璧先提到苏念薇很快会到。\"}, {\"fact_id\": \"f2\", \"fact\": \"苏念薇随后实际到场，当众宣布加入合欢宗并听从宗主安排。\"}], \"npc_mentions\": [{\"primary_surface\": \"姚沉璧\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_26_p001\"]}, {\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_26_p001\", \"turn_26_p002\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"苏念薇被提前提及，随后到场并正式加入合欢宗。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"姚沉璧先提到苏念薇很快会到。\"}, {\"fact_id\": \"f2\", \"fact\": \"苏念薇随后实际到场，当众宣布加入合欢宗并听从宗主安排。\"}], \"npc_mentions\": [{\"primary_surface\": \"姚沉璧\", \"presence\": \"appeared\", \"surfaces\": [\"姚沉璧\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_26_p001\"]}, {\"primary_surface\": \"苏念薇\", \"presence\": \"appeared\", \"surfaces\": [\"苏念薇\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_26_p001\", \"turn_26_p002\"]}]}",
       "player_name": "萧欢",
       "scene_location": "落雁渡茶棚",
       "participants": [
@@ -1439,7 +1640,23 @@
           "npc-su",
           "npc-yao"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "姚沉璧",
+          "surfaces": [
+            "姚沉璧"
+          ],
+          "presence": "appeared"
+        },
+        {
+          "name": "苏念薇",
+          "surfaces": [
+            "苏念薇"
+          ],
+          "presence": "appeared"
+        }
+      ]
     },
     {
       "case_id": "multi_npc_scene_summary_coverage",
@@ -1447,7 +1664,7 @@
       "scene_id": "scene_salvage",
       "turn_index": 27,
       "scene_text": "秦霜把库房钥匙交给林舟，嘱咐他天亮前不得离开。\n\n林舟接过钥匙，当场答应守到天亮。",
-      "scene_facts": "{\"scene_focus\": \"秦霜向林舟交接库房值守。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜把库房钥匙交给林舟并要求他天亮前不得离开。\"}, {\"fact_id\": \"f2\", \"fact\": \"林舟接过钥匙并答应守到天亮。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_27_p001\"]}, {\"primary_surface\": \"林舟\", \"presence\": \"appeared\", \"alias_relations\": [], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_27_p001\", \"turn_27_p002\"]}]}",
+      "scene_facts": "{\"scene_focus\": \"秦霜向林舟交接库房值守。\", \"facts\": [{\"fact_id\": \"f1\", \"fact\": \"秦霜把库房钥匙交给林舟并要求他天亮前不得离开。\"}, {\"fact_id\": \"f2\", \"fact\": \"林舟接过钥匙并答应守到天亮。\"}], \"npc_mentions\": [{\"primary_surface\": \"秦霜\", \"presence\": \"appeared\", \"surfaces\": [\"秦霜\"], \"evidence_fact_ids\": [\"f1\"], \"evidence_paragraph_ids\": [\"turn_27_p001\"]}, {\"primary_surface\": \"林舟\", \"presence\": \"appeared\", \"surfaces\": [\"林舟\"], \"evidence_fact_ids\": [\"f1\", \"f2\"], \"evidence_paragraph_ids\": [\"turn_27_p001\", \"turn_27_p002\"]}]}",
       "player_name": "萧欢",
       "scene_location": "宗门库房",
       "participants": [
@@ -1520,7 +1737,23 @@
           "npc-qin",
           "npc-lin"
         ]
-      }
+      },
+      "npc_usages": [
+        {
+          "name": "秦霜",
+          "surfaces": [
+            "秦霜"
+          ],
+          "presence": "appeared"
+        },
+        {
+          "name": "林舟",
+          "surfaces": [
+            "林舟"
+          ],
+          "presence": "appeared"
+        }
+      ]
     }
   ]
 }

@@ -14,7 +14,7 @@ from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.scene_facts.schemas import SceneFactSet
 from app.domain.scene_summary.schemas import SceneSummary
-from app.domain.scene_writer.schemas import SceneWriterResult
+from app.domain.scene_writer.schemas import NPCUsage, SceneWriterResult
 from app.runtime.session import PendingOpening, PendingTurn
 from app.runtime.services import RuntimeServices
 
@@ -67,6 +67,8 @@ class ConfirmationState(TypedDict, total=False):
     state_before_update: CurrentState
     confirmation_scene_text: str
     existing_npc_profiles: list[NPCProfile]
+    npc_usages: list[NPCUsage]
+    used_npcs: list[dict[str, Any]]
     core_memory: CoreMemory
     scene_summaries: list[SceneSummary]
     recent_summaries: list[SceneSummary]

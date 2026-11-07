@@ -64,6 +64,7 @@ from app.domain.npc_profile.identity_resolver import (
 from app.domain.npc_profile.schemas import KnownAbility, NPCProfile
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_facts.schemas import SceneFactSet
+from app.domain.scene_writer.schemas import NPCUsage
 from app.domain.views import project_current_state
 from app.runtime.sqlite import connect_sqlite
 
@@ -72,7 +73,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURES = ROOT / "benchmarks" / "npc_baseline" / "fixtures_batch.json"
 DEFAULT_RECORDINGS = ROOT / "benchmarks" / "npc_baseline" / "recordings" / "batch.json"
 DEFAULT_BASELINE = ROOT / "benchmarks" / "npc_baseline" / "baseline_batch.json"
-BENCHMARK_VERSION = 3
+BENCHMARK_VERSION = 4
 
 
 def _open_npc_store():
@@ -400,6 +401,7 @@ class RosterTemplate(BaseModel):
 
 
 class BenchmarkCase(BaseModel):
+    npc_usages: list[NPCUsage]
     model_config = ConfigDict(extra="forbid")
 
     case_id: str = Field(min_length=1)
@@ -651,7 +653,13 @@ class StubGateway:
                 "stub gateway ran out of recorded responses for task "
                 f"{kwargs['task']!r}"
             )
-        response = self._responses.pop(0)
+        response = json.loads(json.dumps(self._responses.pop(0)))
+        # Recorded v8 replies used a nested scene_summary; replay as the current wire shape.
+        for entry in response.get("updates", []):
+            if isinstance(entry.get("scene_summary"), dict):
+                summary = entry["scene_summary"]
+                entry["scene_summary"] = summary.get("summary")
+                entry["evidence_ids"] = summary.get("evidence_ids", [])
         if "on_attempt_start" in kwargs and kwargs["on_attempt_start"] is not None:
             kwargs["on_attempt_start"](1)
         result = kwargs["output_schema"].model_validate(response)
@@ -694,6 +702,7 @@ def _run_offline_batch(
             npc_store=store,
             gateway=gateway,  # type: ignore[arg-type]
             scene_facts=scene_facts,
+            npc_usages=case.npc_usages,
             evidence_documents=evidence_documents,
             current_state=_current_state(case),
             turn_index=case.turn_index,
@@ -711,7 +720,7 @@ def _run_offline_batch(
         for mention in scene_facts.npc_mentions
         for surface in [
             mention.primary_surface,
-            *(relation.surface for relation in mention.alias_relations),
+            *mention.surfaces,
         ]
     ]
     exact_mentions = [
@@ -719,7 +728,6 @@ def _run_offline_batch(
         for item in result.resolution.resolved
         for surface in [
             *item.primary_surfaces,
-            *(relation.surface for relation in item.alias_relations),
         ]
         if (
             (profile := profile_by_id.get(item.npc_id)) is not None
@@ -731,11 +739,6 @@ def _run_offline_batch(
         resolutions[item.canonical_name] = {
             "resolution": "existing",
             "target_npc_id": item.npc_id,
-        }
-    for candidate in result.new_npc_candidates:
-        resolutions[candidate.primary_surface] = {
-            "resolution": "new",
-            "target_npc_id": None,
         }
     prompt_metrics = _prompt_metrics(case, gateway.calls)
     batch_entries = []
@@ -766,10 +769,7 @@ def _run_offline_batch(
         "extract_mentions": extract_mentions,
         "exact_mentions": exact_mentions,
         "aliases_added": aliases_added,
-        "new_profile_names": [
-            candidate.primary_surface
-            for candidate in result.new_npc_candidates
-        ],
+        "new_profile_names": [],
         "field_deltas": field_deltas,
         "warnings": [
             [
@@ -1224,6 +1224,7 @@ def _run_live_pipeline(
         npc_store=store,
         gateway=gateway,
         scene_facts=SceneFactSet.model_validate_json(case.scene_facts),
+        npc_usages=case.npc_usages,
         evidence_documents=evidence_documents,
         current_state=_current_state(case),
         turn_index=case.turn_index,
@@ -1327,9 +1328,7 @@ def _expected_batch_input(case: BenchmarkCase) -> dict[str, str] | None:
     resolution = resolve_npc_identities(
         profiles=profiles,
         npc_mentions=scene_facts.npc_mentions,
-        paragraph_texts=[
-            document.text for document in evidence_documents.values()
-        ],
+        npc_usages=case.npc_usages,
         player_name=case.player_name,
     )
     appeared = [
