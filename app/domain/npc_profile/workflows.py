@@ -29,22 +29,6 @@ class NPCConfirmedTurnResult:
     updated_npc_profile_ids: list[str]
 
 
-def _npc_mentioned_in_scene_facts(name: str, scene_facts: SceneFactSet | None) -> bool:
-    """检查 NPC 是否在 Scene Facts 中出现（无论是 appeared 还是 mentioned_only）。"""
-    if scene_facts is None:
-        return True
-    key = normalize_compact_key(name)
-    if not key:
-        return False
-    for mention in getattr(scene_facts, "npc_mentions", []):
-        if normalize_compact_key(mention.primary_surface) == key:
-            return True
-        for relation in getattr(mention, "alias_relations", []):
-            if normalize_compact_key(relation.surface) == key:
-                return True
-    return False
-
-
 def auto_backfill_spontaneous_npc_profiles(
     *,
     pending,
@@ -53,7 +37,7 @@ def auto_backfill_spontaneous_npc_profiles(
     core_memory: CoreMemory,
     turn_index: int,
     scene_id: str | None = None,
-    scene_facts: SceneFactSet | None = None,
+    used_names: set[str],
     trace_id: str | None = None,
 ) -> list[str]:
     """对本轮生成导演引入的即兴轻量 NPC 执行自动 Backfill 并直接写入 NPCProfileStore。"""
@@ -78,8 +62,7 @@ def auto_backfill_spontaneous_npc_profiles(
         if not name:
             continue
 
-        # 若正文中完全未出现（既没有 appeared 也没有 mentioned_only），跳过 Backfill，避免幽灵档案
-        if scene_facts is not None and not _npc_mentioned_in_scene_facts(name, scene_facts):
+        if normalize_compact_key(name) not in used_names:
             continue
 
         # 若已存在同名或同 ID 档案，保护不重复创建
@@ -151,10 +134,8 @@ def prune_npc_transient_aliases_from_current_state(
 
 def apply_confirmed_npc_turn(
     *,
-    pending,
     npc_store: NPCProfileStore,
     gateway,
-    core_memory: CoreMemory,
     scene_facts: SceneFactSet,
     current_state: CurrentState,
     user_input: str,
@@ -165,16 +146,6 @@ def apply_confirmed_npc_turn(
 ) -> NPCConfirmedTurnResult:
     """Apply the complete NPC workflow for one confirmed turn."""
     admitted_at = utc_now()
-    backfilled_ids = auto_backfill_spontaneous_npc_profiles(
-        pending=pending,
-        npc_store=npc_store,
-        gateway=gateway,
-        core_memory=core_memory,
-        turn_index=turn_index,
-        scene_id=scene_id,
-        scene_facts=scene_facts,
-        trace_id=trace_id,
-    )
     evidence_documents = {
         document.document_id: document
         for document in build_turn_documents(
@@ -203,7 +174,6 @@ def apply_confirmed_npc_turn(
     return NPCConfirmedTurnResult(
         process_result=process_result,
         updated_npc_profile_ids=list(dict.fromkeys([
-            *backfilled_ids,
             *process_result.saved_ids,
             *pruned_ids,
         ])),

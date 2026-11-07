@@ -271,8 +271,18 @@ def test_edited_scene_preview_drops_original_directions_and_uses_scene_facts(
     assert captured["scene_facts"] == scene_facts
 
 
+@pytest.mark.parametrize("material_kind,receipt,presence,expected", [
+    ("npc", "used", "appeared", True),
+    ("event", "used", "appeared", True),
+    ("engaged_event", "used", "mentioned_only", True),
+    ("npc", "unused", "appeared", False),
+    ("npc", "unknown", "appeared", False),
+    ("npc", "legacy", "appeared", False),
+    ("npc", "edited", "appeared", False),
+    ("event", "existing", "appeared", False),
+])
 def test_staged_director_npc_promotes_without_preadding_participants(
-    configure_runtime_services,
+    configure_runtime_services, material_kind, receipt, presence, expected,
 ):
     from app.domain.director import DirectorStageMaterial, DirectorStageResult
     from app.domain.director_npc import DirectorNPCDraft, KnownAbility
@@ -308,7 +318,29 @@ def test_staged_director_npc_promotes_without_preadding_participants(
     with services.stores.director_npc as store:
         store.save(draft)
 
-    scene_result = SceneWriterResult(scene_text="林澈走进来。")
+    import hashlib
+    from app.domain.npc_profile.schemas import NPCProfile
+
+    scene_result = SceneWriterResult(
+        scene_text="一名医生走进来。",
+        npc_usages=([{"name": "陌生人" if receipt == "unknown" else "林澈",
+                     "surfaces": ["医生"], "presence": presence}]
+                    if receipt not in {"legacy", "unused"} else []),
+        npc_usages_text_hash=(hashlib.sha256("一名医生走进来。".encode()).hexdigest()
+                              if receipt != "legacy" else None),
+    )
+    if receipt == "existing":
+        with services.stores.npc_profile as store:
+            store.upsert(NPCProfile(name="林澈", role="已确认的职业", disclosure_level="intimate"))
+    materials = [DirectorStageMaterial(
+        kind=material_kind,
+        resource_id=draft.draft_id if material_kind == "npc" else "event-1",
+        guidance="让医生参与互动。",
+        payload=({"source": "director_npc", "name": "林澈"}
+                 if material_kind == "npc" else {"actors": [{
+                     "name": "林澈", "ref": {"kind": "npc", "resource_id": draft.draft_id},
+                 }]}),
+    )]
     pending = make_pending_turn(
         turn_id="turn-staged",
         group_id="turn-staged",
@@ -321,14 +353,7 @@ def test_staged_director_npc_promotes_without_preadding_participants(
         scene_result=scene_result,
         director_stage=DirectorStageResult(
             reasoning="引入林澈。",
-            materials=[
-                DirectorStageMaterial(
-                    kind="npc",
-                    resource_id=draft.draft_id,
-                    guidance="以林澈视角互动。",
-                    payload={"source": "director_npc", "name": "林澈"},
-                )
-            ],
+            materials=materials,
         ),
     )
     prepared = prepare_confirmation_state(
@@ -342,18 +367,24 @@ def test_staged_director_npc_promotes_without_preadding_participants(
             stale_message="stale",
         ),
         write_db=True,
+        scene_text="你独自离开。" if receipt == "edited" else None,
     )
 
-    assert prepared["confirmed_director_npc_drafts"][0].draft_id == draft.draft_id
+    assert [item.draft_id for item in prepared["confirmed_director_npc_drafts"]] == ([draft.draft_id] if expected else [])
     assert {p.name for p in prepared["state_before_update"].scene.participants} == {
         "主角"
     }
-    assert "林澈" in prepared["confirmation_scene_text"]
+    if material_kind == "npc":
+        assert "林澈" in prepared["confirmation_scene_text"]
     with services.stores.director_npc as store:
         saved = store.get_by_id(draft.draft_id)
-    assert saved.status == "introduced"
+    assert saved.status == ("introduced" if expected else "prepared")
     with services.stores.npc_profile as store:
-        assert [profile.name for profile in store.list_all()] == ["林澈"]
+        profiles = store.list_all()
+        assert [profile.name for profile in profiles] == (["林澈"] if expected or receipt == "existing" else [])
+        if receipt == "existing":
+            assert profiles[0].role == "已确认的职业"
+            assert profiles[0].disclosure_level == "intimate"
 
 
 @pytest.mark.parametrize("actor_storage", ["profiles", "prepared-drafts"])

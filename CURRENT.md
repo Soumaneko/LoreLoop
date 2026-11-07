@@ -1090,8 +1090,8 @@ creation/enrichment, backfill, and explicit player editing. Ordinary per-turn
 expertise are not accepted as permanent append-only abilities.
 
 Deliberate trade-off: the generation Director curates the roster. NPCs are introduced
-exclusively in the generation phase via `introduce_npc` (either from prepared drafts or
-as a spontaneous face-to-face creation). Background extras and unnamed characters in prose
+by the generation Director through `introduce_npc` (prepared drafts or spontaneous
+cards) or event actor scheduling; Composer records which supplied people it uses. Background extras and unnamed characters in prose
 that are not introduced by the Director are not persisted as permanent NPC profiles,
 preventing unbounded roster bloat. Spontaneous NPCs introduced by the Director are
 automatically backfilled and persisted during confirmation. Staged Director draft NPCs
@@ -1529,10 +1529,16 @@ cannot override confirmed facts or guidance. In the Director confirmation
 workflow, creating an independent draft or a new Event actor always requires one
 resolved Setting.
 
-Generation observes and may stage only `prepared` drafts. Confirming a staged
-draft marks it `introduced`, creates or merges its NPCProfile, records the
-selected initial disclosure level, and adds its identity to the confirmation
-projection without exposing private information to player-facing projections.
+Generation observes and may stage only `prepared` drafts. Confirmation preparation
+uses the selected Composer result's `npc_usages` before Scene Facts extraction.
+Both `appeared` and `mentioned_only` qualify: used prepared drafts (including event
+actors) become `introduced` and receive an NPCProfile; used spontaneous cards are
+backfilled at the same stage. Existing profiles are preserved, unmatched names
+and unused materials do not create profiles. Draft promotion retains the selected
+initial disclosure level (event actors use `face_to_face`). These writes share the
+confirmation transaction and rollback cache policy. A receipt is usable only when
+its source text hash matches the accepted text; edited prose and legacy results
+without a source hash skip this automatic creation step and still confirm normally.
 The staged NPC is not pre-added to CurrentState participants: whether the
 character is actually present is decided by the normal StateUpdater from the
 confirmed prose's scene-ending snapshot, so a Director NPC that is merely
@@ -1609,8 +1615,10 @@ Record accuracy is assessed offline; surplus names or imprecise surface mappings
 do not reject prose or trigger a semantic validation retry. Basic structured
 parsing remains in place. Records travel with `SceneWriterResult` and
 pending variants; a program-generated text hash identifies their source prose.
-Older saved results default to an empty list. This experimental field is not yet
-consumed by promotion, backfill, fact extraction, state updates, or event review;
+Older saved results default to an empty list. Confirmation preparation consumes
+these records for draft promotion and spontaneous backfill, with identical
+creation eligibility for `appeared` and `mentioned_only`. Scene Facts, identity
+resolution, state updates and event review have not yet migrated to these records;
 `director_reason` and its position remain unchanged.
 
 Rephrase reruns the entire Composer with the saved authoritative context; prior

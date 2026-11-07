@@ -118,6 +118,7 @@ def test_promote_staged_director_npc_profile_writes_disclosure_level(tmp_path):
         pending,
         turn_index=3,
         stores=stores,
+        used_names={"林澈"},
     )
 
     assert len(confirmations) == 1
@@ -149,13 +150,13 @@ def test_promote_staged_director_npc_profile_promotes_all_introduced_drafts(
             kind="npc",
             resource_id=draft_a.draft_id,
             guidance="登场。",
-            payload={"source": "director_npc", "view_mode": "face_to_face"},
+            payload={"source": "director_npc", "view_mode": "face_to_face", "name": "林澈"},
         ),
         DirectorStageMaterial(
             kind="npc",
             resource_id=draft_b.draft_id,
             guidance="登场。",
-            payload={"source": "director_npc", "view_mode": "remote"},
+            payload={"source": "director_npc", "view_mode": "remote", "name": "顾晚棠"},
         ),
     ]))
 
@@ -163,6 +164,7 @@ def test_promote_staged_director_npc_profile_promotes_all_introduced_drafts(
         pending,
         turn_index=3,
         stores=stores,
+        used_names={"林澈", "顾晚棠"},
     )
 
     assert {item.draft.draft_id for item in confirmations} == {
@@ -177,39 +179,36 @@ def test_promote_staged_director_npc_profile_promotes_all_introduced_drafts(
         assert by_source["林澈"].disclosure_level == "face_to_face"
         assert by_source["顾晚棠"].disclosure_level == "remote"
 
+    assert promote_staged_director_npc_profile(
+        pending, turn_index=4, stores=stores, used_names={"林澈", "顾晚棠"},
+    ) == []
+    with stores.npc_profile as store:
+        assert {profile.name: profile for profile in store.list_all()} == by_source
 
-def test_merge_director_draft_never_downgrades_disclosure_level(tmp_path):
-    from app.domain.director_npc.schemas import DirectorNPCDraft, KnownAbility
-    from app.domain.npc_profile.director_promotion import (
-        merge_director_draft_into_npc_profile,
-    )
 
+@pytest.mark.parametrize("match_by", ["name", "source_id"])
+def test_promotion_preserves_existing_profile_and_draft(tmp_path, match_by):
+    from app.graph.confirmation_helpers import ensure_director_npc_profile
+
+    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
+    draft = make_director_npc()
     existing = NPCProfile(
-        name="林澈",
-        role="社区医生",
+        name=draft.name if match_by == "name" else "已修改的姓名",
+        role="已确认的职业",
         disclosure_level="intimate",
-        source_setting_ids=["setting-old", "setting-shared"],
+        source_director_npc_id=draft.draft_id if match_by == "source_id" else None,
+        source_setting_ids=["setting-old"],
     )
-    draft = DirectorNPCDraft(
-        name="林澈",
-        role="社区医生",
-        appearance="深色风衣。",
-        personality_trait="见人先问诊，习惯主动掌握对方近况",
-        known_abilities=[KnownAbility(name="急救", description="处理外伤与常见急症")],
-        core_motivation="保护社区居民。",
-        hidden_secret="曾目击旧案。",
-        conflict_style="先协商后行动。",
-        social_style="克制而友善。",
-        created_turn=2,
-        source_setting_ids=["setting-shared", "setting-new"],
-    )
+    with stores.director_npc as store:
+        store.save(draft)
+        saved_draft = store.get_by_id(draft.draft_id)
+    with stores.npc_profile as store:
+        store.upsert(existing)
 
-    merged = merge_director_draft_into_npc_profile(
-        existing,
-        draft,
-        disclosure_level="remote",
-    )
-
-    assert merged.disclosure_level == "intimate"
-    assert merged.source_setting_ids == ["setting-old", "setting-shared", "setting-new"]
-    assert existing.source_setting_ids == ["setting-old", "setting-shared"]
+    assert ensure_director_npc_profile(
+        draft.draft_id, turn_index=4, stores=stores, disclosure_level="remote",
+    ) is None
+    with stores.npc_profile as store:
+        assert store.list_all() == [existing]
+    with stores.director_npc as store:
+        assert store.get_by_id(draft.draft_id) == saved_draft

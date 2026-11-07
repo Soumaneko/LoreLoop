@@ -74,20 +74,12 @@ def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
         warnings=[],
     )
 
-    def _backfill(**kwargs):
-        return ["npc_backfill", "npc_shared"]
-
     def _batch(**kwargs):
         return process_result
 
     def _prune(**kwargs):
         return ["npc_pruned", "npc_batch"]
 
-    monkeypatch.setattr(
-        npc_workflows,
-        "auto_backfill_spontaneous_npc_profiles",
-        _backfill,
-    )
     monkeypatch.setattr(npc_workflows, "apply_npc_batch_update", _batch)
     monkeypatch.setattr(
         npc_workflows,
@@ -96,10 +88,8 @@ def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
     )
 
     result = npc_workflows.apply_confirmed_npc_turn(
-        pending=object(),
         npc_store=object(),
         gateway=object(),
-        core_memory=CoreMemory(items=[]),
         scene_facts=SceneFactSet(scene_focus="本轮场景。"),
         current_state=object(),
         user_input="前进。",
@@ -111,14 +101,13 @@ def test_confirmed_npc_turn_runs_business_steps_and_merges_ids(monkeypatch):
 
     assert result.process_result == process_result
     assert result.updated_npc_profile_ids == [
-        "npc_backfill",
-        "npc_shared",
         "npc_batch",
+        "npc_shared",
         "npc_pruned",
     ]
 
 
-def test_auto_backfill_skips_when_npc_never_appeared_in_scene_facts():
+def test_auto_backfill_skips_unused_npc():
     conn, npc_store, _ = _make_stores()
 
     material = DirectorStageMaterial(
@@ -147,80 +136,18 @@ def test_auto_backfill_skips_when_npc_never_appeared_in_scene_facts():
         "social_style": "社交",
     })
 
-    # scene_facts 中完全没有孙百草（只有主角）
-    scene_facts = SceneFactSet(
-        scene_focus="萧欢赶路",
-        facts=[SceneFact(fact_id="f1", fact="萧欢在山道上行走。")],
-        npc_mentions=[],
-    )
-
     backfilled_ids = auto_backfill_spontaneous_npc_profiles(
         pending=MockPending(),
+        used_names=set(),
         npc_store=npc_store,
         gateway=gateway,
         core_memory=CoreMemory(items=[]),
         turn_index=1,
-        scene_facts=scene_facts,
     )
 
     assert backfilled_ids == [], "正文中完全未出现时必须跳过 Backfill，避免幽灵 NPC"
     assert len(gateway.calls) == 0
     assert len(npc_store.list_all()) == 0
-
-
-def test_auto_backfill_runs_when_npc_mentioned_only_in_scene_facts():
-    conn, npc_store, _ = _make_stores()
-
-    material = DirectorStageMaterial(
-        kind="npc",
-        resource_id="spontaneous_npc_sun_01",
-        guidance="在柜台后称药。",
-        payload={
-            "source": "spontaneous",
-            "name": "孙百草",
-            "role": "百草堂掌柜",
-            "view_mode": "face_to_face",
-        },
-    )
-
-    class MockPending:
-        def __init__(self):
-            self.director_stage = DirectorStageResult(
-                reasoning="即兴引入孙百草",
-                materials=[material],
-            )
-
-    gateway = _MockGateway({
-        "core_motivation": "收集天下灵药",
-        "hidden_secret": "私藏残方",
-        "conflict_style": "退让",
-        "social_style": "谦和",
-    })
-
-    # scene_facts 中存在孙百草，但为 mentioned_only
-    scene_facts = SceneFactSet(
-        scene_focus="谈论孙百草",
-        facts=[SceneFact(fact_id="f1", fact="店小二提到城西百草堂的孙百草医术高超。")],
-        npc_mentions=[
-            SceneNpcMention(
-                primary_surface="孙百草",
-                presence="mentioned_only",
-                evidence_fact_ids=["f1"],
-            )
-        ],
-    )
-
-    backfilled_ids = auto_backfill_spontaneous_npc_profiles(
-        pending=MockPending(),
-        npc_store=npc_store,
-        gateway=gateway,
-        core_memory=CoreMemory(items=[]),
-        turn_index=1,
-        scene_facts=scene_facts,
-    )
-
-    assert len(backfilled_ids) == 1
-    assert npc_store.get_by_name("孙百草") is not None
 
 
 def test_npc_profile_from_spontaneous_material():
@@ -296,6 +223,7 @@ def test_auto_backfill_spontaneous_npc_profiles_workflow():
 
     backfilled_ids = auto_backfill_spontaneous_npc_profiles(
         pending=MockPending(),
+        used_names={"孙百草"},
         npc_store=npc_store,
         gateway=gateway,
         core_memory=CoreMemory(items=[]),
@@ -326,6 +254,7 @@ def test_auto_backfill_spontaneous_npc_profiles_workflow():
     # 3. 验证再次调用时防重入
     repeated_ids = auto_backfill_spontaneous_npc_profiles(
         pending=MockPending(),
+        used_names={"孙百草"},
         npc_store=npc_store,
         gateway=gateway,
         core_memory=CoreMemory(items=[]),
@@ -338,7 +267,7 @@ def test_auto_backfill_spontaneous_npc_profiles_workflow():
     assert len(gateway.calls) == 1
 
 
-def test_npc_profile_update_node_auto_backfills_spontaneous_npc(monkeypatch):
+def test_preparation_backfills_before_npc_profile_update(monkeypatch):
     from types import SimpleNamespace
     from app.domain.current_state.schemas import CurrentState, PlayerState, SceneState
     from app.domain.scene_facts import SceneFactSet
@@ -420,15 +349,33 @@ def test_npc_profile_update_node_auto_backfills_spontaneous_npc(monkeypatch):
         ),
     }
 
-    result = confirmation_nodes.npc_profile_update_node(state)
+    import hashlib
+    from app.domain.scene_writer.schemas import SceneWriterResult
+    from app.graph.confirmation_helpers import prepare_used_npc_profiles
 
-    # 1. 验证即兴角色被自动 backfill 并记录入 updated_npc_profile_ids
+    scene_result = SceneWriterResult(
+        scene_text=state["effective_scene_text"],
+        npc_usages=[{"name": "孙百草", "surfaces": ["掌柜"], "presence": "mentioned_only"}],
+        npc_usages_text_hash=hashlib.sha256(state["effective_scene_text"].encode()).hexdigest(),
+    )
+    prepared_ids, drafts = prepare_used_npc_profiles(
+        pending, scene_result=scene_result, scene_text=scene_result.scene_text,
+        turn_index=1, scene_id="scene_001", trace_id="trace-1",
+        stores=state["runtime_services"].stores, gateway_factory=lambda: gateway, core_memory=state["core_memory"],
+    )
+    assert len(prepared_ids) == 1
+    assert drafts == []
+    assert [call["task"] for call in gateway.calls] == ["npc_profile_backfill"]
+    confirmation_nodes.npc_profile_update_node(state)
+    assert [call["task"] for call in gateway.calls].count("npc_profile_backfill") == 1
+
+    # 1. 验证即兴角色在确认准备阶段完成 Backfill 并入库
     saved_profiles = npc_store.list_all()
     assert len(saved_profiles) == 1
     sun_profile = saved_profiles[0]
     assert sun_profile.name == "孙百草"
     assert sun_profile.core_motivation == "收集天下灵药"
-    assert sun_profile.npc_id in result["updated_npc_profile_ids"]
+    assert sun_profile.npc_id in prepared_ids
 
     # 2. 验证草稿库零污染
     assert len(director_store.list_all()) == 0

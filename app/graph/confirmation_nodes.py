@@ -457,16 +457,9 @@ def npc_profile_update_node(state: ConfirmationState) -> ConfirmationState:
         nonlocal computed
         computed = True
         with state["runtime_services"].stores.npc_profile as npc_store:
-            pending = state.get("pending") or getattr(
-                pipeline_input,
-                "pending",
-                None,
-            )
             return apply_confirmed_npc_turn(
-                pending=pending,
                 npc_store=npc_store,
                 gateway=_gateway_for(state),
-                core_memory=state["core_memory"],
                 scene_facts=state["scene_facts"],
                 current_state=state["updated_state"],
                 user_input=pipeline_input.user_input,

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
+from app.core.text import normalize_compact_key
+from app.domain.director.scheduled import collect_scheduled_npcs
+from app.domain.npc_profile.workflows import auto_backfill_spontaneous_npc_profiles
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.director_promotion import (
-    merge_director_draft_into_npc_profile,
     npc_profile_from_director_draft,
 )
 from app.domain.npc_profile.schemas import NPC_DISCLOSURE_ORDER
+from app.domain.scene_writer.schemas import SceneWriterResult
 from app.runtime.serialization import model_data
 from app.runtime.services import RuntimeServices
 from app.runtime.session import (
@@ -43,9 +47,9 @@ def promote_staged_director_npc_profile(
     *,
     turn_index: int,
     stores,
+    used_names: set[str],
 ) -> list[DirectorNPCConfirmation]:
-    """Promote every staged Director NPC draft (introduce materials) to a
-    profile, in material order, so multi-introduce turns are fully promoted."""
+    """Promote used prepared actors, including those supplied by events."""
     stage = getattr(pending, "director_stage", None)
     materials = (
         stage.materials
@@ -53,18 +57,69 @@ def promote_staged_director_npc_profile(
         else []
     )
     confirmations: list[DirectorNPCConfirmation] = []
-    for material in materials:
-        if material.kind != "npc" or material.payload.get("source") != "director_npc":
-            continue
-        confirmation = ensure_director_npc_profile(
-            material.resource_id,
-            turn_index=turn_index,
-            stores=stores,
-            disclosure_level=material.payload.get("view_mode"),
-        )
-        if confirmation is not None:
-            confirmations.append(confirmation)
+    with stores.npc_profile as npc_store:
+        scheduled = collect_scheduled_npcs(materials, npc_store, stores.director_npc)
+        for entry in scheduled:
+            if normalize_compact_key(entry.name) not in used_names or not entry.draft_id:
+                continue
+            material = next(
+                (item for item in materials
+                 if item.kind == "npc" and item.resource_id == entry.draft_id),
+                None,
+            )
+            confirmation = ensure_director_npc_profile(
+                entry.draft_id,
+                turn_index=turn_index,
+                stores=stores,
+                disclosure_level=(
+                    material.payload.get("view_mode") if material else "face_to_face"
+                ),
+            )
+            if confirmation is not None:
+                confirmations.append(confirmation)
     return confirmations
+
+
+def prepare_used_npc_profiles(
+    pending,
+    *,
+    scene_result: SceneWriterResult,
+    scene_text: str,
+    turn_index: int,
+    scene_id: str,
+    trace_id: str,
+    stores,
+    gateway_factory,
+    core_memory,
+) -> tuple[list[str], list[DirectorNPCDraft]]:
+    # Edited prose and legacy results have no usable receipt for this confirmation.
+    text_hash = hashlib.sha256(scene_text.encode("utf-8")).hexdigest()
+    if scene_result.npc_usages_text_hash != text_hash:
+        return [], []
+    used_names = {normalize_compact_key(item.name) for item in scene_result.npc_usages}
+    if not used_names:
+        return [], []
+    confirmations = promote_staged_director_npc_profile(
+        pending, turn_index=turn_index, stores=stores, used_names=used_names,
+    )
+    materials = pending.director_stage.materials if pending.director_stage else []
+    has_spontaneous = any(
+        item.kind == "npc" and item.payload.get("source") == "spontaneous"
+        and normalize_compact_key(item.payload.get("name", "")) in used_names
+        for item in materials
+    )
+    backfilled_ids = []
+    if has_spontaneous:
+        with stores.npc_profile as npc_store:
+            backfilled_ids = auto_backfill_spontaneous_npc_profiles(
+                pending=pending, npc_store=npc_store, gateway=gateway_factory(),
+                core_memory=core_memory, turn_index=turn_index, scene_id=scene_id,
+                trace_id=trace_id, used_names=used_names,
+            )
+    return (
+        [item.npc_id for item in confirmations] + backfilled_ids,
+        [item.draft for item in confirmations],
+    )
 
 
 def apply_staged_disclosure_upgrades(
@@ -118,6 +173,12 @@ def ensure_director_npc_profile(
         draft = director_store.get_by_id(draft_id)
         if draft is None or draft.status == "retired":
             return None
+        existing = (
+            npc_store.get_by_source_director_npc_id(draft.draft_id)
+            or npc_store.get_by_name(draft.name)
+        )
+        if existing is not None:
+            return None
         if draft.status == "prepared":
             draft = director_store.mark_introduced(
                 draft_id,
@@ -129,13 +190,6 @@ def ensure_director_npc_profile(
             draft,
             disclosure_level=disclosure_level,
         )
-        existing_npc = npc_store.get_by_source_director_npc_id(draft.draft_id) or npc_store.get_by_name(draft.name)
-        if existing_npc is not None:
-            npc_profile = merge_director_draft_into_npc_profile(
-                existing_npc,
-                draft,
-                disclosure_level=disclosure_level,
-            )
         npc_id = npc_store.upsert(npc_profile)
         return DirectorNPCConfirmation(npc_id=npc_id, draft=draft)
 
@@ -219,12 +273,12 @@ def prepare_confirmation_state(
         current_state_store=stores.current_state,
         npc_profile_store=stores.npc_profile,
         core_memory_store=stores.core_memory,
-        promote_staged_director_npc_profile=lambda pending, *, turn_index: (
-            promote_staged_director_npc_profile(
-                pending,
-                turn_index=turn_index,
-                stores=stores,
-            )
+        prepare_used_npc_profiles=lambda pending, **kwargs: prepare_used_npc_profiles(
+            pending, stores=stores,
+            gateway_factory=lambda: runtime_services.gateway(
+                session_type="confirmation", turn_index=kwargs["turn_index"],
+            ),
+            **kwargs,
         ),
         apply_staged_disclosure_upgrades=lambda pending: (
             apply_staged_disclosure_upgrades(

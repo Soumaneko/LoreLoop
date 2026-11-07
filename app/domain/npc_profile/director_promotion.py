@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import (
-    NPC_DISCLOSURE_ORDER,
     KnownAbility,
     NPCProfile,
 )
@@ -40,46 +39,6 @@ def npc_profile_from_director_draft(
         disclosure_level=disclosure_level or "remote",
         name_hit_count=0,
     )
-
-
-def merge_director_draft_into_npc_profile(
-    profile: NPCProfile,
-    draft: DirectorNPCDraft,
-    *,
-    disclosure_level=None,
-) -> NPCProfile:
-    merged = profile.model_copy(deep=True)
-    if merged.source_director_npc_id:
-        merged.role = merged.role or draft.role
-        merged.appearance = merged.appearance or draft.appearance
-        if not merged.personality_trait:
-            merged.personality_trait = draft.personality_trait
-        if not merged.known_abilities:
-            merged.known_abilities = _profile_abilities(draft)
-        merged.faction = merged.faction or draft.faction
-    else:
-        merged.role = draft.role
-        merged.appearance = draft.appearance
-        merged.personality_trait = draft.personality_trait
-        merged.known_abilities = _profile_abilities(draft)
-        merged.faction = draft.faction
-    merged.core_motivation = draft.core_motivation
-    merged.hidden_secret = draft.hidden_secret
-    merged.conflict_style = draft.conflict_style
-    merged.social_style = draft.social_style
-    merged.source_director_npc_id = merged.source_director_npc_id or draft.draft_id
-    merged.source_setting_ids = list(dict.fromkeys([
-        *merged.source_setting_ids, *draft.source_setting_ids,
-    ]))
-    merged.created_turn = merged.created_turn or draft.created_turn
-    merged.introduced_turn = draft.introduced_turn
-    if disclosure_level is not None:
-        current = NPC_DISCLOSURE_ORDER.get(merged.disclosure_level, 0)
-        granted = NPC_DISCLOSURE_ORDER.get(disclosure_level, 0)
-        if granted > current:
-            merged.disclosure_level = disclosure_level
-    merged.name_hit_count = max(merged.name_hit_count, 0)
-    return merged
 
 
 def npc_profile_from_spontaneous_material(

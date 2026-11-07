@@ -272,7 +272,38 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
     )
     with runtime.uow(write=True) as uow:
         uow.world_setting.save(setting)
-    scene_text = "玩家走到了北门。"
+    import hashlib
+    from app.domain.director.schemas import DirectorStageMaterial, DirectorStageResult
+    from app.tests.factories.director import make_director_npc, ScriptedDirectorGateway
+
+    gateway = ScriptedDirectorGateway(
+        decision={"reasoning": "无额外操作。"},
+        backfill_output={"core_motivation": "照料邻里", "hidden_secret": "藏有药方",
+                         "conflict_style": "协商", "social_style": "和善"},
+    )
+    monkeypatch.setattr(type(runtime.services), "gateway", lambda *args, **kwargs: gateway)
+    draft = make_director_npc()
+    with runtime.uow(write=True) as uow:
+        uow.director_npc.save(draft)
+    scene_text = "玩家和一名医生走到了北门，谈起了孙百草。"
+    pending.scene_result = SceneWriterResult(
+        scene_text=scene_text,
+        npc_usages=[
+            {"name": draft.name, "surfaces": ["医生"], "presence": "appeared"},
+            {"name": "孙百草", "surfaces": ["孙百草"], "presence": "mentioned_only"},
+        ],
+        npc_usages_text_hash=hashlib.sha256(scene_text.encode()).hexdigest(),
+    )
+    pending.director_stage = DirectorStageResult(reasoning="让医生同行。", materials=[DirectorStageMaterial(
+        kind="event", resource_id="event-1", guidance="让医生同行。",
+        payload={"actors": [{"name": draft.name, "ref": {
+            "kind": "npc", "resource_id": draft.draft_id,
+        }}]},
+    ), DirectorStageMaterial(
+        kind="npc", resource_id="spontaneous-sun", guidance="谈起药铺掌柜。",
+        payload={"source": "spontaneous", "name": "孙百草", "role": "药铺掌柜",
+                 "view_mode": "face_to_face"},
+    )])
     computed_wave = confirmation_graph.stream_confirmation_graph
 
     def wave_with_setting_write(graph, state):
@@ -295,6 +326,8 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
         assert uow.current_state.load() == _state()
         assert uow.confirmed_history.turn_count() == 0
         assert uow.world_setting.get_by_id(setting.setting_id).hit_count == 0
+        assert uow.npc_profile.list_all() == []
+        assert uow.director_npc.get_by_id(draft.draft_id).status == "prepared"
     assert runtime.history.get_transaction(pending.turn_id)["status"] == "failed"
     assert runtime.pending_turns.get(pending.turn_id) is pending
     monkeypatch.setattr(runtime.history, "record_confirmation", original)
@@ -302,6 +335,9 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
     assert runtime.history.get_transaction(pending.turn_id)["scene_text"] == scene_text
     with runtime.uow() as uow:
         assert uow.world_setting.get_by_id(setting.setting_id).hit_count == 1
+        assert {profile.name for profile in uow.npc_profile.list_all()} == {draft.name, "孙百草"}
+        assert uow.director_npc.get_by_id(draft.draft_id).status == "introduced"
+    assert gateway.tasks == ["npc_profile_backfill", "npc_profile_backfill"]
 
 
 def test_saved_opening_survives_followup_failure_and_restart(campaign_runtime, monkeypatch, tmp_path):

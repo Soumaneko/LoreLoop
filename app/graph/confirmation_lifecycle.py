@@ -29,7 +29,7 @@ class ConfirmationPreparationServices:
     current_state_store: Callable
     npc_profile_store: Callable
     core_memory_store: Callable
-    promote_staged_director_npc_profile: Callable
+    prepare_used_npc_profiles: Callable
     apply_staged_disclosure_upgrades: Callable
     project_scene_text_with_staged_director_npc: Callable
     runtime_services: RuntimeServices | None = None
@@ -68,21 +68,22 @@ class ConfirmationPreparer:
             if persisted_state != pipeline_input.state_before:
                 raise ValueError(pipeline_input.stale_message)
 
+        core_memory = services.core_memory_store.load_required()
         director_npc_profile_ids = cache.result("director_npc_profile_ids")
         confirmed_director_npc_drafts = cache.result("confirmed_director_npc_drafts")
-        if write_db and not cache.produced("director_npc_profile_ids"):
-            confirmations = services.promote_staged_director_npc_profile(
-                pending,
-                turn_index=pipeline_input.turn_index,
+        if write_db:
+            director_npc_profile_ids, confirmed_director_npc_drafts = cache.atomic(
+                "director_npc_profile_ids", "confirmed_director_npc_drafts",
+                factory=lambda: services.prepare_used_npc_profiles(
+                    pending,
+                    scene_result=pipeline_input.scene_result,
+                    scene_text=effective_scene_text,
+                    turn_index=pipeline_input.turn_index,
+                    scene_id=pipeline_input.state_before.scene.scene_id,
+                    trace_id=trace_id,
+                    core_memory=core_memory,
+                ),
             )
-            director_npc_profile_ids = [
-                confirmation.npc_id for confirmation in confirmations
-            ]
-            confirmed_director_npc_drafts = [
-                confirmation.draft for confirmation in confirmations
-            ]
-            cache.set_result("director_npc_profile_ids", director_npc_profile_ids)
-            cache.set_result("confirmed_director_npc_drafts", confirmed_director_npc_drafts)
 
         if write_db:
             services.apply_staged_disclosure_upgrades(pending)
@@ -106,7 +107,6 @@ class ConfirmationPreparer:
                 existing_npc_profiles = npc_store.list_all()
             cache.set_result("existing_npc_profiles", existing_npc_profiles)
 
-        core_memory = services.core_memory_store.load_required()
         return {
             "runtime_services": services.runtime_services,
             "events": [{
