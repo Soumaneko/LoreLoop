@@ -84,12 +84,12 @@ class CaseRecording(BaseModel):
 
 
 def load_fixtures(path: Path = DEFAULT_FIXTURES) -> list[NarrativeTestCase]:
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     adapter = TypeAdapter(list[NarrativeTestCase])
     if isinstance(data, dict) and "cases" in data:
         cases = []
         for reference in data["cases"]:
-            source = json.loads((path.parent / reference["path"]).read_text())
+            source = json.loads((path.parent / reference["path"]).read_text(encoding="utf-8"))
             candidates = adapter.validate_python(source if isinstance(source, list) else [source])
             selected = [case for case in candidates if case.case_id == reference["case_id"]]
             if len(selected) != 1:
@@ -113,7 +113,7 @@ def record_run(
     snapshot = run_dir / "prompts"
     shutil.copytree(prompts_dir or PromptLoader().prompts_dir, snapshot)
     fixture_text = json.dumps([case.model_dump(mode="json") for case in fixtures], ensure_ascii=False, indent=2)
-    (run_dir / "fixtures.json").write_text(fixture_text)
+    (run_dir / "fixtures.json").write_text(fixture_text, encoding="utf-8")
     manifest = {
         "case_ids": [case.case_id for case in fixtures],
         "model": config.model, "protocol": config.protocol,
@@ -129,7 +129,7 @@ def record_run(
                                   ROOT / "app/domain/narrative_composer/schemas.py",
                                   ROOT / "app/domain/scene_writer/schemas.py"]},
     }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    (run_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     records = []
     for case in fixtures:
         folder = run_dir / case.case_id
@@ -148,9 +148,9 @@ def record_run(
                 turn_index=case.turn_index, trace_id=new_hex_id(prefix="bench_narrative", length=12),
             )
             output = result.model_dump(mode="json")
-            (folder / "composition.json").write_text(json.dumps(output, ensure_ascii=False, indent=2))
-            (folder / "scene.md").write_text(result.scene_text)
-            (folder / "scene-result.json").write_text(result.to_scene_result().model_dump_json(indent=2))
+            (folder / "composition.json").write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+            (folder / "scene.md").write_text(result.scene_text, encoding="utf-8")
+            (folder / "scene-result.json").write_text(result.to_scene_result().model_dump_json(indent=2), encoding="utf-8")
             record.update(success=True, scene_chars=len(result.scene_text),
                           npc_usages=output["npc_usages"],
                           director_usages=output["director_usages"],
@@ -158,12 +158,12 @@ def record_run(
         except Exception as exc:
             record.update(success=False, error=str(exc))
         trace = folder / "traces.jsonl"
-        attempts = [json.loads(line) for line in trace.read_text().splitlines()] if trace.exists() else []
+        attempts = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()] if trace.exists() else []
         record.update(latency_ms=round((time.perf_counter() - started) * 1000, 2),
                       attempts=len(attempts), errors=[c["error"] for c in attempts if c.get("error")])
         records.append(record)
-        (folder / "result.json").write_text(json.dumps(record, ensure_ascii=False, indent=2))
-        (run_dir / "results.json").write_text(json.dumps(records, ensure_ascii=False, indent=2))
+        (folder / "result.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        (run_dir / "results.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
         print(json.dumps(record, ensure_ascii=False), flush=True)
     return records
 
@@ -279,7 +279,7 @@ def main() -> None:
         return
     if args.check:
         recordings = TypeAdapter(list[CaseRecording]).validate_json(
-            args.recordings.read_text()
+            args.recordings.read_text(encoding="utf-8")
         )
         case_by_id = {case.case_id: case for case in fixtures}
         failures = [

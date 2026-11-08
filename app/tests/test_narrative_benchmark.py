@@ -17,9 +17,9 @@ def test_suite_recording_preserves_outputs_and_rejects_stale_run(tmp_path, monke
         turn_index=1, **_context().model_dump(),
     )
     source = tmp_path / "case.json"
-    source.write_text(case.model_dump_json())
+    source.write_text(case.model_dump_json(), encoding="utf-8")
     suite = tmp_path / "suite.json"
-    suite.write_text(json.dumps({"cases": [{"path": source.name, "case_id": case.case_id}]}))
+    suite.write_text(json.dumps({"cases": [{"path": source.name, "case_id": case.case_id}]}), encoding="utf-8")
     cases = benchmark.load_fixtures(suite)
     output = _output()
     output["npc_usages"] = [{"name": "赵七", "surfaces": ["人群"], "presence": "appeared"}]
@@ -41,17 +41,17 @@ def test_suite_recording_preserves_outputs_and_rejects_stale_run(tmp_path, monke
     config = GatewayConfig(api_key="test", model="mock")
     records = benchmark.record_run(cases, config, run_dir)
     assert records[0]["success"] is True
-    saved = json.loads((run_dir / case.case_id / "scene-result.json").read_text())
+    saved = json.loads((run_dir / case.case_id / "scene-result.json").read_text(encoding="utf-8"))
     assert saved["npc_usages"] == output["npc_usages"]
     assert saved["director_usages"] == output["director_usages"]
     assert records[0]["director_usages"] == output["director_usages"]
     assert saved["scene_text"] == output["scene_text"]
-    assert json.loads((run_dir / "fixtures.json").read_text())[0]["case_id"] == case.case_id
-    assert json.loads((run_dir / "manifest.json").read_text())["prompt_sha256"]
+    assert json.loads((run_dir / "fixtures.json").read_text(encoding="utf-8"))[0]["case_id"] == case.case_id
+    assert json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))["prompt_sha256"]
     with pytest.raises(FileExistsError):
         benchmark.record_run(cases, config, run_dir)
     assert len(constructed) == 1
-    assert json.loads((run_dir / case.case_id / "scene-result.json").read_text()) == saved
+    assert json.loads((run_dir / case.case_id / "scene-result.json").read_text(encoding="utf-8")) == saved
 
 
 @pytest.mark.parametrize("added_field", ["npc_usages", "director_usages"])
@@ -116,7 +116,7 @@ def test_ab_frozen_versions_failure_pairing_and_blind_report(tmp_path, monkeypat
     sides = Counter(p["left"] for p in mapping["pairs"])
     assert abs(sides["A"] - sides["B"]) <= 1
     for p in (run_dir / "blind").glob("*.md"):
-        packet = p.read_text()
+        packet = p.read_text(encoding="utf-8")
         assert "npc_usages" not in packet and "director_reason" not in packet
         assert "scene_reasoning" not in packet and "output_schema_json" not in packet
     report_dir = run_dir / "analysis"
@@ -150,8 +150,8 @@ def test_ab_frozen_versions_failure_pairing_and_blind_report(tmp_path, monkeypat
     assert result["case_votes"] == {"B": 10}
     assert result["performance"]["B"]["failures"] == 1
     assert result["performance"]["A"]["metrics"]["total_tokens"] == {"n": 0, "mean": None, "median": None}
-    assert "scene_text" not in (report_dir / "report.json").read_text()
-    saved = (run_dir / "A/prompt.md").read_text()
-    (run_dir / "A/prompt.md").write_text(saved + "changed")
+    assert "scene_text" not in (report_dir / "report.json").read_text(encoding="utf-8")
+    saved = (run_dir / "A/prompt.md").read_text(encoding="utf-8")
+    (run_dir / "A/prompt.md").write_text(saved + "changed", encoding="utf-8")
     with pytest.raises(ValueError, match="frozen file changed"):
         ab.pack(run_dir)

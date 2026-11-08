@@ -66,6 +66,14 @@ narrative_quality/
 | [结果锚定 Composer](experiments/outcome-anchored/README.md) | 正式 10 例，每侧 3 次 | 未取得稳定叙事收益，候选未采用 |
 | [早期开放叙事](experiments/open-affordance-legacy/README.md) | 旧用例 27 对，24 对有效 | A/B 各胜 12 对；旧用例集合与当前不同 |
 
+## 工具检查与产品构建
+
+Windows 发布构建运行产品测试，排除 `app/tests/test_narrative_benchmark.py`。实验工具检查单独手动运行，需要本机保留实验计划引用的 Git 历史：
+
+```bash
+PYTHONPATH=. .venv/bin/python -m pytest -q app/tests/test_narrative_benchmark.py
+```
+
 ## 继续收录与测试
 
 - 新用例：新增 `cases/<case_id>/input.json`，有来源或后台资源时放在同目录；在本页用例表加一行。

@@ -37,14 +37,14 @@ SOURCES = {
 
 
 def read(path):
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def write(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + '.tmp')
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding="utf-8")
     temporary.replace(path)
 
 
@@ -83,7 +83,7 @@ def frozen_runner(folder):
         if qualified in sys.modules:
             continue
         path = folder / (name + '.py')
-        source = path.read_text().replace(
+        source = path.read_text(encoding="utf-8").replace(
             'from app.domain.scene_writer.schemas import', f'from {package}.scene_writer_schemas import'
         ).replace('from app.domain.narrative_composer.schemas import', f'from {package}.schemas import')
         module = types.ModuleType(qualified)
@@ -117,7 +117,7 @@ def prepare(run_dir, config, service='opencode-go', *, plan=None):
     run_dir.mkdir(parents=True, exist_ok=False)
     write(run_dir / 'fixtures.json', [c.model_dump(mode='json') for c in cases])
     shutil.copyfile(ASSETS / 'judge.md', run_dir / 'judge.md')
-    (run_dir / 'judgment.schema.json').write_text(schema_json(CaseJudgment))
+    (run_dir / 'judgment.schema.json').write_text(schema_json(CaseJudgment), encoding="utf-8")
     templates, schemas, runners = {}, {}, {}
     for variant in ('A', 'B'):
         folder = run_dir / variant
@@ -137,7 +137,7 @@ def prepare(run_dir, config, service='opencode-go', *, plan=None):
         runners[variant] = frozen_runner(folder)
         templates[variant] = PromptLoader(str(prompt_dir)).load('narrative_compose')[0]
         schemas[variant] = json.loads(schema_json(runners[variant]._HardComposerResult))
-        (folder / 'prompt.md').write_text(templates[variant])
+        (folder / 'prompt.md').write_text(templates[variant], encoding="utf-8")
         write(folder / 'schema.json', schemas[variant])
     added_field = plan.get('added_field', 'npc_usages')
     if ''.join(line for line in templates['B'].splitlines(keepends=True)
@@ -255,8 +255,8 @@ def record(run_dir, config):
         except Exception as exc:
             error = f'{type(exc).__name__}: {exc}'
         path = folder / 'traces.jsonl'
-        attempts = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
-        expected_schema = json.loads((run_dir / variant / 'schema.json').read_text())
+        attempts = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
+        expected_schema = json.loads((run_dir / variant / 'schema.json').read_text(encoding="utf-8"))
         for attempt in attempts:
             actual = dict(attempt['input_data'])
             actual_schema = json.loads(actual.pop('output_schema_json'))
@@ -340,13 +340,13 @@ def pack(run_dir):
         context = frozen_runner(run_dir / 'A').composer_context_input(
             frozen_runner(run_dir / 'A').NarrativeComposerContext.model_validate(case.model_dump(mode='json')),
             case.recent_scene, case.turn_index)
-        parts = [(run_dir / 'judge.md').read_text(), '\n# 返回 JSON Schema\n', (run_dir / 'judgment.schema.json').read_text(),
+        parts = [(run_dir / 'judge.md').read_text(encoding="utf-8"), '\n# 返回 JSON Schema\n', (run_dir / 'judgment.schema.json').read_text(encoding="utf-8"),
                  f'\n# case_id\n{cid}\n# 共同权威上下文\n', json.dumps(context, ensure_ascii=False, indent=2)]
         for item in pairs:
             parts.append(f'\n# Pair {item["repetition"]}\n')
             for side in ('left', 'right'):
                 parts.append(f'\n## {side}\n' + indexed[cid, item['repetition'], item[side]]['output']['scene_text'])
-        (packets / f'{cid}.md').write_text('\n'.join(parts))
+        (packets / f'{cid}.md').write_text('\n'.join(parts), encoding="utf-8")
     mapping = {'pairs': mappings, 'excluded': excluded,
                'recordings_hash': digest((run_dir / 'recordings.json').read_bytes()),
                'packet_hashes': {p.name: digest(p.read_bytes()) for p in packets.glob('*.md')}}

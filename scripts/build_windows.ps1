@@ -84,7 +84,8 @@ if (-not $SkipTests) {
     $env:PYTHONPATH = $RepoRoot
     Push-Location $RepoRoot
     try {
-        & $Python -m pytest -q
+        # Benchmark tooling checks run separately from product packaging.
+        & $Python -m pytest -q --ignore=app/tests/test_narrative_benchmark.py
         if ($LASTEXITCODE -ne 0) {
             throw "Test suite failed."
         }
