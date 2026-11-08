@@ -40,6 +40,14 @@ DEFAULT_FIXTURES = ROOT / "benchmarks" / "narrative_quality" / "cases" / "standa
 DEFAULT_RECORDINGS = (
     ROOT / "benchmarks" / "narrative_quality" / "local" / "contract-check" / "current.json"
 )
+LOCAL_DIR = ROOT / "benchmarks" / "narrative_quality" / "local"
+
+
+def require_local_path(path: Path) -> Path:
+    path = Path(path)
+    if not path.resolve().is_relative_to(LOCAL_DIR.resolve()):
+        raise ValueError(f"benchmark artifacts must be inside local directory: {LOCAL_DIR}")
+    return path
 
 
 class NarrativeTestCase(BaseModel):
@@ -99,6 +107,7 @@ def record_run(
     fixtures: list[NarrativeTestCase], config: GatewayConfig, run_dir: Path,
     *, prompts_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
+    run_dir = require_local_path(run_dir)
     # Each directory is an immutable run; a repeated path must never reuse stale output.
     run_dir.mkdir(parents=True, exist_ok=False)
     snapshot = run_dir / "prompts"
@@ -144,6 +153,7 @@ def record_run(
             (folder / "scene-result.json").write_text(result.to_scene_result().model_dump_json(indent=2))
             record.update(success=True, scene_chars=len(result.scene_text),
                           npc_usages=output["npc_usages"],
+                          director_usages=output["director_usages"],
                           invariant_check=check_invariants(case, output).model_dump())
         except Exception as exc:
             record.update(success=False, error=str(exc))
@@ -259,6 +269,7 @@ def main() -> None:
             return
         if args.service:
             parser.error("--service requires --run-dir")
+        require_local_path(args.recordings)
         recordings = run_recording(fixtures, create_gateway(model=args.model), args.only)
         args.recordings.parent.mkdir(parents=True, exist_ok=True)
         args.recordings.write_text(

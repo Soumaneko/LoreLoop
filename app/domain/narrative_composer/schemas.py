@@ -53,6 +53,7 @@ class NarrativeComposerResult(BaseModel):
     )
     scene_text: str = Field(min_length=1, description="正文")
     npc_usages: list[NPCUsage] = Field(default_factory=list)
+    director_usages: list[str] = Field(default_factory=list)
     closing_prompt: str = Field(min_length=1, description="结尾提示")
     next_action_directions: list[NextActionDirection] = Field(
         default_factory=list,
@@ -78,6 +79,7 @@ class NarrativeComposerResult(BaseModel):
                     "scene_reasoning",
                     "scene_text",
                     "npc_usages",
+                    "director_usages",
                     "closing_prompt",
                     "next_action_directions",
                 }

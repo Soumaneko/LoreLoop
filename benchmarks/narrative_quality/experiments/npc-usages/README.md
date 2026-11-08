@@ -4,7 +4,7 @@
 
 目标：加入 `npc_usages`，先验证人物使用记录，再通过 A/B 盲评检查正文质量。`director_reason` 和正文前的规划结构保持原样。
 
-选取 **6 例**：01 孙掌柜、02 艾莉丝、11 赵七进店、12 事件介入谈心、13 旁观事件推进、14 差役敲门。[用例清单](../../README.md) · [运行套件](suite.json)
+选取 **6 例**：01 孙掌柜、02 艾莉丝、11 赵七进店、12 事件介入谈心、13 旁观事件推进、14 差役敲门。[用例目录](../../cases/) · [运行套件](suite.json)
 
 普通验证：已完成三批单例验证、两次六例试跑。六例输入修正后均首轮返回；发现局部连续性问题和称呼归纳偏差。随后尝试将 surfaces 改为原文摘取，复查仍有拼接与漏记，该措辞修改已回滚。调用及检查记录集中在 `local/npc-usages/`。
 
@@ -26,7 +26,7 @@ PYTHONPATH=. .venv/bin/python scripts/benchmark_narrative_quality.py --record \
 | 项目 | 固定设置 |
 |---|---|
 | A | 新增字段前的 Composer，基线提交 `7adb0398f4d7fa4d1475c8b0d85879321a88e1b9` |
-| B | 当前姓名版 `npc_usages`，使用已恢复的措辞 |
+| B | 姓名版 `npc_usages`，使用已恢复的措辞；后续复现固定到 `51766d5`，避免新字段混入旧实验 |
 | 差异 | Prompt 增加字段说明，Schema 增加该字段；其余 Prompt 内容和用例输入一致 |
 | 次数 | 每例每版本 3 次，共 60 次逻辑调用、30 对比较 |
 | 模型 | OpenCode Go / deepseek-v4.1-flash，temperature 0.8，沿用一次结构重试 |
@@ -83,11 +83,10 @@ PYTHONPATH=. .venv/bin/python scripts/benchmark_npc_usages_ab.py pack \
 ```bash
 PYTHONPATH=. .venv/bin/python scripts/benchmark_npc_usages_ab.py report \
   --run-dir benchmarks/narrative_quality/local/npc-usages/formal-20261104-01 \
-  --output-dir benchmarks/narrative_quality/experiments/npc-usages/results/formal-20261104-01 \
   --judge 'Codex（用户提供评分，具体型号未记录）' --date 2026-11-05 --mode codex-session
 ```
 
-失败调用保留，失败所在比较单列为排除；不以额外生成替换。`report` 检查评分是否齐全、引文是否来自对应正文，并输出分数、偏好、逐例表现、违规和性能统计。入库材料仅包括 `report.json` 与本轮通用 Prompt／Schema 前后版本，正文和实际输入继续保存在 `local/`。
+失败调用保留，失败所在比较单列为排除；不以额外生成替换。`report` 检查评分是否齐全、引文是否来自对应正文，并输出分数、偏好、逐例表现、违规和性能统计。后续运行的完整报告默认写入本轮 `local/.../analysis/`，连同快照、正文和实际输入一起保留在本地；仓库只更新实验计划和精简总结。上方已提交的历史结果保持原位置。
 
 以后开启新批次时先准备新目录：
 

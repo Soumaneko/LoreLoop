@@ -1,6 +1,8 @@
 # Composer 叙事测试库
 
-**14 个可复用用例，4 个实验。** 当前 NPC 使用记录实验已完成正式十例 A/B 的评分、复核与解盲。
+本文件是测试库的管理入口。实验计划与精简报告保存在各实验目录，完整执行材料集中在 local。
+
+**14 个可复用用例，5 个实验。** 导演材料采用记录实验已完成六例 A/B 的评分与解盲，结果见下方实验索引。
 
 ## 文件目录
 
@@ -13,7 +15,8 @@ narrative_quality/
 │       ├── input.json
 │       ├── source.json                有来源记录时
 │       └── assets.json                有后台资源时
-├── experiments/                       入库：方案、版本对比、统计和结论
+├── experiments/                       入库：实验计划、精简报告和结论
+│   ├── director-usages/               README.md 精简报告、plan.json 实验设置
 │   ├── npc-usages/
 │   │   ├── README.md                  目标、十例 A/B 设置和操作入口
 │   │   ├── suite.json                  普通验证六例
@@ -32,7 +35,7 @@ narrative_quality/
 
 每例输入只有一份，放在自己的目录内；来源和后台资源跟随该例。实验通过 `suite.json` 引用用例。01–10 为构造场景，11–14 来自游玩记录；来源不影响用例的命名和调用方式。
 
-| 编号 | 场景 | 重点 | 导演输入 | 本次正式十例 |
+| 编号 | 场景 | 重点 | 导演输入 | NPC 使用记录正式十例 |
 |---|---|---|---|---|
 | [01](cases/case_01_tavern_inquiry/input.json) | 孙掌柜提供私下拍卖消息 | 事件演员、线索披露、后续调查空间 | `present_event`，孙掌柜为 actor | 是 |
 | [02](cases/case_02_rogue_recruitment/input.json) | 招募艾莉丝 | 人物性格、顾虑与招募互动 | `introduce_npc` 艾莉丝 | 是 |
@@ -57,6 +60,7 @@ narrative_quality/
 
 | 实验 | 做过的测试 | 结论与入口 |
 |---|---|---|
+| [导演材料采用记录](experiments/director-usages/README.md) | 六例、两版本各3次，共18对 | 已解盲：A胜6对、B胜5对、7平；均分12.39 / 12.11 |
 | [NPC 使用记录](experiments/npc-usages/README.md) | 已固定十例、两版本各 3 次 | 已解盲：A 胜 9 对、B 胜 10 对、11 平；重大视角问题另列 |
 | [TR 与 Composer 合并](experiments/tr-composer-unification/README.md) | 10 例，每侧 3 次，30 对 | 候选胜 20 对；总 Token 均值下降 43.5% |
 | [结果锚定 Composer](experiments/outcome-anchored/README.md) | 正式 10 例，每侧 3 次 | 未取得稳定叙事收益，候选未采用 |
@@ -65,12 +69,15 @@ narrative_quality/
 ## 继续收录与测试
 
 - 新用例：新增 `cases/<case_id>/input.json`，有来源或后台资源时放在同目录；在本页用例表加一行。
-- 新实验：新增 `experiments/<实验>/suite.json` 和 `README.md`，列明目标、用例范围和轮次。
+- 新实验：新增 `experiments/<实验>/README.md` 及实验计划或用例清单，列明目标、用例范围和轮次。
 - 普通验证：连通性、字段准确性和输入排查等材料保存在 `local/<实验>/`，实验 README 简要记录准备进展。
-- 正式测试：按确定的版本、用例、重复次数和评分标准执行。原始调用保存在 `local/<实验>/<轮次>/`；正式小结、统计、评分及理由收录到 `experiments/<实验>/results/<轮次>/`，并登记结果链接。
-- 实际比较的通用 Prompt／Schema 前后版本放在该轮 `comparison/`；用例通过 ID、版本或哈希引用。完整正文、渲染后的逐例输入、盲评题包、冻结的用例副本及整套快照留在 `local/`。
+- 正式测试：先确定版本、用例、重复次数、模型配置和评分标准，冻结双方输入与版本后执行。完整调用、详细评分报告和理由保存在 `local/<实验>/<轮次>/`；仓库在实验 README 或轮次目录保留精简小结、核心统计和结论，并登记本地证据位置。
+- 完整报告默认输出到本轮 `local/<实验>/<轮次>/analysis/`；脚本拒绝将执行产物写到 `local/` 外。prepare 只在本轮目录冻结版本，不再自动导出仓库快照。
+- Prompt／Schema 的源码变化通过 Git 历史查看，实验保留版本标识；完整冻结版本、正文、逐例输入、盲评包和用例副本集中在该轮 `local/`。
 - 用例改动后重新开一轮。旧轮次保留当时冻结的输入和输出；输入错误或未完成的轮次明确标注。
 
-仓库保留实验设计、版本对比、统计、评分理由和结论。本地目录保留完整诊断证据，需另行备份。对应忽略规则只有 `/benchmarks/narrative_quality/local/`，没有反向例外。
+完成评分复核与解盲后，更新实验 README 的核心统计、主要问题与结论，并在本页登记轮次和证据位置。普通验证不登记为正式结果。
+
+仓库保留实验设计、版本标识、核心统计和精简结论。本地目录保留完整诊断证据，需另行备份。对应忽略规则只有 `/benchmarks/narrative_quality/local/`，没有反向例外。
 
 普通验证和正式 A/B 的操作入口见 [NPC 使用记录实验](experiments/npc-usages/README.md)。默认 `--record` / `--check` 使用原构造十例清单 `cases/standard.json`，默认原始记录写入 `local/contract-check/current.json`。

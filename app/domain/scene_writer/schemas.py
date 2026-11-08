@@ -20,6 +20,7 @@ class SceneWriterResult(BaseModel):
     scene_reasoning: str = ""
     scene_text: str
     npc_usages: list[NPCUsage] = Field(default_factory=list)
+    director_usages: list[str] = Field(default_factory=list)
     npc_usages_text_hash: str | None = None
     closing_prompt: str = ""
     next_action_directions: list[NextActionDirection] = Field(default_factory=list, max_length=5)
@@ -28,3 +29,9 @@ class SceneWriterResult(BaseModel):
         if self.npc_usages_text_hash != hashlib.sha256(scene_text.encode("utf-8")).hexdigest():
             return []
         return self.npc_usages
+
+    def director_usages_for_text(self, scene_text: str) -> list[str]:
+        # Both receipts share the source prose hash set by Composer.
+        if self.npc_usages_text_hash != hashlib.sha256(scene_text.encode("utf-8")).hexdigest():
+            return []
+        return self.director_usages

@@ -3,6 +3,7 @@
   "seed": 42,
   "repetitions": 3,
   "baseline_revision": "7adb0398f4d7fa4d1475c8b0d85879321a88e1b9",
+  "candidate_revision": "51766d5b9dbe5e926f692bde5e1b45f7d8ff56c8",
   "fixed_case_ids": [
     "case_11_tavern_entry",
     "case_12_disclosure_intrusion",

@@ -23,6 +23,7 @@ def test_suite_recording_preserves_outputs_and_rejects_stale_run(tmp_path, monke
     cases = benchmark.load_fixtures(suite)
     output = _output()
     output["npc_usages"] = [{"name": "赵七", "surfaces": ["人群"], "presence": "appeared"}]
+    output["director_usages"] = ["event_1"]
     constructed = []
 
     def gateway_factory(**kwargs):
@@ -35,12 +36,15 @@ def test_suite_recording_preserves_outputs_and_rejects_stale_run(tmp_path, monke
         )
 
     monkeypatch.setattr(benchmark, "SharedGatewayFactory", gateway_factory)
-    run_dir = tmp_path / "run"
+    monkeypatch.setattr(benchmark, "LOCAL_DIR", tmp_path / "local")
+    run_dir = benchmark.LOCAL_DIR / "run"
     config = GatewayConfig(api_key="test", model="mock")
     records = benchmark.record_run(cases, config, run_dir)
     assert records[0]["success"] is True
     saved = json.loads((run_dir / case.case_id / "scene-result.json").read_text())
     assert saved["npc_usages"] == output["npc_usages"]
+    assert saved["director_usages"] == output["director_usages"]
+    assert records[0]["director_usages"] == output["director_usages"]
     assert saved["scene_text"] == output["scene_text"]
     assert json.loads((run_dir / "fixtures.json").read_text())[0]["case_id"] == case.case_id
     assert json.loads((run_dir / "manifest.json").read_text())["prompt_sha256"]
@@ -50,18 +54,24 @@ def test_suite_recording_preserves_outputs_and_rejects_stale_run(tmp_path, monke
     assert json.loads((run_dir / case.case_id / "scene-result.json").read_text()) == saved
 
 
-def test_ab_frozen_versions_failure_pairing_and_blind_report(tmp_path, monkeypatch):
+@pytest.mark.parametrize("added_field", ["npc_usages", "director_usages"])
+def test_ab_frozen_versions_failure_pairing_and_blind_report(tmp_path, monkeypatch, added_field):
     from collections import Counter
     from scripts import benchmark_npc_usages_ab as ab
 
-    run_dir = tmp_path / "ab"
+    monkeypatch.setattr(benchmark, "LOCAL_DIR", tmp_path / "local")
+    run_dir = benchmark.LOCAL_DIR / "ab"
     config = GatewayConfig(api_key="unit-test-secret", model="mock")
-    metadata = ab.prepare(run_dir, config)
+    plan = ab.read(ab.ASSETS / 'plan.json')
+    if added_field == 'director_usages':
+        plan.update(added_field=added_field, experiment=added_field,
+                    baseline_revision=plan.pop('candidate_revision'))
+    metadata = ab.prepare(run_dir, config, plan=plan)
     assert len(metadata["plan"]["case_ids"]) == 10
     assert len(metadata["jobs"]) == 60
     assert "unit-test-secret" not in json.dumps(metadata)
-    assert "npc_usages" not in ab.read(run_dir / "A/schema.json")["properties"]
-    assert "npc_usages" in ab.read(run_dir / "B/schema.json")["required"]
+    assert added_field not in ab.read(run_dir / "A/schema.json")["properties"]
+    assert added_field in ab.read(run_dir / "B/schema.json")["required"]
     with pytest.raises(FileExistsError):
         ab.prepare(run_dir, config)
     cases = {c.case_id: c for c in benchmark.load_fixtures(run_dir / "fixtures.json")}
@@ -82,9 +92,11 @@ def test_ab_frozen_versions_failure_pairing_and_blind_report(tmp_path, monkeypat
         output["scene_text"] = "你看向门口，脚步声由远而近。" if variant == "A" else "你侧耳听着，门外的脚步停了。"
         # Preserve one failed B call and keep approximate surfaces acceptable elsewhere.
         if variant == "A" or (cid == metadata["plan"]["case_ids"][0] and rep == 1):
-            output.pop("npc_usages")
+            output.pop(added_field)
         else:
             output["npc_usages"] = [{"name": "赵七", "surfaces": ["概括称呼"], "presence": "appeared"}]
+            if added_field == 'director_usages':
+                output[added_field] = ['event_1']
         provider = MockProvider()
         provider.set_responses([json.dumps(output, ensure_ascii=False)] * 2)
         return lambda: LLMGateway(
@@ -97,7 +109,7 @@ def test_ab_frozen_versions_failure_pairing_and_blind_report(tmp_path, monkeypat
     assert len(records) == 60
     failed = [r for r in records if r["error"]]
     assert len(failed) == 1 and failed[0]["variant"] == "B" and failed[0]["attempts"] == 2
-    assert all("npc_usages" not in r["output"] for r in records if r["variant"] == "A")
+    assert all(added_field not in r["output"] for r in records if r["variant"] == "A")
     assert len(ab.record(run_dir, config)) == 60 and len(constructed) == 60
     mapping = ab.pack(run_dir)
     assert len(mapping["pairs"]) == 29 and len(mapping["excluded"]) == 1
@@ -107,7 +119,7 @@ def test_ab_frozen_versions_failure_pairing_and_blind_report(tmp_path, monkeypat
         packet = p.read_text()
         assert "npc_usages" not in packet and "director_reason" not in packet
         assert "scene_reasoning" not in packet and "output_schema_json" not in packet
-    report_dir = tmp_path / "published"
+    report_dir = run_dir / "analysis"
     kwargs = dict(judge="mock", date="2026-11-04", mode="mock")
     with pytest.raises(ValueError, match="incomplete"):
         ab.report(run_dir, report_dir, **kwargs)

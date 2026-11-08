@@ -1628,6 +1628,17 @@ and evidence projections now use the same valid usage roster, including already
 formal NPCs. Facts, state and summary projections carry that identity into later
 event review and Director observation. `director_reason` and its position remain unchanged.
 
+Composer also emits `director_usages` after `npc_usages`, before the closing
+prompt: a list of input Director material `resource_id` strings actually used in
+the prose. Partial use counts as use, each resource appears once, and no use
+produces an empty list. The input material list remains the complete reference
+for identifying unused resources. Resource association accuracy is assessed offline.
+The records travel with `SceneWriterResult` and pending variants, defaulting to
+an empty list for older saves. `director_usages_for_text` uses the existing
+`npc_usages_text_hash` as the shared source-prose hash, returning no records for
+edited or unbound text. Director consumption is a separate follow-up; current Director inputs and
+event-state decisions are unchanged.
+
 Rephrase reruns the entire Composer with the saved authoritative context; prior
 resolution facts, events, and prose are not frozen as an intermediate contract.
 Feedback rewrite first chooses `revise_from_source`, `recompose`, or

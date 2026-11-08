@@ -179,6 +179,7 @@ class _HardComposerResult(BaseModel):
         description="正文",
     )
     npc_usages: list[NPCUsage] = Field(description="根据正文记录实际使用的输入人物；未使用人物时为空列表")
+    director_usages: list[str] = Field(description="正文实际采用的导演材料 resource_id 列表；未采用任何材料时为空列表")
     closing_prompt: str = Field(
         min_length=1,
         description="结尾提示",
@@ -203,6 +204,7 @@ class _LooseComposerResult(BaseModel):
     scene_reasoning: str = Field(min_length=1)
     scene_text: str = Field(min_length=1)
     npc_usages: list[NPCUsage]
+    director_usages: list[str]
     closing_prompt: str = Field(min_length=1)
     next_action_directions: list[NextActionDirection] = Field(
         default_factory=list,

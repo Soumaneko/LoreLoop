@@ -1,4 +1,4 @@
-"""Prepare, record, blind-pack and summarize the NPC-usage A/B experiment."""
+"""Prepare, record, blind-pack and summarize Composer field-addition experiments."""
 from __future__ import annotations
 
 import argparse
@@ -24,7 +24,7 @@ from app.core.llm.config import GatewayConfig, SharedGatewayFactory
 from app.core.llm.prompts import PromptLoader
 from app.core.llm.schema import schema_json
 from app.core.llm.token_usage import normalize_token_usage
-from scripts.benchmark_narrative_quality import load_fixtures, check_invariants
+from scripts.benchmark_narrative_quality import load_fixtures, check_invariants, require_local_path
 
 BENCH = ROOT / 'benchmarks/narrative_quality'
 ASSETS = BENCH / 'experiments/npc-usages'
@@ -113,7 +113,7 @@ def prepare(run_dir, config, service='opencode-go', *, plan=None):
     cases = [load_fixtures(BENCH / 'cases' / cid / 'input.json')[0] for cid in plan['case_ids']]
     if plan['repetitions'] < 1:
         raise ValueError('repetitions must be positive')
-    run_dir = Path(run_dir)
+    run_dir = require_local_path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=False)
     write(run_dir / 'fixtures.json', [c.model_dump(mode='json') for c in cases])
     shutil.copyfile(ASSETS / 'judge.md', run_dir / 'judge.md')
@@ -122,15 +122,16 @@ def prepare(run_dir, config, service='opencode-go', *, plan=None):
     for variant in ('A', 'B'):
         folder = run_dir / variant
         folder.mkdir()
+        revision = plan['baseline_revision'] if variant == 'A' else plan.get('candidate_revision')
         for name, path in SOURCES.items():
-            content = git('show', f"{plan['baseline_revision']}:{path}") if variant == 'A' else (ROOT / path).read_bytes()
+            content = git('show', f"{revision}:{path}") if revision else (ROOT / path).read_bytes()
             (folder / (name + '.py')).write_bytes(content)
         prompt_dir = folder / 'prompts'
-        if variant == 'A':
-            for path in git('ls-tree', '-r', '--name-only', plan['baseline_revision'], 'app/prompts').decode().splitlines():
+        if revision:
+            for path in git('ls-tree', '-r', '--name-only', revision, 'app/prompts').decode().splitlines():
                 target = prompt_dir / Path(path).relative_to('app/prompts')
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(git('show', f"{plan['baseline_revision']}:{path}"))
+                target.write_bytes(git('show', f"{revision}:{path}"))
         else:
             shutil.copytree(ROOT / 'app/prompts', prompt_dir)
         runners[variant] = frozen_runner(folder)
@@ -138,16 +139,17 @@ def prepare(run_dir, config, service='opencode-go', *, plan=None):
         schemas[variant] = json.loads(schema_json(runners[variant]._HardComposerResult))
         (folder / 'prompt.md').write_text(templates[variant])
         write(folder / 'schema.json', schemas[variant])
+    added_field = plan.get('added_field', 'npc_usages')
     if ''.join(line for line in templates['B'].splitlines(keepends=True)
-               if not line.startswith('- npc_usages：')) != templates['A']:
-        raise ValueError('A/B Prompt difference is not limited to the npc_usages instruction')
+               if not line.startswith(f'- {added_field}：')) != templates['A']:
+        raise ValueError(f'A/B Prompt difference is not limited to the {added_field} instruction')
     a_properties, b_properties = schemas['A']['properties'], dict(schemas['B']['properties'])
-    if 'npc_usages' in a_properties or 'npc_usages' not in b_properties:
-        raise ValueError('A must omit npc_usages; B must request it')
-    b_properties.pop('npc_usages')
+    if added_field in a_properties or added_field not in b_properties:
+        raise ValueError(f'A must omit {added_field}; B must request it')
+    b_properties.pop(added_field)
     if a_properties != b_properties:
         raise ValueError('other output fields differ between A/B')
-    if schemas['A']['required'] != [k for k in schemas['B']['required'] if k != 'npc_usages']:
+    if schemas['A']['required'] != [k for k in schemas['B']['required'] if k != added_field]:
         raise ValueError('other required fields differ between A/B')
     inputs = {}
     for case in cases:
@@ -180,7 +182,7 @@ def key(record):
 
 
 def load_run(run_dir, *, complete=False):
-    run_dir = Path(run_dir)
+    run_dir = require_local_path(run_dir)
     metadata = read(run_dir / 'run.json')
     for name, expected in metadata['files'].items():
         if digest((run_dir / name).read_bytes()) != expected:
@@ -201,7 +203,8 @@ def measure(output, attempts):
     body = output.get('scene_text', '') if output else ''
     values = {'body_chars': len(body), 'body_nonwhitespace_chars': sum(not c.isspace() for c in body),
               'structured_chars': len(canonical({k: v for k, v in (output or {}).items() if k != 'scene_text'})),
-              'npc_usages_chars': len(canonical(output['npc_usages'])) if output and 'npc_usages' in output else 0}
+              'npc_usages_chars': len(canonical(output['npc_usages'])) if output and 'npc_usages' in output else 0,
+              'director_usages_chars': len(canonical(output['director_usages'])) if output and 'director_usages' in output else 0}
     usages = [normalize_token_usage(a.get('token_usage')) for a in attempts]
     for name in ('input_tokens', 'output_tokens', 'total_tokens'):
         values[name] = sum(u[name] for u in usages) if usages and all(u[name] is not None for u in usages) else None
@@ -243,7 +246,7 @@ def record(run_dir, config):
             print(f'{cid}/{rep}/{variant}: started', flush=True)
             result = runner.run_narrative_composition(
                 gateway, context=context, recent_scene=case.recent_scene, turn_index=case.turn_index,
-                trace_id=f'npc_ab_{cid}_{rep}_{variant}', on_stream_start=on_start,
+                trace_id=f'{metadata["plan"]["experiment"]}_{cid}_{rep}_{variant}', on_stream_start=on_start,
                 on_scene_text_delta=on_delta, on_warning=lambda w: warnings.append(w.code))
             output = result.model_dump(mode='json')
             checked = check_invariants(case, output)
@@ -358,10 +361,11 @@ def stats(values):
             'median': statistics.median(values) if values else None}
 
 
-def report(run_dir, output_dir, *, judge, date, mode):
+def report(run_dir, output_dir=None, *, judge, date, mode):
     from datetime import date as Date
     Date.fromisoformat(date)
-    run_dir, output_dir = Path(run_dir), Path(output_dir)
+    run_dir = Path(run_dir)
+    output_dir = require_local_path(output_dir if output_dir is not None else run_dir / 'analysis')
     metadata, indexed = load_run(run_dir, complete=True)
     mapping = read(run_dir / 'mapping.json')
     if digest((run_dir / 'recordings.json').read_bytes()) != mapping['recordings_hash']:
@@ -401,9 +405,9 @@ def report(run_dir, output_dir, *, judge, date, mode):
         successful = [r for r in records if not r['error']]
         performance[variant] = {
             'calls': len(records), 'failures': len(records) - len(successful),
-            'metrics': {name: stats([r['metrics'][name] for r in
+            'metrics': {name: stats([r['metrics'].get(name) for r in
                                      (records if name.endswith('_tokens') else successful)]) for name in
-                        ('body_chars', 'body_nonwhitespace_chars', 'structured_chars', 'npc_usages_chars',
+                        ('body_chars', 'body_nonwhitespace_chars', 'structured_chars', 'npc_usages_chars', 'director_usages_chars',
                          'input_tokens', 'output_tokens', 'total_tokens')},
             'latency_ms': stats([r['latency_ms'] for r in records]),
             'retries': stats([r['retries'] for r in records]),
@@ -450,7 +454,7 @@ def main():
         if name == 'prepare':
             p.add_argument('--service', default='opencode-go')
         if name == 'report':
-            p.add_argument('--output-dir', type=Path, required=True)
+            p.add_argument('--output-dir', type=Path, help='Default: <run-dir>/analysis; must remain inside local')
             p.add_argument('--judge', required=True)
             p.add_argument('--date', required=True)
             p.add_argument('--mode', choices=['fresh-web', 'human', 'codex-session'], required=True)
@@ -459,11 +463,6 @@ def main():
         parser.error('raw run directory must be inside benchmarks/narrative_quality/local/')
     if args.command == 'prepare':
         metadata = prepare(args.run_dir, service_config(args.service), args.service)
-        for variant in ('A', 'B'):
-            folder = ASSETS / 'comparison'
-            folder.mkdir(exist_ok=True)
-            for name in ('prompt.md', 'schema.json'):
-                shutil.copyfile(args.run_dir / variant / name, folder / f'{Path(name).stem}_{variant}{Path(name).suffix}')
         print(json.dumps({'cases': metadata['plan']['case_ids'], 'calls': len(metadata['jobs']),
                           'model': metadata['config'], 'status': 'prepared; no LLM calls'}, ensure_ascii=False, indent=2))
     elif args.command == 'record':

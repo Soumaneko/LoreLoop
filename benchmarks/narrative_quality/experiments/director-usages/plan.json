@@ -1,0 +1,22 @@
+{
+  "experiment": "director_usages",
+  "added_field": "director_usages",
+  "seed": 42,
+  "repetitions": 3,
+  "baseline_revision": "51766d5b9dbe5e926f692bde5e1b45f7d8ff56c8",
+  "candidate_revision": null,
+  "case_ids": [
+    "case_01_tavern_inquiry",
+    "case_02_rogue_recruitment",
+    "case_11_tavern_entry",
+    "case_12_disclosure_intrusion",
+    "case_13_event_pressure",
+    "case_14_spontaneous_constable"
+  ],
+  "variants": {
+    "A": "已含 npc_usages、尚未新增 director_usages 的 Composer",
+    "B": "新增 director_usages ID列表的 Composer"
+  },
+  "temperature": 0.8,
+  "max_retries": 1
+}
