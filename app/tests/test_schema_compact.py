@@ -4,7 +4,7 @@ from app.core.llm.schema import (
     compact_schema,
     schema_json,
 )
-from app.domain.director_event.schemas import DirectorEventSelectionResult
+from app.domain.director_event.composition import DirectorEventComposition
 
 
 class _Nested(BaseModel):
@@ -66,7 +66,7 @@ def test_compact_schema_preserves_constraints():
 
 
 def test_business_field_named_title_is_preserved():
-    compact = compact_schema(DirectorEventSelectionResult.model_json_schema())
+    compact = compact_schema(DirectorEventComposition.model_json_schema())
 
     assert "title" in compact["required"]
     assert "title" in compact["properties"]

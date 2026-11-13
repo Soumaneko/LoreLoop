@@ -31,7 +31,7 @@ def _shared_inputs(
         view.update(
             subject=event.subject,
             intent=event.intent,
-            method=event.method,
+            plan=event.plan,
             macro_intent=event.macro_intent,
             world_impact=(
                 event.world_impact.model_dump(mode="json")

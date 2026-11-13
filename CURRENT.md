@@ -1335,9 +1335,9 @@ available while the Event slot is occupied.
 
 The backend assigns every requested actor a stable request-local `actor_key` and
 passes resolved existing-NPC Director views plus new-NPC guidance to the Event
-Selector as mandatory inputs. The Selector must return exactly one
+Designer as mandatory inputs. The Designer must return exactly one
 `role_in_event` for every supplied key; an output validator rejects missing,
-duplicate, or invented actor keys. The backend, not the Selector, assembles the
+duplicate, or invented actor keys. The backend, not the Designer, assembles the
 final actor references. New NPC creation additionally receives its validated
 event role. `subject` is the Event's core causal identity; the actor list is the
 concrete cast. Independent NPC assets use `create_npc` alone.
@@ -1367,7 +1367,7 @@ same-batch `create_npc` requests as additional `source=new` event actors. Only
 their forwarded `name: purpose` guidance is used; `description` remains a
 discarded honeypot. The standalone NPC requests and their Setting requirements
 are removed from execution. Converted actors use the event's Setting and the
-existing event-first, NPC-second creation flow. Without `create_event`, NPC
+design-first, NPC-second, final-composition creation flow. Without `create_event`, NPC
 requests execute independently as before. This conversion is internal to the
 executor; neither Agent needs a different decision protocol.
 
@@ -1384,16 +1384,19 @@ Wave B executes the remaining requests with at most three workers. The event
 receives its original actors plus converted new-actor requests. The original
 Director input limits still apply before conversion; the event output can hold
 eleven actor roles: six requested actors plus five converted NPC requests.
-The Selector returns `actor_roles` for exactly its supplied actors, followed by
-`additional_npcs` for up to three characters it needs to complete the event.
-Both lists use `actor_key` and `role_in_event`; keys must be unique across both
-lists. The LLM output must explicitly provide `additional_npcs`, including an
-empty list when none are needed. Anonymous extras and existing Setting facts
-remain available. After event selection, the original new actors are created
-first, then the additional NPCs, using the same NPC Creator and event Setting.
-Every creation receives the event and both actor lists; all resulting IDs are
-bound to the event and committed together. The additional requests are creation
-metadata, not a new persisted Event field.
+The first-stage Designer (`director_event_design`) returns `actor_roles` for
+exactly its supplied actors, followed by `additional_npcs` for up to three
+characters it needs. Both lists use unique `actor_key` and `role_in_event`.
+Original new actors are created first, then additional actors, using the existing
+NPC Creator and its random CreativeBrief. Existing actors keep their profiles.
+Each creation receives the initial design, original actor material, and full
+profiles of earlier creations, including their secrets and abilities.
+The final Event Composer (`director_event_compose`) then receives the design and
+all completed actor profiles and creates the final Event. It can develop the
+initial design using those profiles. Actor references are assembled by the
+backend. No Event or NPC is persisted until the whole request batch succeeds;
+a failure during final composition also discards the staged actors and Settings.
+The additional actor requests remain creation metadata, not a persisted Event field.
 `create_npc` and `create_event` receive their resolved Setting,
 including facts, in the same confirmation turn. Request ordering is preserved in
 the execution result. Handlers read through the confirmation's operation-level
@@ -1404,22 +1407,17 @@ single `campaign.db` Confirmation transaction. A handled failure rolls the whole
 batch back via the surrounding transaction; there is no separate durable
 before-image journal.
 
-The Event Selector requires exactly one resolved Setting and receives each
-still-unused fact from it as
-`{fact_id, content}`. Fact IDs are stable within a static Setting (`fact_1`,
-`fact_2`, ...). Its structured result must return at least one
-`selected_setting_fact_ids` through the required
-`DirectorEventSelectionOutput` schema; the output validator rejects duplicate or
-unavailable IDs. The selected facts must ground `intent` or `method` and derive
-observable Hooks. Public facts may be presented directly; hidden facts may drive
-backstage causality but Hooks expose only their observable consequences or traces.
-Because the coordinating Director supplies only a directional brief, the Selector
-owns instantiation: unresolved phrases such as "some object/person/matter" are
-directions to be resolved into a concrete core object, stakes, and an investigable
-causal chain, not left to later prose. A passing Selection answers what happens,
-why the actor cares, how it acts, and what the player can find and act on; at least
-one Hook carries a confirmable investigative lead grounded in `method`, with
-atmospheric signs only supplementary.
+The first-stage Designer requires exactly one resolved Setting. It receives
+still-unused facts as `{fact_id, content}`, and already-used facts as content-only
+background. IDs remain stable within the static Setting (`fact_1`, `fact_2`, ...).
+Its required `selected_setting_fact_ids` must select at least one available fact;
+actor keys and Fact IDs are validated before continuing.
+NPC creation and final Event composition receive all public facts and only the
+selected hidden facts, using one shared projection without changing the source
+Setting or renumbering IDs. First-stage selections are persisted on the Event.
+Public facts remain general background; selected hidden facts can guide backstage
+causality while normal player surfaces retain the existing disclosure rules.
+
 The confirmation Director's compact Setting catalog marks
 `event_creation_available`; a dynamic `create_event` argument validator rejects
 an existing Setting whose Facts are all used, while leaving that Setting available
@@ -1437,10 +1435,16 @@ Event may be closely tied to the protagonist's current or near-accessible
 situation (competition, obstacles, losses, new opportunities), but it never
 decides the player's action or reverses adjudicated results. It carries:
 
-- a persistent Core Intent: `conception` (the Selector's concrete event core —
-  the object or change with identifying features, the organizational purpose,
-  and what at least one Hook will reveal), `subject`, `intent`, `method`, and
-  one-line `macro_intent`;
+- an event overview `conception`, core acting `subject`, goal `intent`, current
+  action `plan`, and one-line `macro_intent`;
+- `current_situation`: established backstage facts with program-assigned stable
+  `fact_id`, text `fact`, and an `active` flag. Creation initializes these facts;
+  subsequent add/invalidate operations and update scheduling are not implemented
+  yet. Semantic views include only active facts. IDs survive store round-trips,
+  actor binding, and snapshots. Existing event JSON using `method` loads as
+  `plan`, and records without facts load with an empty fact list; no historical
+  facts are synthesized. This extends the JSON record without changing SQLite
+  tables or requiring a campaign rewrite;
 - a consumable Hook Pool: each hook has a kind (auditory/visual/rumor/
   item/environment), content, trigger anchors, and a `consumed` flag;
 - an actor list: each entry carries a `name` and an optional `DirectorResourceRef`
@@ -1450,14 +1454,14 @@ decides the player's action or reverses adjudicated results. It carries:
 - `world_impact`: the permanent world change applied if the player ignores the
   event; it is stored on the Event and is not applied to Setting persistence;
 - `deadline_clock`: an absolute `WorldClock(day, phase)` deadline computed by
-  the backend from the Selector's bounded `duration_phases` (`1-140`); turn indexes are
+  the backend from the final Composer's bounded `duration_phases` (`1-140`); turn indexes are
   never used for expiry;
 - `final_world_impact`: the actual settled impact, or null when no automatic
   impact is applied;
 - resolution reason and turn.
 
-The persisted `conception` keeps the Selector's concrete event core alive after
-creation: it appears in `semantic_view()` (so later Selector duplicate checks,
+The persisted `conception` keeps the final Composer's event overview alive after
+creation: it appears in `semantic_view()` with `plan` and active facts (so later design duplicate checks,
 reviewers, the Generation observation, NPC creation, and engaged-event
 composition all see it) and has an empty default. It is never
 part of the player-facing `project_director_event` projection, and a hidden

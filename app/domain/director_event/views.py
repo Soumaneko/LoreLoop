@@ -55,3 +55,20 @@ def project_director_events(
         ensure_ascii=False,
         indent=2,
     )
+
+
+def project_creation_settings(
+    settings: list[dict], selected_fact_ids: list[str],
+) -> list[dict]:
+    """Keep all public facts and only selected hidden facts, preserving source IDs."""
+    selected = set(selected_fact_ids)
+    projected = []
+    for setting in settings:
+        public_facts = list(setting["public_facts"])
+        hidden_facts = [
+            fact
+            for index, fact in enumerate(setting["hidden_facts"], start=len(public_facts) + 1)
+            if (fact.get("fact_id") if isinstance(fact, dict) else f"fact_{index}") in selected
+        ]
+        projected.append({**setting, "public_facts": public_facts, "hidden_facts": hidden_facts})
+    return projected

@@ -62,6 +62,19 @@ def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
 
     store = open_director_event_store()
     event = _event()
+    # Load a pre-integration JSON record, then persist the new format and stable facts.
+    old_json = event.model_dump(mode="json")
+    old_json["method"] = old_json.pop("plan")
+    old_json.pop("current_situation")
+    store.save(event)
+    store._conn.execute("UPDATE director_events SET event_json=? WHERE event_id=?",
+                        (json.dumps(old_json), event.event_id))
+    event = store.get_by_id(event.event_id)
+    assert event.plan == old_json["method"]
+    assert event.current_situation == []
+    from app.domain.director_event.schemas import DirectorEventFact
+    fact = DirectorEventFact(fact="账房已经抵达码头。")
+    event = event.model_copy(update={"current_situation": [fact]})
     store.save(event)
 
     updated = store.bind_actor(
@@ -77,6 +90,8 @@ def test_event_store_binds_existing_resources_without_owning_their_lifecycle():
         ref=DirectorResourceRef(kind="npc", resource_id="npc_1"),
     )
     assert store.get_by_id(event.event_id) == updated
+    assert updated.current_situation == [fact]
+    assert updated.semantic_view()["plan"] == event.plan
     store.close()
 
 

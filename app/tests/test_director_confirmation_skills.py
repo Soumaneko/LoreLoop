@@ -285,8 +285,8 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
     assert len(events[0].actors) == expected_count
     assert [actor.ref.resource_id for actor in events[0].actors].count(draft.draft_id) == 1
     assert draft.source_setting_ids == events[0].source_setting_ids
-    assert gateway.tasks.index("director_event_select") < gateway.tasks.index("director_npc_create")
-    selector_input = gateway.input_data[gateway.tasks.index("director_event_select")]
+    assert gateway.tasks.index("director_event_design") < gateway.tasks.index("director_npc_create")
+    selector_input = gateway.input_data[gateway.tasks.index("director_event_design")]
     required = json.loads(selector_input["required_actors_json"])
     assert required[-1] == {
         "actor_key": f"actor_{expected_count}", "source": "new",
@@ -298,7 +298,7 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
     assert "寒川驿" in npc_input["settings_json"]
     assert "不应传递的人物背景" not in json.dumps(npc_input, ensure_ascii=False)
     assert "沈栖舟: 负责货路交涉。" in npc_input["director_guidance"]
-    assert events[0].title in npc_input["batch_recent_creations_json"]
+    assert gateway.event_selection_output["conception"] in npc_input["batch_recent_creations_json"]
     assert "寒川驿" in selector_input["settings_json"]
 
 

@@ -114,10 +114,10 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path, with_addi
     assert len(output["actor_names"]) == expected_count
     assert gateway.tasks == [
         "director_agent_decide_confirmation",
-        "director_event_select",
+        "director_event_design",
         "director_npc_create",
         "director_npc_create",
-    ] + (["director_npc_create"] if with_additional else [])
+    ] + (["director_npc_create"] if with_additional else []) + ["director_event_compose"]
 
     with stores.director_event as store:
         events = store.list_all()
@@ -125,6 +125,12 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path, with_addi
         bound = store.get_by_id(output["event_id"])
         assert bound is not None
         assert bound.deadline_clock == WorldClock(day=2, phase="清晨")
+        assert bound.plan == gateway.event_selection_output["method"]
+        assert [fact.fact for fact in bound.current_situation] == ["账房正在码头追查失踪账册。"]
+        assert all(fact.fact_id.startswith("event_fact_") for fact in bound.current_situation)
+        store.save(bound)
+        assert store.get_by_id(bound.event_id).current_situation == bound.current_situation
+        assert bound.semantic_view()["current_situation"][0]["fact_id"] == bound.current_situation[0].fact_id
         assert {(actor.ref.kind, actor.ref.resource_id) for actor in bound.actors if actor.ref} == {
             ("npc", npc_id) for npc_id in output["new_npc_ids"]
         }
@@ -140,10 +146,10 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path, with_addi
     ]
     assert len(create_calls) == expected_count
     first = create_calls[0]["batch_recent_creations_json"]
-    assert first.count("沉船账本") == 1
+    assert json.loads(first)[0]["conception"] == gateway.event_selection_output["conception"]
     assert "沈二爷" not in first
     second = create_calls[1]["batch_recent_creations_json"]
-    assert second.count("沉船账本") == 1
+    assert json.loads(second)[0]["conception"] == gateway.event_selection_output["conception"]
     assert "沈二爷" in second
     assert "actor_roles" in second
     assert "控制码头货路" in second
@@ -162,7 +168,7 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path, with_addi
     selector_input = [
         entry
         for entry, task in zip(gateway.input_data, gateway.tasks)
-        if task == "director_event_select"
+        if task == "director_event_design"
     ]
     assert selector_input[0]["director_guidance"] == "以码头货运世家为核心演员班底。"
 
@@ -173,8 +179,9 @@ def test_confirmation_agent_can_create_event_with_new_actors(tmp_path, with_addi
 
 
 
+@pytest.mark.parametrize("fail_at", ["npc", "composition"])
 def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, fail_at
 ):
     from app.domain.director_npc.creator import DirectorNPCCreator
 
@@ -246,13 +253,17 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
     }]
 
     def flaky_create(self, **kwargs):
-        if len(created_drafts) == 2:
+        if fail_at == "npc" and len(created_drafts) == 2:
             raise TimeoutError("LLM 超时")
         draft = original_create(self, **kwargs)
         created_drafts.append(draft)
         return draft
 
     monkeypatch.setattr(DirectorNPCCreator, "create", flaky_create)
+    if fail_at == "composition":
+        def fail_composition(_):
+            raise TimeoutError("LLM 超时")
+        gateway.event_composition_output = fail_composition
 
     with pytest.raises(TimeoutError, match="LLM 超时"):
         DirectorConfirmationExecutor(
@@ -268,8 +279,8 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
             trace_id="confirmation-director",
         ).run()
 
-    assert len(created_drafts) == 2
-    assert gateway.tasks.index("director_event_select") < gateway.tasks.index("director_npc_create")
+    assert len(created_drafts) == (2 if fail_at == "npc" else 3)
+    assert gateway.tasks.index("director_event_design") < gateway.tasks.index("director_npc_create")
     with stores.world_setting as store:
         assert store.list_all() == []
     with stores.director_npc as store:
@@ -281,7 +292,8 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
 
 
 def test_event_selector_omits_and_rejects_previously_used_setting_fact_id():
-    from app.domain.director_event.selector import DirectorEventSelector
+    from app.domain.director_event.selector import build_event_creation_inputs
+    from app.domain.director_event.design import DirectorEventDesigner
     from app.domain.world_setting import WorldSetting
 
     setting = WorldSetting(
@@ -307,12 +319,12 @@ def test_event_selector_omits_and_rejects_previously_used_setting_fact_id():
         event_selection_output=available_output,
     )
 
-    selection = DirectorEventSelector(gateway).select_or_create(
+    selection = DirectorEventDesigner(gateway).design(input_data=build_event_creation_inputs(
         events=[previous],
         current_state=make_current_state(),
         core_memory=CoreMemory(items=[]),
         settings=[setting],
-    )
+    ))
 
     [selected_setting] = json.loads(gateway.input_data[0]["settings_json"])
     [previous_event] = json.loads(gateway.input_data[0]["events_json"])
@@ -333,12 +345,32 @@ def test_event_selector_omits_and_rejects_previously_used_setting_fact_id():
         event_selection_output=make_event_selection_output(),
     )
     with pytest.raises(ValueError, match="unavailable"):
-        DirectorEventSelector(rejected_gateway).select_or_create(
+        DirectorEventDesigner(rejected_gateway).design(input_data=build_event_creation_inputs(
             events=[previous],
             current_state=make_current_state(),
             core_memory=CoreMemory(items=[]),
             settings=[setting],
-        )
+        ))
+
+    # The prepared inputs also work through the real prompt renderer. accepts the same prepared input with a smaller output.
+    from app.core.llm import MockLLM
+    from app.domain.director_event.design import DirectorEventDesign, DirectorEventDesigner
+
+    candidate_output = {
+        key: value for key, value in available_output.items()
+        if key in DirectorEventDesign.model_fields
+    }
+    mock = MockLLM()
+    mock.set_responses([json.dumps(candidate_output, ensure_ascii=False)])
+    prepared_input = deepcopy(gateway.input_data[0])
+    design = DirectorEventDesigner(mock.build_gateway()).design(input_data=prepared_input)
+
+    assert design.model_dump(mode="json") == candidate_output
+    assert prepared_input == gateway.input_data[0]
+    assert set(design.model_dump()) == {
+        "current_story_direction", "conception", "subject", "intent",
+        "actor_roles", "additional_npcs", "selected_setting_fact_ids",
+    }
 
 
 def test_confirmation_rejects_exhausted_event_setting(tmp_path):
@@ -403,7 +435,7 @@ def test_confirmation_rejects_exhausted_event_setting(tmp_path):
     assert "create_event" in {skill["name"] for skill in skills}
     assert decision.requests == []
     assert executions.executions == []
-    assert "director_event_select" not in gateway.tasks
+    assert "director_event_design" not in gateway.tasks
 
 
 def test_create_event_rejects_more_than_three_new_actors():
@@ -438,3 +470,118 @@ def test_director_event_semantic_view_hides_internal_state(tmp_path):
     assert saved.world_impact is not None
     assert "hook_pool" not in saved.semantic_view()
     assert "world_impact" not in saved.semantic_view()
+
+
+def test_design_actor_creation_keeps_existing_actors_and_shares_full_profiles(monkeypatch):
+    from app.domain.creative_brief import CreativeBrief
+    from app.domain.director_event.design import DirectorEventDesign
+    from app.domain.director_event.design_actors import DirectorEventActorCreator
+    from app.domain.director_npc.creator import DirectorNPCCreator
+    from app.domain.world_setting import WorldSetting
+    from app.tests.factories.director import make_director_npc
+
+    existing = make_director_npc()
+    required = [
+        {"actor_key": "existing", "source": "existing", "npc_id": existing.draft_id,
+         "guidance": "提供藏身处", "profile": existing.private_view().model_dump(mode="json")},
+        {"actor_key": "new", "source": "new", "guidance": "接应人"},
+    ]
+    design = DirectorEventDesign(
+        current_story_direction="调查河岸旧案", conception="接应持有账本的逃亡者",
+        subject="接应人", intent="接走逃亡者", selected_setting_fact_ids=["fact_1", "fact_4"],
+        actor_roles=[
+            {"actor_key": "existing", "role_in_event": "提供藏身处"},
+            {"actor_key": "new", "role_in_event": "在码头接应"},
+        ],
+        additional_npcs=[{"actor_key": "fugitive", "role_in_event": "持有账本的逃亡者"}],
+    )
+    setting = WorldSetting(kind="location", name="码头", summary="河岸货运码头",
+                           public_facts=["设有渡口", "码头设有仓库"],
+                           hidden_facts=["仓库地下另有暗室", "仓库留有旧账本"], created_turn=1)
+    calls = []
+
+    def create(self, **kwargs):
+        calls.append(deepcopy(kwargs))
+        return make_director_npc().model_copy(update={"name": f"新人物{len(calls)}"})
+
+    monkeypatch.setattr(DirectorNPCCreator, "create", create)
+    reserved = [{"name": "预备人物"}]
+    drafts = DirectorEventActorCreator(object()).create(
+        design=design, required_actors=required, core_memory=CoreMemory(items=[]),
+        settings=[setting], existing_npcs=[], reserved_npcs=reserved,
+        protagonist_name="主角", turn_index=3,
+    )
+
+    assert list(drafts) == ["new", "fugitive"]
+    assert calls[0]["guidance"] == "接应人\n在本事件中的职责：在码头接应"
+    assert calls[1]["guidance"] == "持有账本的逃亡者"
+    initial = calls[0]["recent_creations"][0]
+    assert initial["required_actors"] == required
+    assert initial["conception"] == design.conception
+    prior = calls[1]["recent_creations"][1]
+    assert prior["actor_key"] == "new"
+    assert prior["draft_id"] == drafts["new"].draft_id
+    assert prior["hidden_secret"] == drafts["new"].hidden_secret
+    assert prior["known_abilities"] == drafts["new"].private_view().model_dump(mode="json")["known_abilities"]
+    assert calls[0]["reserved_npcs"][-1]["name"] == existing.name
+    assert calls[1]["reserved_npcs"][-1]["name"] == drafts["new"].name
+    assert all(c["creation_context"].setting_ids == [setting.setting_id] for c in calls)
+    assert all(isinstance(c["creative_brief"], CreativeBrief) for c in calls)
+    assert reserved == [{"name": "预备人物"}]
+    assert all(c["settings"][0].public_facts == setting.public_facts for c in calls)
+    assert all(c["settings"][0].hidden_facts == ["仓库留有旧账本"] for c in calls)
+    assert setting.hidden_facts == ["仓库地下另有暗室", "仓库留有旧账本"]
+
+    from app.core.llm import MockLLM
+    from app.domain.director_event.composition import DirectorEventComposer, DirectorEventComposition
+
+    output = {
+        key: value for key, value in make_event_selection_output().items()
+        if key in DirectorEventComposition.model_fields
+    }
+    output["current_situation"] = ["逃亡者持有账本，藏在码头。"]
+    output["plan"] = "先与逃亡者确认身份，取到账本后安排渡船离开码头。"
+    mock = MockLLM()
+    mock.set_responses([json.dumps(output, ensure_ascii=False)])
+    gateway = mock.build_gateway()
+    composition_calls = []
+    original_run = gateway.run
+
+    def record(**kwargs):
+        composition_calls.append(deepcopy(kwargs["input_data"]))
+        return original_run(**kwargs)
+
+    monkeypatch.setattr(gateway, "run", record)
+    from app.domain.director_event.selector import _setting_fact_view
+
+    input_data = {
+        "core_memory_json": CoreMemory(items=[]).model_dump_json(),
+        "current_state_json": make_current_state().model_dump_json(),
+        "recent_summaries_json": "[]",
+        "settings_json": json.dumps([_setting_fact_view(setting, used_fact_ids=set())]),
+        "events_json": "[]",
+        "director_guidance": "接应持有账本的逃亡者。",
+    }
+    result = DirectorEventComposer(gateway).compose(
+        input_data=input_data, design=design, required_actors=required, new_npcs=drafts,
+    )
+    assert result == DirectorEventComposition.model_validate(output)
+    supplied = composition_calls[0]
+    [projected_setting] = json.loads(supplied["settings_json"])
+    assert [f["content"] for f in projected_setting["public_facts"]] == setting.public_facts
+    assert projected_setting["hidden_facts"] == [
+        {"fact_id": "fact_4", "content": "仓库留有旧账本"},
+    ]
+    assert len(json.loads(input_data["settings_json"])[0]["hidden_facts"]) == 2
+    assert json.loads(supplied["event_design_json"]) == design.model_dump(mode="json")
+    actors = json.loads(supplied["actors_json"])
+    assert [actor["actor_key"] for actor in actors] == ["existing", "new", "fugitive"]
+    assert actors[0]["profile"] == required[0]["profile"]
+    assert actors[1]["profile"] == drafts["new"].private_view().model_dump(mode="json")
+    assert actors[2]["profile"] == drafts["fugitive"].private_view().model_dump(mode="json")
+    assert "event_design_json" not in input_data
+    with pytest.raises(ValueError, match="new_npcs"):
+        DirectorEventComposer(gateway).compose(
+            input_data=input_data, design=design, required_actors=required, new_npcs={},
+        )
+    assert len(composition_calls) == 1

@@ -1,7 +1,7 @@
 from functools import partial
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.ids import new_hex_id
 from app.core.time import utc_now
@@ -46,6 +46,14 @@ class WorldImpact(BaseModel):
     description: str = Field(min_length=1)
 
 
+class DirectorEventFact(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    fact_id: str = Field(default_factory=partial(new_hex_id, prefix="event_fact", length=12))
+    fact: str = Field(min_length=1)
+    active: bool = True
+
+
 class DirectorEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -55,7 +63,8 @@ class DirectorEvent(BaseModel):
 
     subject: str = Field(min_length=1)
     intent: str = Field(min_length=1)
-    method: str = Field(min_length=1)
+    plan: str = Field(min_length=1, validation_alias=AliasChoices("plan", "method"))
+    current_situation: list[DirectorEventFact] = Field(default_factory=list)
     macro_intent: str = Field(min_length=1)
     conception: str = Field(default="", max_length=800)
 
@@ -106,7 +115,11 @@ class DirectorEvent(BaseModel):
             "subject": self.subject,
             "conception": self.conception,
             "intent": self.intent,
-            "method": self.method,
+            "plan": self.plan,
+            "current_situation": [
+                {"fact_id": fact.fact_id, "fact": fact.fact}
+                for fact in self.current_situation if fact.active
+            ],
             "macro_intent": self.macro_intent,
             "deadline_clock": self.deadline_clock.model_dump(mode="json"),
             "actors": [
@@ -118,6 +131,8 @@ class DirectorEvent(BaseModel):
 
 
 class DirectorEventSelectionResult(BaseModel):
+    """Legacy full response used by recorded fixtures; production uses design/composition."""
+
     model_config = ConfigDict(extra="forbid")
 
     current_story_direction: str = Field(min_length=1)

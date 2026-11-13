@@ -4126,7 +4126,8 @@ function renderEventRecords(events, error = null) {
     const details = [];
     if (event.subject && quoteText !== event.subject) details.push(["subject", "主题", false, event.subject]);
     if (event.intent && quoteText !== event.intent) details.push(["intent", "意图", false, event.intent]);
-    if (event.method) details.push(["method", "手法", false, event.method]);
+    if (event.plan) details.push(["plan", "行动计划", false, event.plan]);
+    if (event.current_situation?.length) details.push(["current_situation", "当前局势", false, event.current_situation.filter(fact => fact.active).map(fact => fact.fact).join("\n")]);
     if (event.hook_pool?.length) {
       details.push(["hook_pool", "伏笔钩子", "hooks", event.hook_pool]);
     }

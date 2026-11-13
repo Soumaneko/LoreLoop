@@ -11,10 +11,12 @@ from .schemas import (
     DirectorEventHiddenReviewBatch,
     DirectorEventHiddenReviewResult,
     DirectorEventSelectionResult,
+    DirectorEventFact,
     EventHook,
     WorldImpact,
 )
-from .selector import DirectorEventSelector
+from .design import DirectorEventDesigner
+from .composition import DirectorEventComposer
 from .store import DirectorEventStore
 
 __all__ = [
@@ -28,7 +30,9 @@ __all__ = [
     "DirectorEventHiddenReviewResult",
     "DirectorEventHiddenReviewer",
     "DirectorEventSelectionResult",
-    "DirectorEventSelector",
+    "DirectorEventDesigner",
+    "DirectorEventComposer",
+    "DirectorEventFact",
     "DirectorEventStore",
     "EventHook",
     "WorldImpact",

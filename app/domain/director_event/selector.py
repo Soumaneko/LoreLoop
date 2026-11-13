@@ -1,10 +1,5 @@
 import json
-from typing import cast
 
-from pydantic import BaseModel
-
-from app.core.llm import LLMGateway
-from app.core.llm.schema import schema_json
 from app.domain.core_memory.schemas import CoreMemory
 from app.domain.current_state.schemas import CurrentState
 from app.domain.scene_summary.schemas import SceneSummary
@@ -14,11 +9,7 @@ from app.domain.views import (
     project_scene_summaries,
 )
 
-from .schemas import (
-    DirectorEvent,
-    DirectorEventSelectionOutput,
-    DirectorEventSelectionResult,
-)
+from .schemas import DirectorEvent
 
 
 def _event_list_view(event: DirectorEvent) -> dict:
@@ -28,7 +19,8 @@ def _event_list_view(event: DirectorEvent) -> dict:
         "conception": event.conception,
         "subject": event.subject,
         "intent": event.intent,
-        "method": event.method,
+        "plan": event.plan,
+        "current_situation": event.semantic_view()["current_situation"],
         "actors": [actor.name for actor in event.actors],
     }
     if event.stage == "resolved":
@@ -90,100 +82,52 @@ def _setting_fact_view(
     return view
 
 
-class DirectorEventSelector:
-    def __init__(self, llm: LLMGateway):
-        self.llm = llm
-
-    def select_or_create(
-        self,
-        *,
-        events: list[DirectorEvent],
-        current_state: CurrentState,
-        core_memory: CoreMemory,
-        recent_summaries: list[SceneSummary] | None = None,
-        settings: list[WorldSetting] | None = None,
-        required_actors: list[dict] | None = None,
-        trace_id: str | None = None,
-        guidance: str | None = None,
-    ) -> DirectorEventSelectionResult:
-        required_actors = required_actors or []
-        settings = settings or []
-        if len(settings) != 1:
-            raise ValueError("event selection requires exactly one Setting")
-        used_fact_ids = _used_fact_ids_by_setting(events)
-        setting_views = [
-            _setting_fact_view(
-                setting,
-                used_fact_ids=used_fact_ids.get(setting.setting_id, set()),
-            )
-            for setting in settings
-        ]
-        available_fact_ids = {
-            fact["fact_id"]
-            for setting in setting_views
-            for field_name in ("public_facts", "hidden_facts")
-            for fact in setting[field_name]
-            if "fact_id" in fact
-        }
-        if not available_fact_ids:
-            raise ValueError("selected Setting has no unused facts")
-        input_data = {
-            "events_json": json.dumps(
-                [_event_list_view(event) for event in events],
-                ensure_ascii=False,
-                indent=2,
-            ),
-            "current_state_json": project_current_state(current_state),
-            "core_memory_json": core_memory.model_dump_json(indent=2),
-            "recent_summaries_json": project_scene_summaries(recent_summaries or []),
-            "settings_json": json.dumps(
-                setting_views,
-                ensure_ascii=False,
-                indent=2,
-            ),
-            "required_actors_json": json.dumps(
-                required_actors,
-                ensure_ascii=False,
-                indent=2,
-            ),
-            "director_guidance": guidance or "",
-            "output_schema_json": schema_json(DirectorEventSelectionOutput),
-        }
-        expected_actor_keys = {
-            str(actor["actor_key"])
-            for actor in required_actors
-        }
-
-        def validate_selection(selection: BaseModel) -> None:
-            output = cast(DirectorEventSelectionOutput, selection)
-            actual_actor_keys = {
-                role.actor_key
-                for role in output.actor_roles
-            }
-            if actual_actor_keys != expected_actor_keys:
-                raise ValueError(
-                    "actor_roles must cover exactly every required actor_key"
-                )
-            selected_fact_ids = set(output.selected_setting_fact_ids)
-            if not selected_fact_ids:
-                raise ValueError(
-                    "event selection must choose at least one Setting fact_id"
-                )
-            invalid_fact_ids = selected_fact_ids - available_fact_ids
-            if invalid_fact_ids:
-                raise ValueError(
-                    "selected_setting_fact_ids are unavailable: "
-                    + ", ".join(sorted(invalid_fact_ids))
-                )
-
-        return cast(
-            DirectorEventSelectionResult,
-            self.llm.run(
-                task="director_event_select",
-                input_data=input_data,
-                output_schema=DirectorEventSelectionOutput,
-                temperature=0.3,
-                trace_id=trace_id,
-                output_validator=validate_selection,
-            ),
+def build_event_creation_inputs(
+    *, events: list[DirectorEvent], current_state: CurrentState,
+    core_memory: CoreMemory, recent_summaries: list[SceneSummary] | None = None,
+    settings: list[WorldSetting] | None = None,
+    required_actors: list[dict] | None = None, guidance: str | None = None,
+) -> dict:
+    required_actors = required_actors or []
+    settings = settings or []
+    if len(settings) != 1:
+        raise ValueError("event selection requires exactly one Setting")
+    used_fact_ids = _used_fact_ids_by_setting(events)
+    setting_views = [
+        _setting_fact_view(
+            setting,
+            used_fact_ids=used_fact_ids.get(setting.setting_id, set()),
         )
+        for setting in settings
+    ]
+    available_fact_ids = {
+        fact["fact_id"]
+        for setting in setting_views
+        for field_name in ("public_facts", "hidden_facts")
+        for fact in setting[field_name]
+        if "fact_id" in fact
+    }
+    if not available_fact_ids:
+        raise ValueError("selected Setting has no unused facts")
+    input_data = {
+        "events_json": json.dumps(
+            [_event_list_view(event) for event in events],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        "current_state_json": project_current_state(current_state),
+        "core_memory_json": core_memory.model_dump_json(indent=2),
+        "recent_summaries_json": project_scene_summaries(recent_summaries or []),
+        "settings_json": json.dumps(
+            setting_views,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        "required_actors_json": json.dumps(
+            required_actors,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        "director_guidance": guidance or "",
+    }
+    return input_data

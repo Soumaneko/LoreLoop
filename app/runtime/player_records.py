@@ -191,7 +191,8 @@ def load_player_events() -> dict[str, Any]:
                 "stage": event.stage,
                 "subject": event.subject,
                 "intent": event.intent,
-                "method": event.method,
+                "plan": event.plan,
+                "current_situation": [fact.model_dump(mode="json") for fact in event.current_situation],
                 "macro_intent": event.macro_intent,
                 "hook_pool": [
                     hook.model_dump(mode="json") for hook in event.hook_pool

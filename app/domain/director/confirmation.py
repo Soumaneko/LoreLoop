@@ -44,9 +44,12 @@ from app.domain.director_event.schemas import (
     utc_now,
 )
 from app.domain.director_event.selector import (
-    DirectorEventSelector,
+    build_event_creation_inputs,
     event_eligible_setting_ids,
 )
+from app.domain.director_event.design import DirectorEventDesigner
+from app.domain.director_event.design_actors import DirectorEventActorCreator
+from app.domain.director_event.composition import DirectorEventComposer
 from app.domain.director_npc.creator import DirectorNPCCreator
 from app.domain.director_npc.schemas import NPCCreationContext
 from app.domain.npc_profile.schemas import NPCProfile
@@ -304,92 +307,50 @@ class DirectorConfirmationExecutor:
         settings = self._dispatch_setting_requirements(args.setting_requirements)
         setting_ids = [setting.setting_id for setting in settings]
         event_guidance = guidance or ""
-        required_actors, bound_actors, actor_inputs_by_key = (
+        required_actors, bound_actors, _ = (
             self._resolve_event_actors([*args.actors, *self._event_new_actors])
         )
-        selection = DirectorEventSelector(self._gateway).select_or_create(
+        input_data = build_event_creation_inputs(
             events=self._event_store.list_all(),
             current_state=self._current_state,
             core_memory=self._core_memory,
             recent_summaries=self._selection_summaries,
             settings=settings,
             required_actors=required_actors,
-            trace_id=self._trace_id,
             guidance=event_guidance,
         )
-        event = selection.to_event(
-            turn_index=self._turn_index,
-            actors=bound_actors,
-            current_clock=self._current_state.world_clock,
-            source_setting_ids=setting_ids,
+        design = DirectorEventDesigner(self._gateway).design(
+            input_data=input_data, trace_id=self._trace_id,
         )
-        drafts: list = []
-        new_npc_ids: list[str] = []
-        actor_names: list[str] = [actor.name for actor in bound_actors]
-        role_by_key = {
-            role.actor_key: role.role_in_event
-            for role in selection.actor_roles
-        }
-        actor_roles_view = [
-            role.model_dump(mode="json")
-            for role in selection.actor_roles
-        ]
-        additional_npcs_view = [
-            role.model_dump(mode="json")
-            for role in selection.additional_npcs
-        ]
-        recent_creations: list[dict] = [{
-            **event.semantic_view(),
-            "actor_roles": actor_roles_view,
-            "additional_npcs": additional_npcs_view,
-        }]
-        npc_requests = [
-            (
-                f"{actor_input.guidance}\n"
-                f"在本事件中的职责：{role_by_key[actor_key]}"
+        creator = DirectorEventActorCreator(self._gateway)
+        drafts_by_key = creator.create(
+            design=design, required_actors=required_actors,
+            core_memory=self._core_memory, settings=settings,
+            existing_npcs=self._npc_profile_store.list_all(),
+            reserved_npcs=self._reserved_npc_names([]),
+            protagonist_name=self._current_state.player.name,
+            turn_index=self._turn_index, trace_id=self._trace_id,
+        )
+        self.last_warnings.extend(creator.last_warnings)
+        composition = DirectorEventComposer(self._gateway).compose(
+            input_data=input_data, design=design, required_actors=required_actors,
+            new_npcs=drafts_by_key, trace_id=self._trace_id,
+        )
+        drafts = list(drafts_by_key.values())
+        actors = [*bound_actors, *(
+            DirectorActorRef(
+                name=draft.name,
+                ref=DirectorResourceRef(kind="npc", resource_id=draft.draft_id),
             )
-            for actor_key, actor_input in actor_inputs_by_key.items()
-            if actor_input.source == "new"
-        ]
-        npc_requests.extend(role.role_in_event for role in selection.additional_npcs)
-        for npc_guidance in npc_requests:
-            draft = DirectorNPCCreator(self._gateway).create(
-                core_memory=self._core_memory,
-                existing_npcs=self._npc_profile_store.list_all(),
-                reserved_npcs=self._reserved_npc_names(drafts),
-                creation_context=NPCCreationContext(
-                    setting_ids=setting_ids
-                ),
-                settings=settings,
-                creative_brief=draw_creative_brief(),
-                protagonist_name=self._current_state.player.name,
-                turn_index=self._turn_index,
-                trace_id=self._trace_id,
-                guidance=npc_guidance,
-                recent_creations=recent_creations,
-            )
-            drafts.append(draft)
-            actor_ref = DirectorResourceRef(
-                kind="npc",
-                resource_id=draft.draft_id,
-            )
-            event = self._attach_new_actor_ref(event, draft, actor_ref)
-            recent_creations[0] = {
-                **event.semantic_view(),
-                "actor_roles": actor_roles_view,
-                "additional_npcs": additional_npcs_view,
-            }
-            recent_creations.append(
-                {
-                    "kind": "npc",
-                    "npc_id": draft.draft_id,
-                    "name": draft.name,
-                    "role": draft.role,
-                    "core_motivation": draft.core_motivation,
-                }
-            )
-            new_npc_ids.append(draft.draft_id)
-            actor_names.append(draft.name)
+            for draft in drafts
+        )]
+        event = composition.to_event(
+            turn_index=self._turn_index, current_clock=self._current_state.world_clock,
+            actors=actors, source_setting_ids=setting_ids,
+            source_setting_fact_ids=design.selected_setting_fact_ids,
+        )
+        new_npc_ids = [draft.draft_id for draft in drafts]
+        actor_names = [actor.name for actor in actors]
         with self._plan_lock:
             self._plan.events.append(event)
             self._plan.npc_drafts.extend(drafts)
@@ -476,39 +437,6 @@ class DirectorConfirmationExecutor:
             for staged in staged_drafts
         ]
 
-    def _attach_new_actor_ref(self, event, draft, actor_ref):
-        """Bind a freshly created NPC to the event, replacing a name-only actor."""
-        actors = list(event.actors)
-        clean_name = draft.name.strip()
-        replaced = False
-        for index, existing in enumerate(actors):
-            if existing.ref is not None and existing.ref == actor_ref:
-                replaced = True
-                break
-            if clean_name and existing.name == clean_name and existing.ref is None:
-                actors[index] = DirectorActorRef(
-                    name=clean_name,
-                    ref=actor_ref,
-                )
-                replaced = True
-                break
-        if not replaced and clean_name and not any(
-            existing.name == clean_name and existing.ref == actor_ref
-            for existing in actors
-        ):
-            actors.append(
-                DirectorActorRef(
-                    name=clean_name,
-                    ref=actor_ref,
-                )
-            )
-        return event.model_copy(
-            update={
-                "actors": actors,
-                "updated_turn": self._turn_index,
-                "updated_at": utc_now(),
-            }
-        )
 
     def _bind_actor(
         self,

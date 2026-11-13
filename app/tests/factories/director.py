@@ -180,6 +180,7 @@ class ScriptedDirectorGateway:
         self.npc_output = npc_output
         self.backfill_output = backfill_output
         self.event_selection_output = event_selection_output
+        self.event_composition_output = None
         self.event_review_output = event_review_output
         self.setting_output = setting_output
         self.tasks: list[str] = []
@@ -195,6 +196,18 @@ class ScriptedDirectorGateway:
         }:
             payload = dict(self.decision)
             payload.setdefault("requests", [])
+        elif task == "director_event_design" and self.event_selection_output is not None:
+            payload = {key: value for key, value in self.event_selection_output.items()
+                       if key in kwargs["output_schema"].model_fields}
+        elif task == "director_event_compose" and self.event_selection_output is not None:
+            if self.event_composition_output is not None:
+                payload = (self.event_composition_output(kwargs["input_data"])
+                           if callable(self.event_composition_output) else self.event_composition_output)
+            else:
+                payload = {key: value for key, value in self.event_selection_output.items()
+                           if key in kwargs["output_schema"].model_fields}
+                payload.setdefault("plan", self.event_selection_output["method"])
+                payload.setdefault("current_situation", ["账房正在码头追查失踪账册。"])
         elif task == "director_event_select" and (
             self.event_selection_output is not None
         ):
