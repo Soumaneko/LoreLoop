@@ -31,6 +31,7 @@ class DirectorPendingMutationPlan:
     settings: list[WorldSetting] = field(default_factory=list)
     npc_drafts: list[DirectorNPCDraft] = field(default_factory=list)
     events: list[DirectorEvent] = field(default_factory=list)
+    event_updates: list[DirectorEvent] = field(default_factory=list)
     profile_upserts: list[NPCProfile] = field(default_factory=list)
     actor_bindings: list[DirectorPendingActorBinding] = field(
         default_factory=list
@@ -70,6 +71,13 @@ def _validate_director_plan(
     director_event_store = uow.director_event
     if any(director_event_store.get_by_id(item.event_id) for item in events):
         raise RuntimeError("Director commit would overwrite an existing Event")
+    update_ids = [event.event_id for event in plan.event_updates]
+    if len(update_ids) != len(set(update_ids)):
+        raise ValueError("Director commit contains duplicate Event updates")
+    for update in plan.event_updates:
+        current = director_event_store.get_by_id(update.event_id)
+        if current is None or not current.is_active():
+            raise ValueError("Event update references an unknown active Event")
     seen_event_ids: set[str] = set()
     for binding in actor_bindings:
         if binding.event_id in seen_event_ids:
@@ -102,6 +110,8 @@ def _apply_director_plan(
         store = uow.director_event
         for event in events:
             store.save(event)
+    for event in plan.event_updates:
+        uow.director_event.save(event)
     if profile_upserts:
         store = uow.npc_profile
         for profile in profile_upserts:

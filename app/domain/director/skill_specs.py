@@ -16,12 +16,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Union
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    RootModel,
+    create_model,
     model_validator,
 )
 
@@ -254,6 +256,44 @@ class BindEventActorArguments(BaseModel):
     npc_id: str = Field(min_length=1)
 
 
+class MaintainEventArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(min_length=1)
+    tasks: list[Literal["update_situation", "engage", "resolve"]] = Field(min_length=1, max_length=3)
+    fact_changes: str = Field(description=(
+        "本轮已确认剧情中，后续处理该事件必须依据的重要事实变化。"
+        "说明发生了什么变化；没有重要事实变化时填空字符串。"
+    ))
+
+    @model_validator(mode="after")
+    def _unique_tasks(self):
+        if len(self.tasks) != len(set(self.tasks)):
+            raise ValueError("maintenance tasks must be unique")
+        return self
+
+
+def maintain_event_arguments(events) -> type[BaseModel]:
+    variants = [
+        create_model(
+            f"MaintainEvent{index}", __base__=MaintainEventArguments,
+            event_id=(Literal[event.event_id], Field(description="要维护的事件 ID")),
+            tasks=(list[Literal[tuple(
+                ["update_situation", "engage", "resolve"] if event.stage == "hidden"
+                else ["update_situation", "resolve"]
+            )]], Field(min_length=1, max_length=3, description=(
+                "update_situation：补入后续处理事件必须依据的已确认事实，或使旧事实失效；"
+                "resolve：核心冲突已收束。"
+                + ("engage：主角本轮已直接接触事件。" if event.stage == "hidden" else "")
+            ))),
+        )
+        for index, event in enumerate(events) if event.is_active()
+    ]
+    if not variants:
+        raise ValueError("event maintenance requires an active event")
+    return variants[0] if len(variants) == 1 else RootModel[Union[tuple(variants)]]
+
+
 
 # ---------------------------------------------------------------------------
 # 技能语义规则
@@ -371,6 +411,19 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
         arguments_model=CreateNPCArguments,
     ),
     DirectorSkillSpec(
+        name="maintain_event",
+        description=(
+            "本轮出现后续处理事件必须依据的重要事实、已有事实不再成立、"
+            "主角首次直接介入或核心冲突已经收束时，调用本技能。"
+            "event_id 选择事件，tasks 选择处理事项，fact_changes 描述重要事实变化；"
+            "guidance 说明选择这些操作的原因。"
+            "update_situation 更新事件的重要已发生事实；engage 记录主角介入；resolve 结束事件。"
+        ),
+        phases=_CONFIRMATION,
+        mutates=True,
+        arguments_model=MaintainEventArguments,
+    ),
+    DirectorSkillSpec(
         name="bind_event_actor",
         description=(
             "为活跃事件分配具体的‘演员’。通过将现有 NPC 绑定到某事件中，使其成为该事件的执行者、受害者或关键人物。"
@@ -394,6 +447,8 @@ def register_skill(
     handler,
     arguments_validator=None,
     batch_validator=None,
+    arguments_model=None,
+    description=None,
 ) -> None:
     """Register a skill using its semantic spec declared in this module."""
     spec = next(
@@ -404,10 +459,10 @@ def register_skill(
         raise ValueError(f"unknown director skill spec: {name}")
     service.register(
         name=spec.name,
-        description=spec.description,
+        description=description if description is not None else spec.description,
         phases=set(spec.phases),
         mutates=spec.mutates,
-        arguments_model=spec.arguments_model,
+        arguments_model=arguments_model or spec.arguments_model,
         handler=handler,
         arguments_validator=arguments_validator,
         max_requests_per_batch=spec.max_requests_per_batch,

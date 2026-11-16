@@ -34,6 +34,9 @@
     - `source=new` 必须给出新演员的独立创建方向。
     - 纯环境或宏观局势变化，可以留空 actors。
 
+6. 事件维护的事实依据：
+    维护已有事件时，区分已经发生的事实与对事件走向的判断。fact_changes 描述正文确认的重要事实变化，guidance 说明操作选择的原因。以事件为单位说明，省去场景中的零碎动作和日常互动。创作背景与未来安排的权限用于创建任务，维护任务依据已确认剧情，保留事实实际成立的范围。
+
 只输出符合 Schema 的 JSON。
 
 [[include: director/_shared/director_decide_shared_v1.txt]]

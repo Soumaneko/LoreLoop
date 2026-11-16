@@ -174,6 +174,7 @@ class ScriptedDirectorGateway:
         backfill_output: dict | None = None,
         event_selection_output: dict | None = None,
         event_review_output: dict | None = None,
+        event_update_output: dict | None = None,
         setting_output: dict | None = None,
     ):
         self.decision = decision
@@ -182,6 +183,7 @@ class ScriptedDirectorGateway:
         self.event_selection_output = event_selection_output
         self.event_composition_output = None
         self.event_review_output = event_review_output
+        self.event_update_output = event_update_output
         self.setting_output = setting_output
         self.tasks: list[str] = []
         self.input_data: list[dict] = []
@@ -212,7 +214,9 @@ class ScriptedDirectorGateway:
             self.event_selection_output is not None
         ):
             payload = self.event_selection_output
-        elif task.startswith("director_event_review_") and (
+        elif task == "director_event_update" and self.event_update_output is not None:
+            payload = self.event_update_output
+        elif task == "director_event_expire" and (
             self.event_review_output is not None
         ):
             payload = self.event_review_output

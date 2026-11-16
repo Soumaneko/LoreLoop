@@ -177,6 +177,7 @@ def _prepare_persistence_test(monkeypatch, *, opening_pending=None):
     from app.domain.narrative_composer.schemas import NarrativeComposerContext
     from app.domain.plot_outline.schemas import PlotOutlineResult
     from app.domain.scene_summary.schemas import SceneSummary
+    from app.domain.scene_facts.schemas import SceneFactSet
     from app.graph.confirmation_lifecycle import ConfirmationMaintenanceScheduler
 
     runtime = get_campaign_runtime()
@@ -196,7 +197,8 @@ def _prepare_persistence_test(monkeypatch, *, opening_pending=None):
         runtime.pending_turns.add(pending)
 
     def computed_wave(_graph, state):
-        # Replay computed domain outputs; persistence and finalization run unchanged.
+        # Replay LLM outputs, retaining deterministic Hook writes and finalization.
+        state["scene_facts"] = SceneFactSet(scene_focus=state["effective_scene_text"])
         state["updated_state"] = pending.current_state if opening_pending else _state().model_copy(update={
             "scene": _state().scene.model_copy(update={"location": "北门"}),
         })
@@ -210,6 +212,11 @@ def _prepare_persistence_test(monkeypatch, *, opening_pending=None):
         state["cache"]["npc_turn_result"] = SimpleNamespace(
             process_result=SimpleNamespace(accepted_changes=[]),
         )
+        if _graph is confirmation_graph.build_confirmation_director_graph():
+            events = confirmation_graph.merge_confirmation_node_update(
+                state, confirmation_graph.director_hook_consumption_node(state),
+            )
+            return iter(events)
         return iter(())
 
     monkeypatch.setattr(confirmation_graph, "stream_confirmation_graph", computed_wave)
@@ -274,10 +281,28 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
         uow.world_setting.save(setting)
     import hashlib
     from app.domain.director.schemas import DirectorStageMaterial, DirectorStageResult
-    from app.tests.factories.director import make_director_npc, ScriptedDirectorGateway
+    from app.tests.factories.director import make_director_npc, make_review_selection, ScriptedDirectorGateway
+    from app.domain.director_event.schemas import DirectorEventFact
+
+    event = make_review_selection("北门暗号").to_event(
+        turn_index=0, current_clock=_state().world_clock,
+    ).model_copy(update={"deadline_clock": _state().world_clock})
+    initial_fact = DirectorEventFact(fact="医生尚未抵达北门。")
+    event.current_situation = [initial_fact]
+    with runtime.uow(write=True) as uow:
+        uow.director_event.save(event)
+    material_id = f"{event.event_id}:hook_sound"
 
     gateway = ScriptedDirectorGateway(
-        decision={"reasoning": "无额外操作。"},
+        decision={"reasoning": "记录医生抵达及玩家介入。", "requests": [{
+            "request_id": "maintain", "skill": "maintain_event",
+            "arguments": {"event_id": event.event_id, "tasks": ["update_situation", "engage"],
+                          "fact_changes": "医生已随玩家抵达北门。"},
+            "guidance": "医生已随玩家抵达北门，记录此事实并确认玩家介入。",
+        }]},
+        event_update_output={"reason": "正文确认医生已抵达北门，原先尚未抵达的事实失效。",
+                             "add_facts": ["医生已随玩家抵达北门。"],
+                             "invalidate_fact_ids": [initial_fact.fact_id]},
         backfill_output={"core_motivation": "照料邻里", "hidden_secret": "藏有药方",
                          "conflict_style": "协商", "social_style": "和善"},
     )
@@ -288,6 +313,7 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
     scene_text = "玩家和一名医生走到了北门，谈起了孙百草。"
     pending.scene_result = SceneWriterResult(
         scene_text=scene_text,
+        director_usages=[material_id],
         npc_usages=[
             {"name": draft.name, "surfaces": ["医生"], "presence": "appeared"},
             {"name": "孙百草", "surfaces": ["孙百草"], "presence": "mentioned_only"},
@@ -295,8 +321,9 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
         npc_usages_text_hash=hashlib.sha256(scene_text.encode()).hexdigest(),
     )
     pending.director_stage = DirectorStageResult(reasoning="让医生同行。", materials=[DirectorStageMaterial(
-        kind="event", resource_id="event-1", guidance="让医生同行。",
-        payload={"actors": [{"name": draft.name, "ref": {
+        kind="event", resource_id=material_id, guidance="让医生同行。",
+        payload={"event_id": event.event_id, "hook": {"hook_id": "hook_sound"},
+                 "actors": [{"name": draft.name, "ref": {
             "kind": "npc", "resource_id": draft.draft_id,
         }}]},
     ), DirectorStageMaterial(
@@ -311,6 +338,13 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
         yield from confirmation_graph.merge_confirmation_node_update(
             state, setting_appearance_update_node(state),
         )
+        if graph is confirmation_graph.build_confirmation_director_graph():
+            for node in (confirmation_graph.director_agent_confirm_node,
+                         confirmation_graph.director_event_expiry_node,
+                         confirmation_graph.director_hidden_expiry_node):
+                yield from confirmation_graph.merge_confirmation_node_update(state, node(state))
+            assert state["runtime_services"].stores.director_event.get_by_id(event.event_id).hook_pool[0].consumed
+            assert state["runtime_services"].stores.director_event.get_by_id(event.event_id).stage == "resolved"
 
     monkeypatch.setattr(confirmation_graph, "stream_confirmation_graph", wave_with_setting_write)
     original = runtime.history.record_confirmation
@@ -328,6 +362,9 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
         assert uow.world_setting.get_by_id(setting.setting_id).hit_count == 0
         assert uow.npc_profile.list_all() == []
         assert uow.director_npc.get_by_id(draft.draft_id).status == "prepared"
+        assert not uow.director_event.get_by_id(event.event_id).hook_pool[0].consumed
+        assert uow.director_event.get_by_id(event.event_id).stage == "hidden"
+        assert uow.director_event.get_by_id(event.event_id).current_situation == [initial_fact]
     assert runtime.history.get_transaction(pending.turn_id)["status"] == "failed"
     assert runtime.pending_turns.get(pending.turn_id) is pending
     monkeypatch.setattr(runtime.history, "record_confirmation", original)
@@ -337,7 +374,13 @@ def test_confirmation_failure_rolls_back_fact_and_domain_writes_then_retries(cam
         assert uow.world_setting.get_by_id(setting.setting_id).hit_count == 1
         assert {profile.name for profile in uow.npc_profile.list_all()} == {draft.name, "孙百草"}
         assert uow.director_npc.get_by_id(draft.draft_id).status == "introduced"
-    assert gateway.tasks == ["npc_profile_backfill", "npc_profile_backfill"]
+        assert uow.director_event.get_by_id(event.event_id).hook_pool[0].consumed_turn == pending.turn_index
+        assert uow.director_event.get_by_id(event.event_id).stage == "resolved"
+        facts = uow.director_event.get_by_id(event.event_id).current_situation
+        assert facts[0].fact_id == initial_fact.fact_id and not facts[0].active
+        assert facts[1].fact == "医生已随玩家抵达北门。" and facts[1].active
+    assert gateway.tasks == ["npc_profile_backfill", "director_agent_decide_confirmation",
+                             "director_event_update"] * 2
 
 
 def test_saved_opening_survives_followup_failure_and_restart(campaign_runtime, monkeypatch, tmp_path):

@@ -13,12 +13,12 @@ from app.domain.confirmed_history import build_turn_documents
 from app.domain.continuity import ContinuityProjector
 from app.domain.current_state import StateChangeSet, StateUpdater
 from app.domain.director_event.reviewer import (
-    DirectorEventEngagedReviewer,
-    DirectorEventHiddenReviewer,
+    DirectorEventExpiryReviewer,
 )
 from app.domain.director_event.workflows import (
-    review_engaged_events_workflow,
-    review_hidden_events_workflow,
+    consume_used_event_hooks,
+    resolve_expired_hidden_events,
+    expire_engaged_events_workflow,
 )
 from app.core.text import normalize_compact_key
 from app.domain.npc_profile.identity_resolver import archive_alias_surfaces, project_used_npcs
@@ -518,7 +518,34 @@ def setting_appearance_update_node(state: ConfirmationState) -> ConfirmationStat
     }
 
 
-def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
+def director_hook_consumption_node(state: ConfirmationState) -> ConfirmationState:
+    if not state.get("write_db", True):
+        return {}
+    pipeline_input = state["pipeline_input"]
+    used = pipeline_input.scene_result.director_usages_for_text(state["effective_scene_text"])
+    stage = getattr(state["pending"], "director_stage", None)
+    if not used or stage is None:
+        return {}
+    with state["runtime_services"].stores.director_event as store:
+        consumed = consume_used_event_hooks(
+            materials=stage.materials, used_resource_ids=used,
+            turn_index=pipeline_input.turn_index, store=store,
+        )
+    return {"events": [{"step": "director_hooks_consumed", "data": {"hooks": consumed}}]}
+
+
+def director_hidden_expiry_node(state: ConfirmationState) -> ConfirmationState:
+    if not state.get("write_db", True):
+        return {}
+    with state["runtime_services"].stores.director_event as store:
+        resolved = resolve_expired_hidden_events(
+            current_clock=state["updated_state"].world_clock,
+            turn_index=state["pipeline_input"].turn_index, store=store,
+        )
+    return {"events": [{"step": "director_hidden_events_expired", "data": {"event_ids": resolved}}]}
+
+
+def director_event_expiry_node(state: ConfirmationState) -> ConfirmationState:
     pipeline_input = state["pipeline_input"]
     if not state.get("write_db", True):
         return {
@@ -532,7 +559,6 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
     if cache.produced("director_event_reviews"):
         return {"director_event_reviews": cache.result("director_event_reviews")}
 
-    gateway = _gateway_for(state)
     turn_index = pipeline_input.turn_index
     reviews = []
     review_warnings: list[tuple[str, str]] = []
@@ -547,14 +573,37 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
             for event in event_store.list_active()
             if event.created_turn < turn_index
         ]
-        hidden_events = [event for event in active_events if event.stage == "hidden"]
-        engaged_events = [
-            event for event in active_events if event.stage == "engaged"
+        due_events = [
+            event for event in active_events
+            if event.stage == "engaged"
+            and state["updated_state"].world_clock.has_reached(event.deadline_clock)
         ]
-        if hidden_events:
+        executions = state.get("director_executions")
+        newly_engaged = {
+            execution.output["event_id"]
+            for execution in (executions.executions if executions is not None else [])
+            if execution.skill == "maintain_event"
+            and execution.output.get("stage_before") == "hidden"
+            and execution.output.get("stage_after") == "engaged"
+        }
+        for event in list(due_events):
+            if event.event_id not in newly_engaged:
+                continue
+            event_store.resolve_event(
+                event.event_id, turn_index=turn_index,
+                resolved_reason="事件到期时玩家本轮首次介入，退出导演后台管理。",
+                final_world_impact=None,
+            )
+            reviews.append({"event_id": event.event_id,
+                            "active_before": model_data(event),
+                            "active_after": model_data(event_store.get_by_id(event.event_id)),
+                            "review_result": None,
+                            "notes": ["resolved_due_event_with_active_player"]})
+        due_events = [event for event in due_events if event.event_id not in newly_engaged]
+        if due_events:
             try:
-                hidden_results = review_hidden_events_workflow(
-                    active_events=hidden_events,
+                engaged_results = expire_engaged_events_workflow(
+                    due_events=due_events,
                     user_input=pipeline_input.user_input,
                     scene_facts=scene_facts_json,
                     current_state=state["updated_state"],
@@ -562,7 +611,7 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
                     scene_summaries=state.get("recent_summaries", []),
                     turn_index=turn_index,
                     store=event_store,
-                    reviewer=DirectorEventHiddenReviewer(gateway),
+                    reviewer=DirectorEventExpiryReviewer(_gateway_for(state)),
                     trace_id=state["trace_id"],
                 )
             except (
@@ -571,47 +620,7 @@ def director_event_review_node(state: ConfirmationState) -> ConfirmationState:
             ) as exc:
                 review_warnings.append((
                     "director_event_review_fallback",
-                    f"Hidden event review failed; skipped: {exc}",
-                ))
-            else:
-                reviews.extend(
-                    result.model_dump(mode="json")
-                    for result in hidden_results
-                )
-                engaged_ids = {event.event_id for event in engaged_events}
-                for result in hidden_results:
-                    event = result.active_after
-                    if (
-                        event is not None
-                        and event.stage == "engaged"
-                        and state["updated_state"].world_clock.has_reached(
-                            event.deadline_clock
-                        )
-                        and event.event_id not in engaged_ids
-                    ):
-                        engaged_events.append(event)
-                        engaged_ids.add(event.event_id)
-        if engaged_events:
-            try:
-                engaged_results = review_engaged_events_workflow(
-                    active_events=engaged_events,
-                    user_input=pipeline_input.user_input,
-                    scene_facts=scene_facts_json,
-                    current_state=state["updated_state"],
-                    core_memory=state["core_memory"],
-                    scene_summaries=state.get("recent_summaries", []),
-                    turn_index=turn_index,
-                    store=event_store,
-                    reviewer=DirectorEventEngagedReviewer(gateway),
-                    trace_id=state["trace_id"],
-                )
-            except (
-                LLMOutputParseError,
-                LLMOutputValidationError,
-            ) as exc:
-                review_warnings.append((
-                    "director_event_review_fallback",
-                    f"Engaged event review failed; skipped: {exc}",
+                    f"Event expiry review failed; skipped: {exc}",
                 ))
             else:
                 reviews.extend(

@@ -290,7 +290,7 @@ def _present_event(
     }
     return DirectorStageMaterial(
         kind="event",
-        resource_id=event.event_id,
+        resource_id=f"{event.event_id}:{hook.hook_id}",
         guidance=_require_generation_guidance(guidance),
         payload=payload,
     )

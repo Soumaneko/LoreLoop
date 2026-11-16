@@ -23,7 +23,9 @@ from .confirmation_nodes import (
     action_preview_node,
     continuity_project_node,
     director_agent_confirm_node,
-    director_event_review_node,
+    director_event_expiry_node,
+    director_hook_consumption_node,
+    director_hidden_expiry_node,
     npc_profile_update_node,
     scene_fact_extract_node,
     scene_summarize_node,
@@ -127,10 +129,22 @@ def build_confirmation_second_wave_graph():
 def build_confirmation_director_graph():
     graph = StateGraph(ConfirmationState)
     graph.add_node(
-        "director_event_review",
+        "director_hook_consumption",
         capture_confirmation_node_errors(
-            "director_event_review",
-            director_event_review_node,
+            "director_hook_consumption", director_hook_consumption_node,
+        ),
+    )
+    graph.add_node(
+        "director_event_expiry",
+        capture_confirmation_node_errors(
+            "director_event_expiry",
+            director_event_expiry_node,
+        ),
+    )
+    graph.add_node(
+        "director_hidden_expiry",
+        capture_confirmation_node_errors(
+            "director_hidden_expiry", director_hidden_expiry_node,
         ),
     )
     graph.add_node(
@@ -140,9 +154,11 @@ def build_confirmation_director_graph():
             director_agent_confirm_node,
         ),
     )
-    graph.add_edge(START, "director_event_review")
-    graph.add_edge("director_event_review", "director_agent_confirm")
-    graph.add_edge("director_agent_confirm", END)
+    graph.add_edge(START, "director_hook_consumption")
+    graph.add_edge("director_hook_consumption", "director_agent_confirm")
+    graph.add_edge("director_agent_confirm", "director_event_expiry")
+    graph.add_edge("director_event_expiry", "director_hidden_expiry")
+    graph.add_edge("director_hidden_expiry", END)
     return graph.compile()
 
 

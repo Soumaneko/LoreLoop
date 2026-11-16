@@ -1126,8 +1126,8 @@ function stepTasks(scope, stepName) {
     npc_profiles_updated: ["npc_batch_update"],
     director_agent_confirmed: [
       "director_agent_decide_confirmation",
-      "director_event_review_hidden",
-      "director_event_review_engaged",
+      "director_event_expire",
+      "director_event_update",
       "director_event_design",
       "director_event_compose",
       "director_npc_create",

@@ -226,61 +226,29 @@ class DirectorEventSelectionOutput(DirectorEventSelectionResult):
     )
 
 
-class DirectorEventHiddenReviewResult(BaseModel):
+class DirectorEventExpiryResult(BaseModel):
     event_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
-    action: Literal["keep_hidden", "engage"]
-    consume_hook_ids: list[str] = Field(default_factory=list, max_length=16)
-
-
-class DirectorEventHiddenReviewBatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    reviews: list[DirectorEventHiddenReviewResult] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def _unique_event_ids(self):
-        event_ids = [review.event_id for review in self.reviews]
-        if len(event_ids) != len(set(event_ids)):
-            raise ValueError("hidden review batch has duplicate event_id")
-        return self
-
-
-class DirectorEventEngagedReviewResult(BaseModel):
-    event_id: str = Field(min_length=1)
-    reason: str = Field(min_length=1)
-    action: Literal["engage", "resolve"]
-    resolved_reason: str | None = None
-    player_still_involved: bool | None = None
+    player_still_involved: bool
     final_world_impact: WorldImpact | None = None
 
     @model_validator(mode="after")
-    def _validate_resolved_reason(self):
-        if self.action == "resolve" and not (self.resolved_reason or "").strip():
-            self.resolved_reason = self.reason
-        if self.player_still_involved is True and self.final_world_impact is not None:
-            raise ValueError(
-                "an involved player cannot receive an automatic final_world_impact"
-            )
-        if self.player_still_involved is False and self.final_world_impact is None:
-            raise ValueError(
-                "a disengaged player requires final_world_impact"
-            )
-        if self.player_still_involved is None and self.final_world_impact is not None:
-            raise ValueError(
-                "final_world_impact requires a deadline involvement decision"
-            )
+    def _validate_final_world_impact(self):
+        if self.player_still_involved and self.final_world_impact is not None:
+            raise ValueError("an involved player cannot receive an automatic final_world_impact")
+        if not self.player_still_involved and self.final_world_impact is None:
+            raise ValueError("a disengaged player requires final_world_impact")
         return self
 
 
-class DirectorEventEngagedReviewBatch(BaseModel):
+class DirectorEventExpiryBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    reviews: list[DirectorEventEngagedReviewResult] = Field(min_length=1)
+    reviews: list[DirectorEventExpiryResult] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _unique_event_ids(self):
         event_ids = [review.event_id for review in self.reviews]
         if len(event_ids) != len(set(event_ids)):
-            raise ValueError("engaged review batch has duplicate event_id")
+            raise ValueError("expiry batch has duplicate event_id")
         return self

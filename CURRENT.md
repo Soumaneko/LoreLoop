@@ -1314,11 +1314,34 @@ disclosure upgrades, or alter Setting state.
 
 ## 13. Director Agent Confirmation Skills
 
-Confirmation exposes three mutating skills:
+Confirmation exposes four mutating skills:
 
 - `create_npc(setting_requirements[1])`
 - `create_event(role, setting_requirements[1], actors)`
 - `bind_event_actor(event_id, npc_id)`
+- `maintain_event(event_id, tasks, fact_changes)`
+
+`maintain_event` is exposed for active Events. Its runtime input schema binds
+allowed tasks to each Event ID: hidden Events allow `update_situation`, `engage`,
+and `resolve`; engaged Events allow `update_situation` and `resolve`. Expiry is
+not a selectable task. One request combines tasks for one Event; a batch cannot
+maintain the same Event twice. After selecting tasks, the Director describes
+important confirmed fact changes in `fact_changes` (empty when none);
+free-text `guidance` explains the operation choices.
+Only `update_situation` invokes an additional model (`director_event_update`). It
+receives the accepted prose, Scene Facts, current Event, player input, CoreMemory,
+and updated CurrentState, plus `fact_changes` instead of request guidance,
+and returns `reason`, `add_facts` and `invalidate_fact_ids` in that order.
+The leading reason explains the evidence for additions and each invalidation;
+it remains in the model output trace, not in the Event fact list.
+Invalidation references must belong to this Event's active facts. Old text and
+IDs remain unchanged; new facts receive program IDs, and inactive facts remain
+stored. `intent` and `plan` are read-only context. There is no backstage simulation.
+`engage` and `resolve` use the Director's decision directly; normal resolution
+stores its reason and turn without automatic final impact. All changes join the
+existing deferred mutation plan and confirmation transaction. Event creation
+availability uses the decision-entry snapshot, so a slot closed by maintenance
+becomes available to the next confirmation Director decision.
 
 `create_event` is the only skill that creates an Event. Its `actors` list is a
 discriminated union: `source=existing` references an active Director NPC or NPC
@@ -1438,9 +1461,12 @@ decides the player's action or reverses adjudicated results. It carries:
 - an event overview `conception`, core acting `subject`, goal `intent`, current
   action `plan`, and one-line `macro_intent`;
 - `current_situation`: established backstage facts with program-assigned stable
-  `fact_id`, text `fact`, and an `active` flag. Creation initializes these facts;
-  subsequent add/invalidate operations and update scheduling are not implemented
-  yet. Semantic views include only active facts. IDs survive store round-trips,
+  `fact_id`, text `fact`, and an `active` flag. Creation and updates select
+  established facts later Event handling must rely on, retaining their concrete
+  scope rather than inferring progress or feasibility. Momentary actions,
+  dialogue, or positions stay in scene history. Creation initializes these facts;
+  confirmation Director maintenance records subsequent confirmed changes through
+  additions and invalidations. Semantic views include only active facts. IDs survive store round-trips,
   actor binding, and snapshots. Existing event JSON using `method` loads as
   `plan`, and records without facts load with an empty fact list; no historical
   facts are synthesized. This extends the JSON record without changing SQLite
@@ -1478,49 +1504,54 @@ progress through the normal three-stage lifecycle:
 hidden -> engaged -> resolved
 ```
 
-After normal confirmation review, the updated CurrentState World Clock is
-compared with each active Event's `deadline_clock`:
+Confirmation handles Event changes in this order:
 
-- a hidden Event that remains hidden at expiry resolves with its pre-generated
-  `world_impact`;
-- a hidden Event engaged in the expiry scene is immediately included in the
-  same turn's engaged-review batch;
-- an engaged Event explicitly resolved by review closes without automatic
-  impact;
-- an unresolved engaged Event at expiry closes without impact when the player
-  is still concretely intervening, or closes with a reviewer-derived
-  `final_world_impact` when the player has disengaged.
+```text
+NPC/Setting updates -> Hook consumption -> confirmation Director
+  -> fixed engaged-expiry handling -> hidden-expiry settlement
+```
 
-Merely remaining nearby or mentioning an Event is not continued intervention.
-`world_impact` is available to Director/reviewer judgment but is not included in
+Hook consumption maps the selected variant's text-bound `director_usages` back
+to admitted `present_event` materials. Each new Hook material has a distinct
+`resource_id` (`event_id:hook_id`); the payload retains the Event ID. Legacy IDs
+work when they identify one Hook; ambiguous legacy IDs do not prove adoption of
+an individual Hook. Unused, edited, unbound, or unmatched receipts do not consume
+Hooks. Repeated application preserves the first consumption turn.
+
+The confirmation Director receives all active Event facts and plans, plus the
+complete Hook pool with anchors, consumption flags and consumption turns. It
+therefore retains contact evidence after consumption is recorded. Contact and
+ordinary resolution are selected through `maintain_event`; there are no fixed
+hidden-contact or not-yet-due engaged-review model calls. Hook presentation alone
+does not change Event stage.
+
+Expiry remains mandatory outside the skill. Program code compares the updated
+World Clock with `deadline_clock` after maintenance, using the persisted stage:
+
+- a hidden Event still hidden at expiry closes with its original `world_impact`;
+- an Event first engaged this turn at expiry closes its backstage management
+  without final impact, directly using this turn's confirmed involvement;
+- pre-existing engaged Events reaching expiry receive one fixed batch call to
+  `DirectorEventExpiryReviewer` (`director_event_expire`). It only outputs the
+  Event ID, reason, required `player_still_involved`, and `final_world_impact`.
+  Continued actual involvement closes backstage management without impact;
+  disengagement closes with the reviewer-derived final impact. Ordinary conflict
+  resolution is handled by the Director before this call. The expiry contract
+  has no `action`, `resolved_reason`, or keep-tracking choice, and receives no
+  optional Director guidance.
+
+Being nearby or mentioning an Event is not continued intervention. Expiry only
+runs for pre-existing active Events, uses world time rather than turn counts,
+and cannot be omitted by the Director. Handled expiry-model parse/validation
+failures retain the current state and emit diagnostics; hidden expiry still runs.
+Dry runs do not write. Hook consumption, fact and stage changes, and expiry all
+share the campaign confirmation transaction, rollback and Undo/Redo snapshots.
+Generic `DirectorResourceRef` keeps Event ownership independent of NPC lifecycle.
+
+During generation the Action Extractor still provides read-only
+`touched_event_candidates` for direct targeting of visible traces. Generation
+never consumes Hooks or changes persisted stages. `world_impact` remains outside
 the Composer's admitted engaged-event payload.
-
-During generation, the Action Extractor's single LLM call judges whether the
-player action directly targets a hidden Event's visible traces. A hit produces
-the read-only `touched_event_candidates` projection described in section 12; no
-database write or automatic Composer admission occurs.
-
-All Event database writes are owned by the confirmation-phase Director
-subsystem: mandatory event-review workflows update existing Events, while
-mutating Agent skills create Events or bind actors. Review runs before the Agent
-whenever eligible active Events exist. The review is not a skill: the
-confirmation pipeline reviews each
-pre-existing active event (created before the current turn) in two batched LLM
-calls — one covering all hidden events and one covering all engaged events — so
-the number of review calls per turn is bounded regardless of how many events
-exist. A hidden event's review detects which hooks were adopted or presented
-this turn (marking them consumed) and whether the protagonist contacted the
-event — `keep_hidden` leaves it hidden, `engage` advances it to engaged. An
-engaged event's review judges whether its core conflict resolved — `engage` keeps
-tracking, `resolve` closes the event immediately, including before its deadline.
-Defeat or capture of the subject, permanent loss of the method, and an achieved or
-objectively impossible intent are terminal; temporary setbacks are not. Because
-review precedes the confirmation Agent, a resolution reopens the single Event slot
-in the same confirmation turn. Hook consumption and lifecycle action are
-independent decisions. Each batch result must cover every supplied Event exactly
-once. There is no automatic stage flip or hook consumption derived from the
-pending turn. Generic `DirectorResourceRef` keeps Event ownership independent
-from the Director NPC domain.
 
 ## 15. Director NPC and Creative Brief
 
@@ -1640,8 +1671,9 @@ for identifying unused resources. Resource association accuracy is assessed offl
 The records travel with `SceneWriterResult` and pending variants, defaulting to
 an empty list for older saves. `director_usages_for_text` uses the existing
 `npc_usages_text_hash` as the shared source-prose hash, returning no records for
-edited or unbound text. Director consumption is a separate follow-up; current Director inputs and
-event-state decisions are unchanged.
+edited or unbound text. Confirmation uses these receipts for deterministic Hook
+consumption as described in section 14. Event contact, resolution, and expiry
+are still handled by the existing reviewers.
 
 Rephrase reruns the entire Composer with the saved authoritative context; prior
 resolution facts, events, and prose are not frozen as an intermediate contract.
@@ -2763,16 +2795,16 @@ paths do not override it, so they run at most two model calls per task.
   does not discard valid requests.
 - `DirectorConfirmationExecutor` returns immediately for empty decisions
   (no skill execution and no Director mutation batch).
-- Decision LLM, Setting/NPC creation LLM, and pre-write preprocessing failures
+- Decision LLM, Setting/NPC creation LLM, Event fact-update LLM, and pre-write preprocessing failures
   discard the mutation plan and return empty executions with
   `director_execution_fallback`. Mutation-plan validation, canonical DB write,
   outer transaction commit/rollback, and runtime recovery failures propagate.
-- `director_event_review_node` degrades hidden and engaged reviews
-  independently: hidden success is preserved; engaged failure skips only
-  engaged changes and emits `director_event_review_fallback`.
-- Hidden review validates all `consume_hook_ids` before any state write; the
-  node catches only LLM errors, so workflow/domain `ValueError`s propagate as
-  integrity failures instead of being misreported as safe degradation.
+- `director_event_expiry_node` calls the expiry reviewer only for
+  due Events. Parse/validation failures skip that batch and emit
+  `director_event_review_fallback`; deterministic Hook consumption and hidden
+  expiry remain independent. Workflow/domain `ValueError`s propagate as
+  integrity failures. Fact-update validation checks invalidation IDs against
+  the target Event's active facts before adding anything to the mutation plan.
 - Diagnostics are aggregated by `DirectorConfirmationExecutor` and emitted once
   by the node; `DirectorGenerationExecutor` also aggregates generation warnings
   and its node emits them into diagnostics.

@@ -12,54 +12,76 @@ from app.tests.factories.director import make_review_node_state
 from app.tests.factories.director import run_generation_director_agent
 
 
-def test_review_event_consumes_multiple_hooks_via_arguments(tmp_path):
-    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
+@pytest.mark.parametrize("receipt", [
+    "used", "edited", "unused", "legacy", "dry_run",
+    "legacy-material", "ambiguous-legacy",
+])
+def test_confirmation_consumes_only_used_hook_before_director(tmp_path, monkeypatch, receipt):
+    import hashlib
+    import json
+    from types import SimpleNamespace
+    from app.domain.scene_writer import SceneWriterResult
+    from app.domain.director_event.schemas import EventHook
+    from app.graph import confirmation_graph
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = make_review_selection(
-        "无灯船",
-        current_story_direction="河岸码头出现异常动静。",
-        hook_pool=[
-            EventHook(
-                hook_id="hook_sound",
-                kind="auditory",
-                content="深夜水面传来无人摇橹声。",
-                trigger_anchors=["旧码头"],
-            ),
-            EventHook(
-                hook_id="hook_rumor",
-                kind="rumor",
-                content="码头流传无灯货船的传闻。",
-                trigger_anchors=["旧码头"],
-            ),
-        ],
-    ).to_event(turn_index=1, current_clock=WorldClock())
-    with stores.director_event as store:
-        event_id = store.save(selection)
-
+    event = make_review_selection("无灯船", hook_pool=[
+        EventHook(hook_id="sound", kind="auditory", content="水面传来摇橹声。", trigger_anchors=["旧码头"]),
+        EventHook(hook_id="rumor", kind="rumor", content="码头流传货船的传闻。", trigger_anchors=["旧码头"]),
+    ]).to_event(turn_index=1, current_clock=WorldClock())
+    stores.director_event.save(event)
     gateway = ScriptedDirectorGateway(
-        decision={"reasoning": "本轮无额外调度。", "requests": []},
-        event_review_output={
-    "reviews": [
-        {
-            "event_id": event_id,
-                "reason": "核心冲突仍在持续。",
-                "action": "engage",
-                "consume_hook_ids": ["hook_sound", "hook_rumor"],
-        }
-    ],
-},
+        decision={"reasoning": "提供两个不同的征兆。", "requests": [
+            {"request_id": hook.hook_id, "skill": "present_event",
+             "arguments": {"event_id": event.event_id, "hook_id": hook.hook_id},
+             "guidance": "呈现这个征兆。"}
+            for hook in event.hook_pool
+        ]},
+        event_review_output={"reviews": [{"event_id": event.event_id,
+            "reason": "玩家尚未直接调查。", "action": "keep_hidden"}]},
     )
+    stage, _ = run_generation_director_agent(
+        gateway=gateway, stores=stores, core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(), user_input="观察码头。", context_facts=[],
+        recent_summaries=[], turn_index=3, trace_id="generation-hooks",
+        npc_profiles=[], touched_event_candidates=[],
+    )
+    assert len({m.resource_id for m in stage.materials}) == 2
+    assert not any(h.consumed for h in stores.director_event.get_by_id(event.event_id).hook_pool)
+    if receipt in {"legacy-material", "ambiguous-legacy"}:
+        stage.materials[0].resource_id = event.event_id
+        if receipt == "ambiguous-legacy":
+            stage.materials[1].resource_id = event.event_id
+    text = "水面传来摇橹声。"
+    scene = SceneWriterResult(
+        scene_text=text,
+        director_usages=([stage.materials[0].resource_id] * 2 + ["unknown"] if receipt != "unused" else []),
+        npc_usages_text_hash=(hashlib.sha256(text.encode()).hexdigest() if receipt != "legacy" else None),
+    )
+    state = make_review_node_state(stores, gateway)
+    state.update(pending=SimpleNamespace(director_stage=stage),
+                 effective_scene_text="你离开了码头。" if receipt == "edited" else text,
+                 write_db=receipt != "dry_run")
+    state["pipeline_input"].scene_result = scene
+    expected = receipt in {"used", "legacy-material"}
+    def confirm_director(state):
+        saved = stores.director_event.get_by_id(event.event_id)
+        assert [h.consumed for h in saved.hook_pool] == [expected, False]
+        assert saved.stage == "hidden"
+        return {}
 
-    confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
-
-    with stores.director_event as store:
-        persisted = store.get_by_id(event_id)
-        assert persisted is not None
-        assert {hook.hook_id for hook in persisted.hook_pool if hook.consumed} == {
-            "hook_sound",
-            "hook_rumor",
-        }
+    monkeypatch.setattr(confirmation_graph, "director_agent_confirm_node", confirm_director)
+    confirmation_graph.build_confirmation_director_graph.cache_clear()
+    try:
+        result = confirmation_graph.build_confirmation_director_graph().invoke(state)
+    finally:
+        confirmation_graph.build_confirmation_director_graph.cache_clear()
+    assert not result.get("node_errors")
+    assert gateway.tasks == ["director_agent_decide_generation"]
+    if expected:
+        state["pipeline_input"].turn_index = 4
+        confirmation_nodes.director_hook_consumption_node(state)
+        assert stores.director_event.get_by_id(event.event_id).hook_pool[0].consumed_turn == 3
 
 
 def test_present_event_rejects_already_consumed_hook(tmp_path):
@@ -331,76 +353,7 @@ def test_present_event_requires_hook_id(tmp_path):
     assert stage.materials == []
 
 
-def test_review_event_rejects_unknown_consume_hook(tmp_path):
-    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
-
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = make_review_selection(
-        "无灯船",
-        current_story_direction="河岸码头出现异常动静。",
-    ).to_event(turn_index=1, current_clock=WorldClock())
-    with stores.director_event as store:
-        event_id = store.save(selection)
-
-    gateway = ScriptedDirectorGateway(
-        decision={"reasoning": "本轮无额外调度。", "requests": []},
-        event_review_output={
-            "reviews": [
-                {
-                    "event_id": event_id,
-                    "reason": "错误地消费不存在的事件 hook。",
-                    "action": "engage",
-                    "consume_hook_ids": ["hook_ghost"],
-                }
-            ],
-        },
-    )
-
-    with pytest.raises(ValueError, match="consume_hook_ids not part of this event"):
-        confirmation_nodes.director_event_review_node(
-            make_review_node_state(stores, gateway)
-        )
-
-    with stores.director_event as store:
-        assert store.get_by_id(event_id).stage == "hidden"
-
-
-def test_review_event_rejects_already_consumed_consume_hook(tmp_path):
-    from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
-
-    stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
-    selection = make_review_selection(
-        "无灯船",
-        current_story_direction="河岸码头出现异常动静。",
-    ).to_event(turn_index=1, current_clock=WorldClock())
-    with stores.director_event as store:
-        event_id = store.save(selection)
-        store.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
-
-    gateway = ScriptedDirectorGateway(
-        decision={"reasoning": "本轮无额外调度。", "requests": []},
-        event_review_output={
-            "reviews": [
-                {
-                    "event_id": event_id,
-                    "reason": "错误地重复消费已消费 hook。",
-                    "action": "engage",
-                    "consume_hook_ids": ["hook_sound"],
-                }
-            ],
-        },
-    )
-
-    with pytest.raises(ValueError, match="consume_hook_ids already consumed"):
-        confirmation_nodes.director_event_review_node(
-            make_review_node_state(stores, gateway)
-        )
-
-    with stores.director_event as store:
-        assert store.get_by_id(event_id).stage == "hidden"
-
-
-def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
+def test_confirmation_director_sees_consumed_hook_traces(tmp_path):
     from app.domain.director_event.schemas import DirectorEventSelectionResult, EventHook, WorldImpact
 
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
@@ -427,20 +380,25 @@ def test_hidden_review_input_includes_hook_trigger_anchors(tmp_path):
                     "event_id": event_id,
                     "reason": "事件未接触。",
                     "action": "keep_hidden",
-                    "consume_hook_ids": [],
                 }
             ],
         },
     )
 
-    confirmation_nodes.director_event_review_node(make_review_node_state(stores, gateway))
-
-    assert gateway.tasks == ["director_event_review_hidden"]
-    hidden_input = gateway.input_data[0]["events_json"]
-    assert '"trigger_anchors"' in hidden_input
-    assert "旧码头" in hidden_input
-    assert "player_contacts" not in hidden_input
-    assert "last_presented_turn" not in hidden_input
+    from app.domain.director.confirmation import DirectorConfirmationExecutor
+    stores.director_event.mark_hooks_consumed(event_id, ["hook_sound"], turn_index=2)
+    DirectorConfirmationExecutor(
+        gateway=gateway, stores=stores, core_memory=CoreMemory(items=[]),
+        current_state=make_current_state(), user_input="调查旧码头的声音。",
+        scene_facts={"scene_focus": "调查旧码头。", "facts": []},
+        recent_summaries=[], selection_summaries=[], turn_index=3, trace_id="director-hook",
+    ).run()
+    import json
+    observation = json.loads(gateway.input_data[0]["director_observation_json"])
+    [hook] = observation["resources"]["events"][0]["hook_pool"]
+    assert hook["trigger_anchors"] == ["旧码头", "港务署"]
+    assert hook["consumed"] and hook["consumed_turn"] == 2
+    assert gateway.tasks == ["director_agent_decide_confirmation"]
 
 
 @pytest.mark.parametrize("scenario,reverse", [

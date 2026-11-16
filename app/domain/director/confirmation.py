@@ -37,6 +37,8 @@ from app.domain.director.skill_specs import (
     CreateEventArguments,
     CreateNPCArguments,
     NewEventActorInput,
+    maintain_event_arguments,
+    get_director_skill_specs,
     register_skill,
 )
 from app.domain.director_event.schemas import (
@@ -50,6 +52,7 @@ from app.domain.director_event.selector import (
 from app.domain.director_event.design import DirectorEventDesigner
 from app.domain.director_event.design_actors import DirectorEventActorCreator
 from app.domain.director_event.composition import DirectorEventComposer
+from app.domain.director_event.updater import DirectorEventFactUpdater
 from app.domain.director_npc.creator import DirectorNPCCreator
 from app.domain.director_npc.schemas import NPCCreationContext
 from app.domain.npc_profile.schemas import NPCProfile
@@ -68,6 +71,12 @@ from app.runtime.director_mutation import (
 )
 
 DIRECTOR_WAVE_MAX_WORKERS = 3
+
+
+def _require_unique_maintenance_events(arguments) -> None:
+    ids = [getattr(args, "root", args).event_id for args in arguments]
+    if len(ids) != len(set(ids)):
+        raise ValueError("each Event may have only one maintenance request per batch")
 
 
 class DirectorConfirmationExecutor:
@@ -249,6 +258,17 @@ class DirectorConfirmationExecutor:
                     eligible_setting_ids=eligible_event_setting_ids,
                 ),
             )
+        if active_events:
+            description = next(spec.description for spec in get_director_skill_specs()
+                               if spec.name == "maintain_event")
+            if any(event.stage == "hidden" for event in active_events):
+                description += "主角本轮首次直接接触 hidden 事件时，选择 engage 记录介入。"
+            register_skill(
+                self._service, "maintain_event", handler=self._maintain_event,
+                arguments_model=maintain_event_arguments(active_events),
+                description=description,
+                batch_validator=_require_unique_maintenance_events,
+            )
         register_skill(
             self._service,
             "bind_event_actor",
@@ -261,6 +281,32 @@ class DirectorConfirmationExecutor:
                 npc_id=args.npc_id,
             ),
         )
+
+    def _maintain_event(self, args, guidance: str | None = None):
+        args = getattr(args, "root", args)
+        event = self._event_store.get_by_id(args.event_id)
+        if event is None or not event.is_active():
+            raise ValueError("maintenance references an unknown active Event")
+        stage_before = event.stage
+        changes = {"updated_turn": self._turn_index, "updated_at": utc_now()}
+        if "update_situation" in args.tasks:
+            update = DirectorEventFactUpdater(self._gateway).update(
+                event=event, scene_text=self._scene_text, scene_facts=self._scene_facts,
+                user_input=self._user_input, current_state=self._current_state,
+                core_memory=self._core_memory, fact_changes=args.fact_changes,
+                trace_id=self._trace_id,
+            )
+            changes["current_situation"] = update.apply(event)
+        if "engage" in args.tasks:
+            changes["stage"] = "engaged"
+        if "resolve" in args.tasks:
+            changes.update(stage="resolved", resolved_reason=guidance,
+                           resolved_turn=self._turn_index, final_world_impact=None)
+        updated = event.model_copy(update=changes)
+        with self._plan_lock:
+            self._plan.event_updates.append(updated)
+        return {"event_id": event.event_id, "tasks": args.tasks,
+                "stage_before": stage_before, "stage_after": updated.stage}
 
     def _dispatch_setting_requirements(self, requirements) -> list:
         """Resolve the requirement from available + Wave-A in-memory Settings."""
@@ -514,9 +560,11 @@ class DirectorConfirmationExecutor:
                                 "hook_id": hook.hook_id,
                                 "kind": hook.kind,
                                 "content": hook.content,
+                                "trigger_anchors": list(hook.trigger_anchors),
+                                "consumed": hook.consumed,
+                                "consumed_turn": hook.consumed_turn,
                             }
                             for hook in event.hook_pool
-                            if not hook.consumed
                         ],
                     }
                     for event in active_events
