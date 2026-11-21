@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from app.domain.director.schemas import DirectorResourceRef
 from app.domain.director_event.schemas import DirectorEvent
+from app.domain.director_event.creative_brief import EventCreativeDecks
 from app.domain.director_npc.schemas import DirectorNPCDraft
 from app.domain.npc_profile.schemas import NPCProfile
 from app.domain.world_setting.schemas import WorldSetting
@@ -31,6 +32,7 @@ class DirectorPendingMutationPlan:
     settings: list[WorldSetting] = field(default_factory=list)
     npc_drafts: list[DirectorNPCDraft] = field(default_factory=list)
     events: list[DirectorEvent] = field(default_factory=list)
+    event_creative_decks: EventCreativeDecks | None = None
     event_updates: list[DirectorEvent] = field(default_factory=list)
     profile_upserts: list[NPCProfile] = field(default_factory=list)
     actor_bindings: list[DirectorPendingActorBinding] = field(
@@ -61,6 +63,8 @@ def _validate_director_plan(
     npc_drafts = plan.npc_drafts
     events = plan.events
     actor_bindings = plan.actor_bindings
+    if plan.event_creative_decks is not None and len(events) != 1:
+        raise ValueError("Event creative decks require exactly one created Event")
 
     world_setting_store = uow.world_setting
     if any(world_setting_store.get_by_id(item.setting_id) for item in settings):
@@ -110,6 +114,8 @@ def _apply_director_plan(
         store = uow.director_event
         for event in events:
             store.save(event)
+    if plan.event_creative_decks is not None:
+        uow.event_creative_decks.save(plan.event_creative_decks)
     for event in plan.event_updates:
         uow.director_event.save(event)
     if profile_upserts:

@@ -73,10 +73,17 @@ def test_snapshot_uses_sqlite_backup_and_excludes_wal_and_shm(tmp_path):
 
 
 def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
+    from app.domain.director_event.creative_brief import EventCreativeDecks, draw_event_creative_brief
+    from app.runtime.uow import CampaignUnitOfWork
+
     source = tmp_path / "source#%20name"
     source.mkdir()
     SaveManifestRepository(source).create("Alpha")
     _make_campaign_database(source / "campaign.db")
+    _, remaining = draw_event_creative_brief(EventCreativeDecks())
+    with CampaignUnitOfWork(CampaignPaths.from_data_dir(source), write=True) as stores:
+        with stores.transaction():
+            stores.event_creative_decks.save(remaining)
     _make_control_database(source / ".runtime" / "control.db")
     _make_campaign_database(source / ".snapshots" / "undo-one" / "campaign.db", "old")
     (source / ".snapshots" / "undo-one" / "manifest.json").write_text(
@@ -96,6 +103,8 @@ def test_export_and_extract_round_trip_allowed_save_files(tmp_path):
     destination = tmp_path / "imported#%20name"
     extracted = extract_archive(archive, destination)
     assert extracted == exported
+    with CampaignUnitOfWork(CampaignPaths.from_data_dir(destination)) as stores:
+        assert stores.event_creative_decks.load() == remaining
     assert SaveManifestRepository(destination).load().display_name == "Alpha"
     with closing(sqlite3.connect(destination / ".snapshots" / "undo-one" / "campaign.db")) as db, db:
         assert db.execute("SELECT value FROM values_for_test").fetchone()[0] == "old"

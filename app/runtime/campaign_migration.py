@@ -10,6 +10,7 @@ from app.domain.continuity.store import ContinuityStore
 from app.domain.current_state.store import CurrentStateStore
 from app.domain.director.log_store import RecentDirectorLogStore
 from app.domain.director_event.store import DirectorEventStore
+from app.domain.director_event.creative_brief_store import EventCreativeDeckStore
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.store import SceneSummaryStore
@@ -38,6 +39,7 @@ def _build_campaign_schema(conn: sqlite3.Connection) -> None:
     ConfirmedHistoryStore(conn)
     NPCProfileStore(conn)
     DirectorEventStore(conn)
+    EventCreativeDeckStore(conn)
     DirectorNPCStore(conn)
     RecentDirectorLogStore(conn)
     WorldSettingStore(conn)

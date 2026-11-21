@@ -75,10 +75,17 @@ def test_pending_opening_is_restored_after_runtime_restart(tmp_path):
 
 
 def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
+    from app.domain.director_event.creative_brief import EventCreativeDecks, draw_event_creative_brief
+    from app.runtime.uow import CampaignUnitOfWork
+
     data_dir = tmp_path / "save"
     data_dir.mkdir()
     game_db = data_dir / "campaign.db"
     _write_value(game_db, "before")
+    # Restore must also accept a save from before Event decks existed.
+    with closing(sqlite3.connect(game_db)) as conn, conn:
+        conn.execute("DROP TABLE event_creative_decks")
+        conn.execute("DELETE FROM schema_versions WHERE component='event_creative_decks'")
     settings = data_dir / "settings.json"
     core = data_dir / "core_memory.json"
     core.write_text('{"items":[]}', encoding="utf-8")
@@ -94,6 +101,10 @@ def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
     )
     history.begin_confirmation("turn-1", write_db=True, scene_text=None)
     _write_value(game_db, "after")
+    _, remaining = draw_event_creative_brief(EventCreativeDecks())
+    with CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir), write=True) as stores:
+        with stores.transaction():
+            stores.event_creative_decks.save(remaining)
     with history._campaign_connect() as campaign:
         campaign.execute("BEGIN")
         history.record_confirmation(campaign, "turn-1", scene_text="场景正文")
@@ -106,6 +117,8 @@ def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
     assert undo_result["turn_id"] == "turn-1"
     assert undo_result["restored_pending_turn_ids"] == ["turn-1"]
     assert _read_value(game_db) == "before"
+    with CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir)) as stores:
+        assert stores.event_creative_decks.load() == EventCreativeDecks()
     assert core.read_text() == '{"items":[]}'
     assert settings.read_text() == '{"dice_display":"off"}'
     assert notes.read_bytes() == b"owner data"
@@ -114,6 +127,8 @@ def test_undo_and_redo_restore_confirmed_turn_snapshot(tmp_path):
 
     assert history.redo()["turn_id"] == "turn-1"
     assert _read_value(game_db) == "after"
+    with CampaignUnitOfWork(CampaignPaths.from_data_dir(data_dir)) as stores:
+        assert stores.event_creative_decks.load() == remaining
     assert core.read_text() == '{"items":[{"id":"after"}]}'
     assert settings.read_text() == '{"dice_display":"off"}'
     assert notes.read_bytes() == b"owner data"

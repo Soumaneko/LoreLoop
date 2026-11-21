@@ -287,6 +287,8 @@ def test_wave_b_failure_rolls_back_wave_a_settings_and_all_writes(
         assert store.list_all() == []
     with stores.director_event as store:
         assert store.list_all() == []
+    from app.domain.director_event.creative_brief import EventCreativeDecks
+    assert stores.event_creative_decks.load() == EventCreativeDecks()
 
 
 

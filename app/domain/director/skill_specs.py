@@ -383,14 +383,11 @@ _DIRECTOR_SKILL_SPECS: tuple[DirectorSkillSpec, ...] = (
     DirectorSkillSpec(
         name="create_event",
         description=(
-            "让第三方按自身目的行动，触及主角附近的人与目标，带来可回应的请求与机会；"
-            "玩家保有选择。"
-            "guidance 写清谁想做什么、对哪个对象采取什么行动、带来什么变化；"
-            "背景与因果由 Selector 结合 Setting 补全。"
-            "actors 至少一名真实演员：已有 NPC 用 source='existing' 填 npc_id，"
-            "新人物用 source='new'；组织名不能替代演员，禁止无人物事件。"
-            "setting_requirements 声明 1 个依托 Setting：命中时只能选 "
-            "event_creation_available=true 的 matched_setting_id，否则留空。"
+            "让第三方按自身目的行动，触及主角附近的人与目标，带来可回应的局势，保留玩家选择。"
+            "guidance 聚焦核心冲突的骨架，写清谁想做什么、采取什么行动及造成的变化，"
+            "无需铺陈 Setting 中的环境背景人物，具体细节留给下游创建模块补全。"
+            "actors 至少一名真实演员，组织名不能代替人物。依托 1 个 Setting，"
+            "matched_setting_id 仅选 event_creation_available=true 的已有项，否则留空。"
         ),
         phases=_CONFIRMATION,
         mutates=True,

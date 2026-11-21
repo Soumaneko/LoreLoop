@@ -10,6 +10,7 @@ from app.domain.core_memory.store import CoreMemoryStore
 from app.domain.current_state.store import CurrentStateStore
 from app.domain.director.log_store import RecentDirectorLogStore
 from app.domain.director_event.store import DirectorEventStore
+from app.domain.director_event.creative_brief_store import EventCreativeDeckStore
 from app.domain.director_npc.store import DirectorNPCStore
 from app.domain.npc_profile.store import NPCProfileStore
 from app.domain.scene_summary.store import SceneSummaryStore
@@ -73,6 +74,7 @@ class CampaignUnitOfWork:
             "confirmed_history",
             "npc_profile",
             "director_event",
+            "event_creative_decks",
             "director_npc",
             "director_log",
             "world_setting",
@@ -112,6 +114,10 @@ class CampaignUnitOfWork:
     @property
     def director_event(self) -> DirectorEventStore:
         return self._store("director_event", DirectorEventStore)  # type: ignore[arg-type]
+
+    @property
+    def event_creative_decks(self) -> EventCreativeDeckStore:
+        return self._store("event_creative_decks", EventCreativeDeckStore)  # type: ignore[arg-type]
 
     @property
     def director_npc(self) -> DirectorNPCStore:

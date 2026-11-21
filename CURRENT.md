@@ -1394,6 +1394,27 @@ design-first, NPC-second, final-composition creation flow. Without `create_event
 requests execute independently as before. This conversion is internal to the
 executor; neither Agent needs a different decision protocol.
 
+When `create_event` is available, the confirmation Director receives one draw
+each for Event cause, opposing party, and tone in that skill's description.
+Each dimension has an independent shuffled deck (6, 6, and 5 cards), persisted
+in `campaign.db` as `event_creative_decks`. Nonempty decks are consumed in order;
+an empty deck is shuffled only when the next creation attempt needs a card.
+Saved decks store stable card IDs. On load, original Chinese labels are mapped
+to those IDs and retired cards are skipped, preserving the surviving order.
+The next successful Event creation saves the updated decks in ID form.
+Removing the last card leaves that deck empty. Older saves without this optional
+table or its state start with empty decks; operation-level store bootstrap adds
+the table without requiring a save-format migration.
+
+The executor draws on an in-memory copy before the Director decides. Only a
+successful Event creation stages the remaining decks in the Director mutation
+plan, and the whole confirmation commits them with the Event. No creation,
+discarded creation, or failed confirmation consumes saved cards. Model retries
+reuse the same skill description and draw. A new attempt starts from the saved
+decks, so it may reshuffle an empty deck; it does not reshuffle a nonempty deck.
+Undo/Redo and save export/import preserve the deck order through the existing
+database snapshots. NPC CreativeBrief sampling is unchanged.
+
 Confirmation then executes Director requests in two waves. Wave A resolves the one
 Setting requirement attached to each dependent request. A valid turn-start
 `matched_setting_id` is reused; `null`, an unknown ID, or a kind mismatch causes

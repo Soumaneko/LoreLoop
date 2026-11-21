@@ -128,7 +128,7 @@ class DirectorSkillSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=80)
-    description: str = Field(min_length=1, max_length=300)
+    description: str = Field(min_length=1, max_length=400)
     phases: list[DirectorPhase] = Field(min_length=1)
     mutates: bool
     input_schema: dict[str, Any]

@@ -50,6 +50,11 @@ from app.domain.director_event.selector import (
     event_eligible_setting_ids,
 )
 from app.domain.director_event.design import DirectorEventDesigner
+from app.domain.director_event.creative_brief import (
+    EventCreativeDecks,
+    draw_event_creative_brief,
+    event_creative_brief_description,
+)
 from app.domain.director_event.design_actors import DirectorEventActorCreator
 from app.domain.director_event.composition import DirectorEventComposer
 from app.domain.director_event.updater import DirectorEventFactUpdater
@@ -130,6 +135,7 @@ class DirectorConfirmationExecutor:
         self._setting_store: Any = stores.world_setting
         self._settings_by_id: dict[str, WorldSetting] = {}
         self._event_new_actors: list[NewEventActorInput] = []
+        self._event_creative_decks: EventCreativeDecks | None = None
 
     def run(self) -> tuple[object, DirectorSkillExecutionBatch]:
         self.last_warnings = []
@@ -248,10 +254,16 @@ class DirectorConfirmationExecutor:
             handler=self._create_npc,
         )
         if not active_events:
+            brief, self._event_creative_decks = draw_event_creative_brief(
+                self._stores.event_creative_decks.load(),
+            )
+            description = next(spec.description for spec in get_director_skill_specs()
+                               if spec.name == "create_event")
             register_skill(
                 self._service,
                 "create_event",
                 handler=self._create_event,
+                description=description + event_creative_brief_description(brief),
                 arguments_validator=lambda args: _require_event_setting_available(
                     args,
                     known_setting_ids=set(self._settings_by_id),
@@ -400,6 +412,7 @@ class DirectorConfirmationExecutor:
         with self._plan_lock:
             self._plan.events.append(event)
             self._plan.npc_drafts.extend(drafts)
+            self._plan.event_creative_decks = self._event_creative_decks
         return {
             "event_id": event.event_id,
             "new_npc_ids": new_npc_ids,

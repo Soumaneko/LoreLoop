@@ -300,6 +300,17 @@ def test_confirmation_agent_creates_settings_then_runs_wave_b_for_all_requests(
     assert "沈栖舟: 负责货路交涉。" in npc_input["director_guidance"]
     assert gateway.event_selection_output["conception"] in npc_input["batch_recent_creations_json"]
     assert "寒川驿" in selector_input["settings_json"]
+    from app.domain.director_event.creative_brief import EVENT_CREATIVE_POOLS
+
+    description = next(
+        spec["description"] for spec in json.loads(gateway.input_data[0]["available_skills_json"])
+        if spec["name"] == "create_event"
+    )
+    remaining = stores.event_creative_decks.load().model_dump()
+    for key, pool in EVENT_CREATIVE_POOLS.items():
+        drawn = set(pool) - set(remaining[key])
+        assert len(drawn) == 1
+        assert pool[drawn.pop()] in description
 
 
 def test_skill_guidance_flows_through_to_execution_handler():

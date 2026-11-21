@@ -49,7 +49,11 @@ def test_apply_rejects_unknown_event_binding(tmp_path):
         apply_director_mutations(DirectorPendingMutationPlan(actor_bindings=[binding]), stores)
 
 
-def test_apply_rolls_back_after_first_write_fails(tmp_path, monkeypatch):
+def test_apply_rolls_back_after_deck_write_fails(tmp_path, monkeypatch):
+    from app.domain.director_event.creative_brief import EventCreativeDecks, draw_event_creative_brief
+    from app.domain.director_event.creative_brief_store import EventCreativeDeckStore
+    from app.tests.factories.director import make_intrude_event
+
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
     setting = WorldSetting(
         kind="location",
@@ -72,31 +76,36 @@ def test_apply_rolls_back_after_first_write_fails(tmp_path, monkeypatch):
         appearance="灰袍",
         created_turn=2,
     )
-    # Simulate failure while persisting the second item (NPC draft), after the
-    # first item (setting) has already been written.
-    from app.domain.director_npc.store import DirectorNPCStore
-    original_save_draft = DirectorNPCStore.save
+    event = make_intrude_event()
+    _, remaining = draw_event_creative_brief(EventCreativeDecks())
+    original_save = EventCreativeDeckStore.save
 
-    def fail_draft_save(self, draft):
-        raise RuntimeError("injected draft write failure")
+    def fail_deck_save(self, decks):
+        original_save(self, decks)
+        raise RuntimeError("injected deck write failure")
 
-    monkeypatch.setattr(DirectorNPCStore, "save", fail_draft_save)
+    monkeypatch.setattr(EventCreativeDeckStore, "save", fail_deck_save)
 
-    with pytest.raises(RuntimeError, match="injected draft write failure"):
+    plan = DirectorPendingMutationPlan(
+        settings=[setting], npc_drafts=[draft], events=[event],
+        event_creative_decks=remaining,
+    )
+    with pytest.raises(RuntimeError, match="injected deck write failure"):
         with stores.transaction():
-            apply_director_mutations(
-                DirectorPendingMutationPlan(
-                    settings=[setting],
-                    npc_drafts=[draft],
-                ),
-                stores,
-            )
+            apply_director_mutations(plan, stores)
 
     # Outer transaction rollback: the first write (setting) must be undone.
     with stores.world_setting as s:
         assert s.get_by_id(setting.setting_id) is None
     with stores.director_npc as d:
         assert d.get_by_id(draft.draft_id) is None
+    assert stores.director_event.get_by_id(event.event_id) is None
+    assert stores.event_creative_decks.load() == EventCreativeDecks()
+    monkeypatch.setattr(EventCreativeDeckStore, "save", original_save)
+    with stores.transaction():
+        apply_director_mutations(plan, stores)
+    assert stores.event_creative_decks.load() == remaining
+    assert stores.director_event.get_by_id(event.event_id) is not None
 
 
 def test_invalid_binding_leaves_setting_unwritten(tmp_path):

@@ -54,6 +54,9 @@ def test_confirmation_agent_observation_prepends_current_turn_gen_entry(
     )
     assert log_payload[0] == gen_entry
     assert log_payload[1]["turn_index"] == 1
+    assert stores.event_creative_decks.load().model_dump() == {
+        "cause": [], "opposition": [], "tone": [],
+    }
 
 
 def test_confirmation_agent_rejects_npc_creation_without_setting(tmp_path):
