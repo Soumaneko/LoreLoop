@@ -1559,7 +1559,8 @@ World Clock with `deadline_clock` after maintenance, using the persisted stage:
   disengagement closes with the reviewer-derived final impact. Ordinary conflict
   resolution is handled by the Director before this call. The expiry contract
   has no `action`, `resolved_reason`, or keep-tracking choice, and receives no
-  optional Director guidance.
+  optional Director guidance. Its scene summaries include the current turn's
+  summary alongside the recent saved summaries.
 
 Being nearby or mentioning an Event is not continued intervention. Expiry only
 runs for pre-existing active Events, uses world time rather than turn counts,

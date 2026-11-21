@@ -608,7 +608,7 @@ def director_event_expiry_node(state: ConfirmationState) -> ConfirmationState:
                     scene_facts=scene_facts_json,
                     current_state=state["updated_state"],
                     core_memory=state["core_memory"],
-                    scene_summaries=state.get("recent_summaries", []),
+                    scene_summaries=state.get("selection_summaries", []),
                     turn_index=turn_index,
                     store=event_store,
                     reviewer=DirectorEventExpiryReviewer(_gateway_for(state)),

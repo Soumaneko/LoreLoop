@@ -64,6 +64,7 @@ def test_hidden_event_deadline_resolves_after_contact_review(tmp_path, monkeypat
 def test_engaged_event_deadline_resolves(tmp_path, monkeypatch, player_still_involved, final_world_impact, reason):
     import json
     from types import SimpleNamespace
+    from app.domain.scene_summary.schemas import SceneSummary
     from app.domain.scene_writer import SceneWriterResult
     from app.graph.confirmation_graph import build_confirmation_director_graph
     stores = CampaignUnitOfWork(CampaignPaths.from_data_dir(tmp_path))
@@ -85,11 +86,14 @@ def test_engaged_event_deadline_resolves(tmp_path, monkeypatch, player_still_inv
     monkeypatch.setattr(gateway, "run", record)
 
     state = make_review_node_state(stores, gateway, world_clock=WorldClock(day=2, phase="清晨"))
+    turn_summary = SceneSummary(content="玩家回到码头查看沉船账本。", level=1, turn_start=3, turn_end=3)
+    state["selection_summaries"] = [*state["recent_summaries"], turn_summary]
     state["pipeline_input"].scene_result = SceneWriterResult(scene_text="玩家在码头行动。")
     state.update(pending=SimpleNamespace(director_stage=None), effective_scene_text="玩家在码头行动。")
     result = build_confirmation_director_graph().invoke(state)
     assert not result.get("node_errors")
     assert [call["task"] for call in calls] == ["director_agent_decide_confirmation", "director_event_expire"]
+    assert json.loads(calls[-1]["input_data"]["scene_summaries_json"])[-1]["content"] == turn_summary.content
     expiry_schema = json.loads(calls[-1]["input_data"]["output_schema_json"])
     result_fields = expiry_schema["$defs"]["DirectorEventExpiryResult"]["properties"]
     assert set(result_fields) == {"event_id", "reason", "player_still_involved", "final_world_impact"}
