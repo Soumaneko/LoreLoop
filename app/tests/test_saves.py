@@ -33,7 +33,7 @@ def test_bundled_opening_is_complete_and_each_creation_is_isolated(
 
     runtime = campaign_runtime
     manager = SaveManager(tmp_path / "preset#%20saves", runtime=runtime)
-    original_id = manager.active_id
+    original_id = manager.create("现有旅程").save_id
     preset, _ = opening_preset(preset_id)
     source = json.loads((Path(__file__).resolve().parents[2] / "scripts" / "opening_presets"
                          / f"{preset_id}.json").read_text(encoding="utf-8"))
@@ -90,10 +90,10 @@ def test_bundled_opening_is_complete_and_each_creation_is_isolated(
 def test_preset_creation_rejection_preserves_existing_saves(campaign_runtime, tmp_path, monkeypatch):
     from app.runtime import saves
     manager = SaveManager(tmp_path / "saves", runtime=campaign_runtime)
+    existing = manager.create("现有旅程")
     before = manager.payload()
     with pytest.raises(ClientValidationError, match="预设不存在"):
         manager.create("", preset_id="../fantasy")
-    existing = manager.list()[0]
     with pytest.raises(ClientValidationError, match="已存在"):
         manager.create(existing.name, preset_id="fantasy")
     def reject_archive(*_args):
@@ -214,7 +214,7 @@ def test_save_manager_creates_lists_switches_and_isolates_state(tmp_path):
             assert store.load().player.name == "Alpha"
 
         assert manager.active_file.read_text(encoding="utf-8") == alpha.save_id
-        assert [save.name for save in manager.list()] == ["alpha", "beta", "默认存档"]
+        assert [save.name for save in manager.list()] == ["alpha", "beta"]
         assert manager.payload()["active"] == alpha.save_id
     finally:
         runtime.close()
@@ -228,6 +228,7 @@ def test_create_inactive_save_has_both_databases(tmp_path):
     )
     manager = SaveManager(root, runtime=runtime)
     try:
+        manager.create("active")
         save = manager.create("inactive", activate=False)
         assert save.active is False
         paths = CampaignPaths.from_data_dir(root / save.save_id)
@@ -250,8 +251,8 @@ def test_switch_preserves_and_restores_pending_turn_variants(tmp_path):
     )
     manager = SaveManager(root, runtime=runtime)
     try:
+        original_id = manager.create("original").save_id
         other = manager.create("other", activate=False)
-        original_id = manager.active_id
         state_before = make_default_state()
         runtime.pending_turns.add(_pending_turn(
             turn_id="turn-v1",
@@ -303,7 +304,7 @@ def test_create_and_activate_preserves_pending_opening_in_source_save(tmp_path):
     )
     manager = SaveManager(root, runtime=runtime)
     try:
-        original_id = manager.active_id
+        original_id = manager.create("original").save_id
         config = InitConfig(
             world_name="泰瑞大陆",
             world_style="奇幻",
@@ -353,6 +354,7 @@ def test_create_does_not_leave_directory_when_operation_is_active(tmp_path):
         max_workers=1,
     )
     manager = SaveManager(root, runtime=runtime)
+    manager.create("active")
     started = threading.Event()
     release = threading.Event()
 
@@ -366,7 +368,7 @@ def test_create_does_not_leave_directory_when_operation_is_active(tmp_path):
         assert started.wait(timeout=2)
         with pytest.raises(ClientValidationError, match="active operation"):
             manager.create("should-not-exist")
-        assert not (root / "should-not-exist").exists()
+        assert [save.name for save in manager.list()] == ["active"]
         release.set()
         runtime.operations.wait(operation_id, timeout=2)
     finally:
@@ -388,11 +390,35 @@ def test_save_manager_ignores_hidden_directories_and_symlinks(tmp_path):
         outside.mkdir()
         (root / "linked").symlink_to(outside, target_is_directory=True)
 
-        assert [save.name for save in manager.list()] == ["默认存档"]
+        assert manager.payload() == {"active": None, "saves": []}
         with pytest.raises(ValueError, match="canonical UUID"):
             manager.switch("linked")
     finally:
         runtime.close()
+
+
+def test_first_import_rolls_back_if_activation_fails_and_can_be_retried(
+    campaign_runtime, tmp_path, monkeypatch,
+):
+    from app.runtime.opening_presets import opening_preset
+
+    manager = SaveManager(tmp_path / "empty-library", runtime=campaign_runtime)
+    _, archive = opening_preset("fantasy")
+
+    def cannot_open(*_args):
+        raise OSError("campaign could not open")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(campaign_runtime, "reconfigure", cannot_open)
+        with pytest.raises(OSError, match="campaign could not open"):
+            manager.import_from(archive, "导入旅程")
+
+    assert manager.payload() == {"active": None, "saves": []}
+    assert not list(manager.root.iterdir())
+    imported = manager.import_from(archive, "导入旅程")
+    assert imported.active
+    assert manager.payload() == {"active": imported.save_id, "saves": [imported.as_dict()]}
+    assert campaign_runtime.initialization.load().phase == "opening_pending"
 
 
 def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path, monkeypatch):
@@ -404,7 +430,7 @@ def test_rename_copy_export_import_and_delete_are_identity_safe(tmp_path, monkey
     )
     manager = SaveManager(root, runtime=runtime)
     try:
-        original = manager.rename(manager.active_id, "原始旅程")
+        original = manager.create("原始旅程")
         original_dir = root / original.save_id
         with runtime.stores.current_state as store:
             store.save(
@@ -480,7 +506,7 @@ def test_delete_active_switches_to_explicit_replacement(tmp_path):
     )
     manager = SaveManager(root, runtime=runtime)
     try:
-        first = manager.rename(manager.active_id, "第一份")
+        first = manager.create("第一份")
         second = manager.create("第二份", activate=False)
 
         manager.delete(

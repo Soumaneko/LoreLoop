@@ -463,6 +463,7 @@ def save_model_config(
             new_set = new_set.set_active(config.config_id)
         if activate or is_active:
             runtime = runtime or _campaign_runtime()
+        if (activate or is_active) and runtime is not None:
             factory = SharedGatewayFactory(config=config.gateway_config())
             runtime.replace_gateway_factory(
                 factory,
@@ -489,11 +490,14 @@ def activate_model_config(
             raise ValueError("此服务缺少 API Key，请先编辑并填写")
         new_set = config_set.set_active(config_id)
         runtime = runtime or _campaign_runtime()
-        factory = SharedGatewayFactory(config=service.gateway_config())
-        runtime.replace_gateway_factory(
-            factory,
-            persist=lambda: store.save_set(new_set),
-        )
+        if runtime is None:
+            store.save_set(new_set)
+        else:
+            factory = SharedGatewayFactory(config=service.gateway_config())
+            runtime.replace_gateway_factory(
+                factory,
+                persist=lambda: store.save_set(new_set),
+            )
     return list_model_configs(store=store)
 
 
@@ -631,6 +635,6 @@ def _best_effort_chmod(path: Path, mode: int) -> None:
 
 
 def _campaign_runtime():
-    from .session import get_campaign_runtime
+    from .session import get_active_campaign_runtime
 
-    return get_campaign_runtime()
+    return get_active_campaign_runtime()

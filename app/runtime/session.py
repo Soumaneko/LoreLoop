@@ -32,7 +32,7 @@ from app.runtime.services import RuntimeServices
 from app.runtime.uow import CampaignUnitOfWork
 from app.runtime.jobs import MaintenanceJobCoordinator
 from app.runtime.operations import OperationManager
-from app.runtime.model_config import effective_gateway_factory
+from app.runtime.model_config import _CONFIG_WRITE_LOCK, effective_gateway_factory
 from app.core.client_error import ClientValidationError
 from app.core.diagnostics import NullDiagnosticLogger
 from app.runtime.serialization import model_data
@@ -247,6 +247,8 @@ class CampaignRuntime:
     ) -> None:
         self.campaign_id = campaign_id
         self.paths = paths or default_campaign_paths()
+        if self.paths is None:
+            raise ClientValidationError("请先创建或导入旅程。")
         if stores is None:
             opened = open_campaign_resources(self.paths)
             self.history = opened.history
@@ -885,14 +887,28 @@ class CampaignRuntime:
 
 
 _default_runtime: CampaignRuntime | None = None
-_runtime_lock = threading.Lock()
+
+
+def current_campaign_runtime() -> CampaignRuntime | None:
+    """Return the runtime only if it has already been opened."""
+    return _default_runtime
+
+
+def get_active_campaign_runtime() -> CampaignRuntime | None:
+    global _default_runtime
+    if _default_runtime is None:
+        # Serialize runtime startup with model activation so it loads the saved configuration.
+        with _CONFIG_WRITE_LOCK:
+            if _default_runtime is None:
+                paths = default_campaign_paths()
+                if paths is None:
+                    return None
+                _default_runtime = CampaignRuntime(paths.data_dir.name, paths=paths)
+    return _default_runtime
 
 
 def get_campaign_runtime() -> CampaignRuntime:
-    global _default_runtime
-    if _default_runtime is None:
-        with _runtime_lock:
-            if _default_runtime is None:
-                paths = default_campaign_paths()
-                _default_runtime = CampaignRuntime(paths.data_dir.name, paths=paths)
-    return _default_runtime
+    runtime = get_active_campaign_runtime()
+    if runtime is None:
+        raise ClientValidationError("请先创建或导入旅程。")
+    return runtime

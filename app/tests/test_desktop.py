@@ -167,7 +167,9 @@ def test_crash_log_redacts_environment_secrets(tmp_path, monkeypatch):
     assert "[REDACTED]" in content
 
 
-def test_run_desktop_uses_random_loopback_server_and_cleans_up(tmp_path):
+def test_run_desktop_uses_random_loopback_server_and_cleans_up(tmp_path, monkeypatch):
+    from app.runtime import session
+
     paths = resolve_application_paths(
         {"LORELOOP_DATA_DIR": str(tmp_path / "user-data")}
     )
@@ -184,6 +186,7 @@ def test_run_desktop_uses_random_loopback_server_and_cleans_up(tmp_path):
         @staticmethod
         def start(**options):
             calls["start"] = options
+            calls["runtime"] = FakeRuntime()
 
     class FakeRuntime:
         def begin_shutdown(self):
@@ -193,11 +196,11 @@ def test_run_desktop_uses_random_loopback_server_and_cleans_up(tmp_path):
         def close(self):
             calls["closed"] = True
 
+    monkeypatch.setattr(session, "current_campaign_runtime", lambda: calls.get("runtime"))
     run_desktop(
         paths,
         webview_module=FakeWebview,
         handler_factory=lambda token: make_player_handler(token),
-        runtime_factory=FakeRuntime,
     )
 
     title, url, window_options = calls["window"]

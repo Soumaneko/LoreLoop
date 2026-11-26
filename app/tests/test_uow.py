@@ -125,7 +125,7 @@ def test_bare_uow_is_closed_after_context_exit(tmp_path):
 
 
 def test_runtime_reconfigure_and_close_release_old_uow(tmp_path):
-    runtime = CampaignRuntime()
+    runtime = CampaignRuntime(paths=_paths(tmp_path / "old"))
     old = runtime.stores
     old.current_state
     assert not old.is_closed

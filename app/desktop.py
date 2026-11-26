@@ -39,12 +39,9 @@ def run_desktop(
         from app.player_server import make_player_handler
 
         handler_factory = make_player_handler
-    if runtime_factory is None:
-        from app.runtime.session import get_campaign_runtime
+    from app.runtime.session import current_campaign_runtime
 
-        runtime_factory = get_campaign_runtime
-
-    runtime = runtime_factory()
+    runtime = runtime_factory() if runtime_factory is not None else None
     server = None
     server_thread = None
     try:
@@ -78,8 +75,11 @@ def run_desktop(
     finally:
         active_failure = sys.exc_info()[0] is not None
         cleanup_errors = []
+        if runtime_factory is None:
+            runtime = current_campaign_runtime()
         try:
-            runtime.begin_shutdown()
+            if runtime is not None:
+                runtime.begin_shutdown()
         except BaseException as error:
             cleanup_errors.append(error)
         if server is not None and server_thread is not None:
@@ -91,7 +91,10 @@ def run_desktop(
             except BaseException as error:
                 cleanup_errors.append(error)
         try:
-            runtime.close()
+            if runtime_factory is None:
+                runtime = current_campaign_runtime()
+            if runtime is not None:
+                runtime.close()
         except BaseException as error:
             cleanup_errors.append(error)
         if cleanup_errors and not active_failure:

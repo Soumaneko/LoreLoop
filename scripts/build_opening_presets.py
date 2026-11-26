@@ -61,8 +61,8 @@ def main():
 
         destination = ROOT / "app" / "opening_presets"
         destination.mkdir(exist_ok=True)
-        runtime = get_campaign_runtime()
-        manager = SaveManager(runtime=runtime)
+        manager = SaveManager()
+        runtime = None
         catalog = {
             item["id"]: item for item in json.loads(
                 (destination / "catalog.json").read_text(encoding="utf-8")
@@ -75,6 +75,7 @@ def main():
                 public = content["public"]
                 assert public["id"] == preset_id
                 save = manager.create(public["name"])
+                runtime = get_campaign_runtime()
                 runtime.replace_gateway_factory(lambda: AuthoredOpening(content))
                 list(initialization_stream(content))
                 pending = runtime.pending_openings.values()[0]
@@ -93,7 +94,8 @@ def main():
                 catalog[preset_id] = public
                 print(f"Built {preset_id}: {public['name']} (opening_pending)")
         finally:
-            runtime.close()
+            if runtime is not None:
+                runtime.close()
         (destination / "catalog.json").write_text(
             json.dumps(list(catalog.values()), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )

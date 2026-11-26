@@ -889,7 +889,11 @@ class PlayerHandler(BaseHTTPRequestHandler):
             )
         except (TypeError, ValueError):
             after_sequence = 0
-        runtime = get_campaign_runtime()
+        try:
+            runtime = get_campaign_runtime()
+        except ClientValidationError as error:
+            self._write_operation_start_error(error, player=player)
+            return
         operation = runtime.operations.get(operation_id)
         if operation is None or (
             player

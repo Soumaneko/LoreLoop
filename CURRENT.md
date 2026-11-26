@@ -1921,7 +1921,10 @@ refresh block navigation. Hidden reading surfaces and archive entrances are iner
 drawers/popovers close before switching, and focus returns to a visible control.
 
 Cold startup lands in the Journey Library, including when no model service is
-configured. `journey_library.js` owns the single save list and create, import,
+configured. An empty library returns an empty list and no active save. Model
+configuration and the preset catalog are available before any campaign runtime
+opens. The first successful create or import activates its save.
+`journey_library.js` owns the single save list and create, import,
 rename, copy, export and delete interactions through the existing save APIs.
 The current journey has a prominent filled region; other journeys use compact
 rows, and secondary management actions live in each journey's menu. Metadata
@@ -1944,8 +1947,8 @@ name input is retained while browsing genres and opening excerpts. A separate
 Start Journey action allows a blank name (using an available preset title),
 while custom creation still requires a name. `/api/player/saves/create` accepts
 an optional fixed `preset_id`: it imports a complete independent copy with a new
-save ID, initially inactive, then the normal entry flow activates it and opens
-reading at its unconfirmed opening. An explicit duplicate name is rejected;
+save ID. With an existing active save, the copy starts inactive. The normal
+entry flow opens reading at its unconfirmed opening. An explicit duplicate name is rejected;
 automatic preset names receive a numeric suffix. Listing does not create a save
 or call a model. Model configuration and committed-write/read-failure retries
 continue the same saved copy. Import naming does not display presets. Presets

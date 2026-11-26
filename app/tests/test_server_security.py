@@ -173,6 +173,7 @@ def test_save_import_reports_real_reason_without_installing_save(campaign_runtim
 
     manager = saves.SaveManager(tmp_path / "saves", runtime=get_campaign_runtime())
     monkeypatch.setattr(saves, "_get_save_manager", lambda: manager)
+    manager.create("现有旅程")
     before = {item.save_id for item in manager.list()}
     body = io.BytesIO()
     if kind == "not_zip":
@@ -251,7 +252,11 @@ def test_opening_preset_routes_return_public_catalog_and_created_identity(
     from app.runtime import saves
     manager = saves.SaveManager(tmp_path / "saves", runtime=campaign_runtime)
     monkeypatch.setattr(saves, "_get_save_manager", lambda: manager)
-    original = manager.active_id
+    handler = _make_handler(handler_class=PlayerHandler, path="/api/player/saves")
+    handler.do_GET()
+    assert handler.recorded_status == 200
+    assert _body(handler)["data"] == {"active": None, "saves": []}
+    assert not list(manager.root.iterdir())
     handler = _make_handler(handler_class=PlayerHandler, path="/api/player/opening-presets")
     handler.do_GET()
     assert handler.recorded_status == 200
@@ -266,7 +271,7 @@ def test_opening_preset_routes_return_public_catalog_and_created_identity(
     handler.do_POST()
     assert handler.recorded_status == 200
     result = _body(handler)["data"]
-    assert result["active"] == original
-    assert result["save"]["save_id"] != original
+    assert result["active"] == result["save"]["save_id"]
+    assert result["saves"] == [result["save"]]
     assert result["save"]["name"] == catalog[0]["name"]
     assert "root" not in result["save"]

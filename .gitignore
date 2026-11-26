@@ -23,5 +23,6 @@ tools/
 /debug_server.py
 .bench/
 .scratch
+.plan
 .saves
 /benchmarks/narrative_quality/local/

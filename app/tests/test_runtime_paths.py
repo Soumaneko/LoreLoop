@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -74,7 +74,7 @@ def test_resolve_falls_back_to_most_recent_when_active_is_stale(tmp_path):
     active.write_text(str(uuid4()), encoding="utf-8")
 
     assert resolve_active_save_id(root=root, active_file=active) == newer
-    assert active.read_text(encoding="utf-8").strip() == newer
+    assert active.read_text(encoding="utf-8").strip() != newer
 
 
 def test_resolve_ignores_staging_directories(tmp_path):
@@ -88,27 +88,13 @@ def test_resolve_ignores_staging_directories(tmp_path):
     assert resolved == save_id
 
 
-def test_resolve_creates_new_uuid_when_no_saves_exist(tmp_path):
+def test_resolve_leaves_empty_save_directory_unchanged(tmp_path):
     root = tmp_path / "saves"
     root.mkdir()
     active = root / "active_save"
 
-    save_id = resolve_active_save_id(root=root, active_file=active)
-    assert str(UUID(save_id)) == save_id
-    assert (root / save_id).is_dir()
-    assert active.read_text(encoding="utf-8").strip() == save_id
-
-
-def test_resolve_recent_policy_raises_when_no_saves_exist(tmp_path):
-    root = tmp_path / "saves"
-    root.mkdir()
-
-    with pytest.raises(RuntimeError, match="No local save is available"):
-        resolve_active_save_id(
-            root=root,
-            active_file=root / "active_save",
-            policy="recent",
-        )
+    assert resolve_active_save_id(root=root, active_file=active) is None
+    assert not list(root.iterdir())
 
 
 def test_save_manager_and_resolution_agree_on_stale_active(tmp_path):
@@ -127,6 +113,7 @@ def test_save_manager_and_resolution_agree_on_stale_active(tmp_path):
     manager = SaveManager(root=root, runtime=runtime)
     try:
         assert manager.active_id == newer
+        assert manager.active_file.read_text(encoding="utf-8") == newer
         assert (
             resolve_active_save_id(
                 root=root,
@@ -142,6 +129,12 @@ def test_concurrent_first_runtime_access_yields_single_instance(tmp_path):
     code = f"""import sys, threading
 sys.path.insert(0, {str(REPO_ROOT)!r})
 from app.runtime.session import get_campaign_runtime
+from app.runtime.paths import SAVES_DIR
+from app.runtime.save_manifest import SaveManifestRepository
+save_id = "12345678-1234-1234-1234-123456789abc"
+path = SAVES_DIR / save_id
+path.mkdir(parents=True)
+SaveManifestRepository(path).create("existing", save_id=save_id)
 results = []
 barrier = threading.Barrier(16)
 def worker():
@@ -175,9 +168,8 @@ from app.runtime.app_paths import APP_PATHS
 from app.runtime.paths import resolve_active_save_id
 custom = Path(sys.argv[1])
 custom.mkdir(parents=True, exist_ok=True)
-save_id = resolve_active_save_id(root=custom, active_file=custom / "active_save")
-assert (custom / save_id).is_dir()
-assert (custom / "active_save").read_text(encoding="utf-8").strip() == save_id
+assert resolve_active_save_id(root=custom, active_file=custom / "active_save") is None
+assert not list(custom.iterdir())
 assert not (APP_PATHS.data_root / "saves").exists(), "global saves dir created"
 assert not (APP_PATHS.data_root / "config").exists(), "global config dir created"
 print("ok")

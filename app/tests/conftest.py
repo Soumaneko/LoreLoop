@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ["LORELOOP_DATA_DIR"] = tempfile.mkdtemp(prefix="loreloop-tests-")
 
 from app.runtime.paths import CampaignPaths
-from app.runtime.session import get_campaign_runtime
+from app.runtime import session
 from app.runtime.services import RuntimeServices
 
 
@@ -61,15 +61,13 @@ def configure_runtime_services(monkeypatch, campaign_runtime):
 
 
 @pytest.fixture
-def campaign_runtime(tmp_path):
+def campaign_runtime(tmp_path, monkeypatch):
     """Keep the shared default runtime scoped to this test's campaign."""
-    runtime = get_campaign_runtime()
-    runtime.pending_turns.clear(discard=False)
-    runtime.pending_openings.clear(discard=False)
-    runtime.reconfigure(
+    runtime = session.CampaignRuntime(
         "pytest",
-        CampaignPaths.from_data_dir(tmp_path / "campaign-runtime"),
+        paths=CampaignPaths.from_data_dir(tmp_path / "campaign-runtime"),
     )
+    monkeypatch.setattr(session, "_default_runtime", runtime)
     try:
         yield runtime
     finally:

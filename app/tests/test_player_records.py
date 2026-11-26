@@ -211,7 +211,7 @@ def test_update_setting_rejects_hidden_facts_in_general_and_unknown_fields(campa
     with pytest.raises(ValueError, match="Setting not found"):
         update_player_record("setting", "missing", {"name": "无"})
 
-def test_update_player_record_validates_kind_id_and_payload():
+def test_update_player_record_validates_kind_id_and_payload(campaign_runtime):
     with pytest.raises(ValueError, match="unknown record kind"):
         update_player_record("unknown", "id", {})
     with pytest.raises(ValueError, match="record_id"):

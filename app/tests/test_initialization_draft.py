@@ -100,7 +100,7 @@ def test_unreadable_draft_envelope_is_preserved(campaign_runtime):
     assert path.read_bytes() == original
 
 
-def test_stale_config_version_draft_is_rejected_on_save():
+def test_stale_config_version_draft_is_rejected_on_save(campaign_runtime):
     stale = {**_draft(), "config": {"version": 3, "world_name": "艾兰"}}
     with pytest.raises(ValueError, match="version"):
         save_initialization_draft(stale)

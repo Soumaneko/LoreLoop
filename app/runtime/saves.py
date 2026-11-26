@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 import threading
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from .paths import (
 from .campaign_migration import ensure_campaign_database
 from .turn_history import ensure_control_database
 from .initialization import InitializationStore
+from .model_config import _CONFIG_WRITE_LOCK
 from .save_archive import (
     ArchiveInspection,
     create_consistent_snapshot,
@@ -60,7 +62,7 @@ class SaveManager:
         active_file: str | Path | None = None,
     ) -> None:
         self.root = Path(root)
-        self.runtime = runtime or get_campaign_runtime()
+        self._runtime = runtime
         if active_file is not None:
             self.active_file = Path(active_file)
         elif self.root == SAVES_DIR:
@@ -70,36 +72,27 @@ class SaveManager:
         self._lock = threading.RLock()
         self.root.mkdir(parents=True, exist_ok=True)
         self._cleanup_staging()
-        if not self._save_directories():
-            runtime_path = self.runtime.paths.data_dir
-            if (
-                runtime_path.parent.resolve() == self.root.resolve()
-                and self._is_save_id(runtime_path.name)
-                and runtime_path.is_dir()
-            ):
-                SaveManifestRepository(runtime_path).create(
-                    "默认存档",
-                    save_id=runtime_path.name,
-                )
-            else:
-                self._create_directory("默认存档")
-        active_id = self._configured_active_id()
-        if (
-            active_id != self.runtime.campaign_id
-            or self.runtime.paths.data_dir != self._save_path(active_id)
-        ):
-            self.runtime.pending_turns.clear(discard=False)
-            self.runtime.pending_openings.clear(discard=False)
-            self.runtime.reconfigure(
-                active_id,
-                CampaignPaths.from_data_dir(self._save_path(active_id)),
-            )
-        self.runtime.configure_save_touch(self.touch_active)
-        self._write_active_id(active_id)
+        self.active_id: str | None = None
+        active_id = resolve_active_save_id(root=self.root, active_file=self.active_file)
+        if active_id is not None:
+            self._bind_runtime(active_id, CampaignPaths.from_data_dir(self._require_save(active_id)))
+            self._write_active_id(active_id)
 
-    @property
-    def active_id(self) -> str:
-        return self.runtime.campaign_id
+    def _require_runtime(self) -> CampaignRuntime:
+        if self._runtime is None:
+            raise ClientValidationError("请先创建或导入旅程。")
+        return self._runtime
+
+    @contextmanager
+    def _save_task(self):
+        with self._lock:
+            if self.active_id is None:
+                # Keep model activation and runtime startup outside the first save install.
+                with _CONFIG_WRITE_LOCK:
+                    yield
+                return
+        with self._require_runtime().save_task(), self._lock:
+            yield
 
     def list(self) -> list[SaveInfo]:
         with self._lock:
@@ -124,12 +117,12 @@ class SaveManager:
                 archive, name if name.strip() else preset["name"],
                 unique_name=not name.strip(),
             )
-        with self.runtime.save_task(), self._lock:
+        with self._save_task():
             clean_name = self._available_name(name)
             path = self._create_directory(clean_name)
             save_id = path.name
             try:
-                if activate:
+                if activate or self.active_id is None:
                     self._switch_locked(save_id)
                 return self._describe(path)
             except BaseException:
@@ -138,7 +131,7 @@ class SaveManager:
                 raise
 
     def switch(self, save_id: str) -> SaveInfo:
-        with self.runtime.save_task(), self._lock:
+        with self._save_task():
             return self._switch_locked(self._validate_save_id(save_id))
 
     def rename(self, save_id: str, name: str) -> SaveInfo:
@@ -151,7 +144,7 @@ class SaveManager:
 
     def copy(self, save_id: str, name: str = "") -> SaveInfo:
         source_id = self._validate_save_id(save_id)
-        with self.runtime._pause_connections(reject_active_operations=True), self._lock:
+        with self._require_runtime()._pause_connections(reject_active_operations=True), self._lock:
             source = self._require_save(source_id)
             if str(name).strip():
                 clean_name = self._available_name(name)
@@ -190,7 +183,7 @@ class SaveManager:
         replacement_save_id: str | None = None,
     ) -> dict[str, Any]:
         clean_id = self._validate_save_id(save_id)
-        with self.runtime.save_task(), self._lock:
+        with self._save_task():
             path = self._require_save(clean_id)
             manifest = SaveManifestRepository(path).load()
             if confirmation_name != manifest.display_name:
@@ -198,7 +191,7 @@ class SaveManager:
             if len(self._save_directories()) <= 1:
                 raise ClientValidationError("最后一个存档无法删除。")
             if clean_id == self.active_id:
-                if self.runtime.has_pending_content():
+                if self._require_runtime().has_pending_content():
                     raise ClientValidationError(
                         "当前有未处理内容：请先【确认采用】或【删除】草稿，再删除此存档。"
                     )
@@ -226,7 +219,7 @@ class SaveManager:
     def export_to(self, save_id: str, destination: str | Path) -> ArchiveInspection:
         clean_id = self._validate_save_id(save_id)
         destination_path = Path(destination)
-        with self.runtime._pause_connections(reject_active_operations=True), self._lock:
+        with self._require_runtime()._pause_connections(reject_active_operations=True), self._lock:
             source = self._require_save(clean_id)
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination_path.with_name(
@@ -240,7 +233,7 @@ class SaveManager:
                 temporary.unlink(missing_ok=True)
 
     def import_from(self, archive: str | Path, name: str, *, unique_name: bool = False) -> SaveInfo:
-        with self.runtime.save_task(), self._lock:
+        with self._save_task():
             if unique_name:
                 base_name = validate_save_name(name)
                 names = {item.name.casefold() for item in self.list()}
@@ -260,27 +253,53 @@ class SaveManager:
             except BaseException:
                 shutil.rmtree(staging, ignore_errors=True)
                 raise
+            if self.active_id is None:
+                try:
+                    self._activate(save_id, CampaignPaths.from_data_dir(destination))
+                except BaseException:
+                    shutil.rmtree(destination, ignore_errors=True)
+                    raise
             return self._describe(destination)
 
     def touch_active(self) -> None:
         with self._lock:
-            SaveManifestRepository(self._require_save(self.active_id)).touch()
+            if self.active_id is not None:
+                SaveManifestRepository(self._require_save(self.active_id)).touch()
 
     def payload(self) -> dict[str, Any]:
-        return {
-            "active": self.active_id,
-            "saves": [save.as_dict() for save in self.list()],
-        }
+        with self._lock:
+            return {
+                "active": self.active_id,
+                "saves": [save.as_dict() for save in self.list()],
+            }
 
     def _switch_locked(self, save_id: str) -> SaveInfo:
         path = self._require_save(save_id)
-        if save_id != self.runtime.campaign_id:
-            self.runtime.reconfigure(
-                save_id,
-                CampaignPaths.from_data_dir(path),
-            )
-        self._write_active_id(save_id)
+        self._activate(save_id, CampaignPaths.from_data_dir(path))
         return self._describe(path)
+
+    def _activate(self, save_id: str, paths: CampaignPaths) -> None:
+        if self.active_id is None:
+            self._write_active_id(save_id)
+            try:
+                self._bind_runtime(save_id, paths)
+            except BaseException:
+                self.active_file.unlink(missing_ok=True)
+                raise
+        else:
+            self._bind_runtime(save_id, paths)
+            self._write_active_id(save_id)
+
+    def _bind_runtime(self, save_id: str, paths: CampaignPaths) -> None:
+        if self._runtime is None:
+            self._runtime = (
+                get_campaign_runtime() if self.root == SAVES_DIR
+                else CampaignRuntime(save_id, paths=paths)
+            )
+        if self._runtime.campaign_id != save_id or self._runtime.paths != paths:
+            self._runtime.reconfigure(save_id, paths)
+        self._runtime.configure_save_touch(self.touch_active)
+        self.active_id = save_id
 
     def _create_directory(self, display_name: str) -> Path:
         save_id = str(uuid4())
@@ -318,7 +337,7 @@ class SaveManager:
         return SaveInfo(
             save_id=manifest.save_id,
             name=manifest.display_name,
-            active=manifest.save_id == self.runtime.campaign_id,
+            active=manifest.save_id == self.active_id,
             initialized=(
                 initialization is not None
                 and initialization.phase == "completed"
@@ -358,13 +377,6 @@ class SaveManager:
             raise ValueError("Save path must be inside the saves directory")
         return path
 
-    def _configured_active_id(self) -> str:
-        return resolve_active_save_id(
-            root=self.root,
-            active_file=self.active_file,
-            policy="recent",
-        )
-
     def _cleanup_staging(self) -> None:
         for path in self.root.iterdir():
             if path.is_dir() and any(
@@ -375,8 +387,11 @@ class SaveManager:
 
     def _write_active_id(self, save_id: str) -> None:
         temporary = self.active_file.with_name(f"{self.active_file.name}.tmp")
-        temporary.write_text(save_id, encoding="utf-8")
-        os.replace(temporary, self.active_file)
+        try:
+            temporary.write_text(save_id, encoding="utf-8")
+            os.replace(temporary, self.active_file)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @staticmethod
     def _is_save_id(value: str) -> bool:

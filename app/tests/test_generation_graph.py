@@ -56,7 +56,7 @@ def test_generation_captures_experience_mode_snapshot_at_generation(campaign_run
     assert captured["state"]["experience_mode"] == "player"
 
 
-def test_generate_turn_stream_forwards_state_events(monkeypatch):
+def test_generate_turn_stream_forwards_state_events(campaign_runtime, monkeypatch):
     class _FakeGraph:
         def stream(self, _state, stream_mode):
             assert stream_mode == ["updates", "custom"]

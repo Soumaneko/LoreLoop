@@ -392,6 +392,22 @@ def test_save_new_without_activate_does_not_swap(tmp_path):
     assert runtime.persisted_when_swapped is False
 
 
+def test_model_service_can_be_enabled_with_no_campaign(tmp_path, monkeypatch):
+    from app.runtime import session
+
+    monkeypatch.setattr(session, "_default_runtime", None)
+    monkeypatch.setattr(session, "default_campaign_paths", lambda: None)
+    store = ModelConfigStore(tmp_path / "model_config.json")
+    created = save_model_config(_service_payload(activate=True), store=store)
+    assert created["active_config_id"] == created["services"][0]["config_id"]
+
+    updated = save_model_config(_service_payload(model="another-model"), store=store)
+    next_id = updated["services"][1]["config_id"]
+    activate_model_config(next_id, store=store)
+    assert store.load_effective().model == "another-model"
+    assert session.current_campaign_runtime() is None
+
+
 def test_edit_active_service_hot_swaps(tmp_path):
     store = ModelConfigStore(tmp_path / "model_config.json")
     a = store.resolve_draft(_service_payload(api_key="k1", name="A"), _empty_set())
