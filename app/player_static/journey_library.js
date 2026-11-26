@@ -8,7 +8,29 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
   const dialog = $("renameJourneyDialog");
   let activeId = null, loaded = false, busy = false, error = "", task = null;
   let menuSave = null, renameSave = null, entryRetry = null, listRetry = false;
-  let openingPresets = null;
+  let openingPresets = null, presetsPromise = null, presetsError = "", welcomeAnimated = false;
+  let initialSplashDone = false;
+  let splashPlayed = false;
+  const LOOP_PATH = "M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z";
+  function prefersReducedMotion() {
+    return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  }
+  async function waitInitialSplash() {
+    if (initialSplashDone) return;
+    initialSplashDone = true;
+    const splash = content.querySelector(".library-splash");
+    if (!splash || prefersReducedMotion()) return;
+    splashPlayed = true;
+    if (typeof splash.getAnimations !== "function") return;
+    const running = splash.getAnimations({ subtree: true }).filter(anim => anim.playState === "running");
+    if (!running.length) return;
+    await Promise.allSettled(running.map(anim => anim.finished));
+  }
+  function clearWelcomeAnimation() {
+    for (const el of content.querySelectorAll(".brand-lockup-animate, .welcome-animate")) {
+      el.classList.remove("brand-lockup-animate", "welcome-animate");
+    }
+  }
   const node = (tag, className = "", text) => {
     const el = document.createElement(tag); el.className = className;
     if (text !== undefined) el.textContent = text;
@@ -44,8 +66,10 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     setBusy(true); error = "";
     try {
       const payload = await request("/api/player/saves");
+      await waitInitialSplash();
       listRetry = false; update(payload); return payload;
     } catch (cause) {
+      initialSplashDone = true;
       listRetry = true; reportError(cause); error = cause.message || "暂时无法读取旅程，请重试。";
       render(); throw cause;
     } finally { setBusy(false); }
@@ -88,19 +112,45 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     for (const x of [5, 12, 19]) { const dot = document.createElementNS(svg.namespaceURI, "circle"); dot.setAttribute("cx", x); dot.setAttribute("cy", "12"); dot.setAttribute("r", "1"); svg.append(dot); }
     el.append(svg); return el;
   }
+  function brandLockup({ caption = "", quote = "", animate = false, titleText = "续章" } = {}) {
+    const wrap = node("div", `brand-lockup${animate ? " brand-lockup-animate" : ""}`);
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "brand-lockup-svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(svg.namespaceURI, "path");
+    path.setAttribute("class", "brand-lockup-path"); path.setAttribute("d", LOOP_PATH);
+    svg.append(path);
+    const title = node("h1", "brand-lockup-title", titleText);
+    title.id = "journeyLibraryTitle"; title.tabIndex = -1;
+    wrap.append(svg, title, node("div", "brand-lockup-sub", "LORELOOP"));
+    if (quote) wrap.append(node("p", "brand-lockup-quote", quote));
+    if (caption) wrap.append(node("p", "library-splash-caption", caption));
+    return wrap;
+  }
   function render() {
     if (task) return;
-    closeMenu(); content.replaceChildren();
-    const heading = node("div", "journey-heading"); const title = node("h1", "", "旅程库");
-    title.id = "journeyLibraryTitle"; title.tabIndex = -1; heading.append(title);
-    const actions = node("div", "journey-heading-actions");
-    for (const [label, action] of [["新建旅程", () => openTask("new")], ["导入存档", () => $("importSaveInput").click()]]) {
-      const el = button(label, label === "新建旅程" ? "journey-secondary" : "journey-quiet", action);
-      el.dataset.libraryWrite = ""; el.id = label === "新建旅程" ? "newJourneyBtn" : "importSaveBtn"; actions.append(el);
-      el.prepend(icon(label === "新建旅程" ? "M12 5v14M5 12h14" : "M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"));
+    const isEmpty = loaded && !state.saves.length;
+    if (isEmpty && $("welcomePresetPanel") && !error && !listRetry && !entryRetry && $("journeyLibraryError")?.hidden) {
+      refreshControls();
+      return;
     }
-    if (loaded && state.saves.length) heading.append(actions);
-    content.append(heading);
+    closeMenu(); content.replaceChildren();
+    const actions = node("div", "journey-heading-actions");
+    for (const [label, action] of [[isEmpty ? "自行创建世界" : "新建旅程", () => openTask("new")], ["导入存档", () => $("importSaveInput").click()]]) {
+      const el = button(label, label === "导入存档" ? "journey-quiet" : "journey-secondary", action);
+      el.dataset.libraryWrite = ""; el.id = label === "导入存档" ? "importSaveBtn" : "newJourneyBtn"; actions.append(el);
+      el.prepend(icon(label === "导入存档" ? "M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" : "M12 5v14M5 12h14"));
+    }
+    if (!loaded && !listRetry && !error) {
+      const splash = node("section", "library-splash"); splash.setAttribute("aria-busy", "true");
+      splash.append(brandLockup({ caption: "正在读取旅程……", animate: true }));
+      content.append(splash); refreshControls(); return;
+    }
+    if (!isEmpty) {
+      const heading = node("div", "journey-heading"); const title = node("h1", "", "旅程库");
+      title.id = "journeyLibraryTitle"; title.tabIndex = -1; heading.append(title);
+      if (loaded && state.saves.length) heading.append(actions);
+      content.append(heading);
+    }
     const alert = node("div", "journey-notice"); alert.id = "journeyLibraryError"; alert.setAttribute("role", "alert"); alert.hidden = !error;
     alert.textContent = error; content.append(alert);
     if (listRetry || entryRetry) {
@@ -109,13 +159,33 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
       }); retry.id = "retryJourneysBtn"; content.append(retry);
     }
     if (!loaded) { content.append(node("p", "journey-help", listRetry ? "旅程暂时无法显示，已保存的内容不会丢失。" : "正在读取旅程……")); refreshControls(); return; }
-    const noModel = node("section", "journey-notice"); noModel.id = "journeyModelNotice";
-    noModel.append(node("p", "", "尚未配置模型服务。你仍可管理存档，开始游玩前请先完成配置。"), button("配置模型服务", "journey-quiet", () => onModels()));
-    content.append(noModel);
-    if (!state.saves.length) {
-      const empty = node("section", "journey-empty"); empty.append(node("h2", "", "开始你的第一段旅程"), node("p", "", "创建世界与主角，或导入已有存档，接着上次的故事。"), actions);
-      content.append(empty);
+    if (isEmpty) {
+      const animate = !welcomeAnimated; welcomeAnimated = true;
+      const animateLockup = animate && !splashPlayed;
+      const masthead = node("section", "welcome-masthead");
+      masthead.append(brandLockup({ quote: "这里没有预设答案。描述你想做的事，世界会记住已经发生的一切。", animate: animateLockup }));
+      if (animate && !animateLockup) masthead.querySelector(".brand-lockup-quote")?.classList.add("welcome-animate");
+      content.append(masthead);
+      const noModel = node("section", `journey-notice${animate ? " welcome-animate" : ""}`); noModel.id = "journeyModelNotice";
+      noModel.append(node("p", "", "尚未配置模型服务。你仍可先试读预设开场，开始游玩前请先完成配置。"), button("配置模型服务", "journey-quiet", () => onModels()));
+      content.append(noModel);
+      const panelSection = node("section", `welcome-panel${animate ? " welcome-animate" : ""}`); panelSection.setAttribute("aria-label", "从预设世界开始");
+      const panelHead = node("div", "welcome-panel-head");
+      panelHead.append(node("h2", "", "从预设开始"), node("small", "", "选一个准备好的故事开局"));
+      const presetHost = node("div"); presetHost.id = "welcomePresetPanel";
+      panelSection.append(panelHead, presetHost); content.append(panelSection);
+      if (openingPresets) renderPresets(presetHost, openingPresets[0], { isWelcome: true });
+      else if (presetsPromise) presetHost.append(node("p", "journey-help", "正在读取故事开局……"));
+      else if (presetsError) renderPresetError(presetHost, { isWelcome: true });
+      else loadPresets({ isWelcome: true });
+      const altBar = node("div", `welcome-alt-bar${animate ? " welcome-animate" : ""}`);
+      altBar.append(node("span", "", "或者从空白世界起笔，导入已有存档"), actions);
+      content.append(altBar);
     } else {
+      welcomeAnimated = false;
+      const noModel = node("section", "journey-notice"); noModel.id = "journeyModelNotice";
+      noModel.append(node("p", "", "尚未配置模型服务。你仍可管理存档，开始游玩前请先完成配置。"), button("配置模型服务", "journey-quiet", () => onModels()));
+      content.append(noModel);
       const current = state.saves.find(save => save.save_id === activeId);
       if (current) {
         const featured = node("section", "journey-featured");
@@ -197,7 +267,13 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
         toggle.setAttribute("aria-expanded", String(expanded)); panel.hidden = !expanded;
         triangle.textContent = expanded ? "▼" : "▶";
         submit.className = expanded ? "journey-secondary" : "primary-action";
-        if (expanded && !openingPresets) await loadPresets();
+        if (expanded) {
+          if (openingPresets) {
+            if (!panel.querySelector(".journey-preset-layout")) renderPresets(panel, openingPresets[0]);
+          } else {
+            await loadPresets();
+          }
+        }
       });
       toggle.id = "journeyPresetToggle"; toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-controls", "journeyPresetPanel");
       const triangle = node("span", "journey-preset-triangle", "▶"); triangle.setAttribute("aria-hidden", "true");
@@ -213,39 +289,69 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     };
     input.focus(); refreshControls();
   }
-  async function loadPresets() {
-    if (busy || !task) return;
-    const current = task, panel = $("journeyPresetPanel");
-    panel.replaceChildren(node("p", "journey-help", "正在读取故事开局……"));
-    setBusy(true);
-    try {
-      const payload = await request("/api/player/opening-presets");
-      if (current !== task) return;
-      openingPresets = payload.presets;
-      renderPresets(panel, openingPresets[0]);
-    } catch (cause) {
-      reportError(cause);
-      if (current === task) {
-        const message = node("p", "journey-form-error", cause.message || "暂时无法读取故事开局，请重试。"); message.setAttribute("role", "alert");
-        panel.replaceChildren(message, button("重新读取", "journey-secondary", loadPresets));
-      }
-    } finally { setBusy(false); }
+  function activePresetTarget() {
+    if (task?.kind === "new") {
+      const panel = $("journeyPresetPanel");
+      return panel ? { panel, isWelcome: false } : null;
+    }
+    if (!task && loaded && !state.saves.length) {
+      const panel = $("welcomePresetPanel");
+      return panel ? { panel, isWelcome: true } : null;
+    }
+    return null;
+  }
+  function syncPresetPanel(target = activePresetTarget()) {
+    if (!target?.panel) return;
+    if (openingPresets) renderPresets(target.panel, openingPresets[0], { isWelcome: target.isWelcome });
+    else if (presetsPromise) target.panel.replaceChildren(node("p", "journey-help", "正在读取故事开局……"));
+    else if (presetsError) renderPresetError(target.panel, { isWelcome: target.isWelcome });
+  }
+  function renderPresetError(panel, { isWelcome = false } = {}) {
+    const message = node("p", "journey-form-error", presetsError || "暂时无法读取故事开局，请重试。");
+    message.setAttribute("role", "alert");
+    panel.replaceChildren(message, button("重新读取", "journey-secondary", () => loadPresets({ isWelcome })));
+  }
+  async function loadPresets({ isWelcome = false } = {}) {
+    if (!isWelcome && (busy || !task)) return;
+    if (openingPresets) { syncPresetPanel(); return; }
+    if (!presetsPromise) {
+      presetsError = "";
+      presetsPromise = request("/api/player/opening-presets")
+        .then(payload => { openingPresets = payload.presets; })
+        .catch(cause => {
+          reportError(cause);
+          presetsError = cause.message || "暂时无法读取故事开局，请重试。";
+        })
+        .finally(() => {
+          presetsPromise = null;
+          syncPresetPanel();
+        });
+    }
+    syncPresetPanel();
+    if (!isWelcome) {
+      setBusy(true);
+      try { await presetsPromise; }
+      finally { setBusy(false); }
+    } else {
+      await presetsPromise;
+    }
   }
   function updatePresetName() {
     const note = $("journeyPresetName");
-    if (!note) return;
-    const name = $("journeyTaskName").value.trim();
+    const input = $("journeyTaskName");
+    if (!note || !input) return;
+    const name = input.value.trim();
     note.textContent = name ? `将以“${name}”创建旅程。开始后可阅读并确认开场。`
       : `留空名称将使用“${note.dataset.defaultName}”。开始后可阅读并确认开场。`;
   }
-  function renderPresets(panel, selected) {
+  function renderPresets(panel, selected, { isWelcome = false } = {}) {
     panel.replaceChildren();
     if (!selected) { panel.append(node("p", "journey-help", "目前没有可用的故事开局，你仍可自行创建。")); return; }
     const layout = node("div", "journey-preset-layout"), list = node("div", "journey-preset-list");
     list.setAttribute("role", "group"); list.setAttribute("aria-label", "选择故事开局");
     for (const preset of openingPresets) {
       const option = button("", "journey-preset-option", () => {
-        renderPresets(panel, preset); panel.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
+        renderPresets(panel, preset, { isWelcome }); panel.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
       });
       option.setAttribute("aria-pressed", String(preset.id === selected.id));
       option.append(node("span", "", preset.genre), node("strong", "", preset.name)); list.append(option);
@@ -258,13 +364,17 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     for (const paragraph of selected.opening.split(/\n\s*\n/)) opening.append(node("p", "", paragraph));
     detail.append(opening);
     const footer = node("div", "journey-preset-footer"), note = node("p"); note.id = "journeyPresetName"; note.dataset.defaultName = selected.name;
+    if (isWelcome) note.textContent = "开始后可直接阅读并确认开场，名称之后也可以修改。";
     const start = button("开始旅程", "primary-action", () => {
       if (entryRetry) return;
-      mutate(() => post("create", { name: $("journeyTaskName").value.trim(), preset_id: selected.id }), "旅程已创建", true);
+      const customName = isWelcome ? "" : ($("journeyTaskName")?.value.trim() || "");
+      mutate(() => post("create", { name: customName, preset_id: selected.id }), "旅程已创建", true);
     });
     start.id = "journeyPresetStart"; start.dataset.journeyCreate = "";
+    if (isWelcome) start.dataset.libraryWrite = "";
     footer.append(note, start); detail.append(footer); layout.append(list, detail); panel.append(layout);
-    updatePresetName(); refreshControls();
+    if (!isWelcome) updatePresetName();
+    refreshControls();
   }
   async function enterJourney(save) {
     if (busy) return;
@@ -350,7 +460,7 @@ export function createJourneyLibrary({ state, canManage, canContinue, onBusyChan
     };
     document.addEventListener("keydown", event => { if (event.key === "Escape" && !menu.hidden) { event.preventDefault(); const id = menuSave?.save_id; closeMenu(); document.querySelector(`[data-journey-menu="${id}"]`)?.focus(); } });
   }
-  return { bind, update, refresh, render, refreshControls, canLeave, home, closeMenu,
+  return { bind, update, refresh, render, refreshControls, canLeave, home, closeMenu, clearWelcomeAnimation,
     continueCurrent: () => {
       const current = state.saves.find(save => save.save_id === activeId);
       if (current) return enterJourney(current);

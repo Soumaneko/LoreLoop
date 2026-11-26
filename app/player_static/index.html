@@ -52,7 +52,18 @@
     </header>
 
     <main id="journeyLibraryPage" class="journey-library-page">
-      <div id="journeyLibraryContent"><h1 id="journeyLibraryTitle" tabindex="-1">旅程库</h1><p>正在读取旅程……</p></div>
+      <div id="journeyLibraryContent">
+        <section class="library-splash" aria-busy="true">
+          <div class="brand-lockup brand-lockup-animate">
+            <svg class="brand-lockup-svg" viewBox="0 0 24 24" aria-hidden="true">
+              <path class="brand-lockup-path" d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
+            </svg>
+            <h1 id="journeyLibraryTitle" class="brand-lockup-title" tabindex="-1">续章</h1>
+            <div class="brand-lockup-sub">LORELOOP</div>
+            <p class="library-splash-caption">正在读取旅程……</p>
+          </div>
+        </section>
+      </div>
       <div id="libraryNotices"></div>
     </main>
     <main id="modelPage" class="journey-library-page model-page" hidden inert>

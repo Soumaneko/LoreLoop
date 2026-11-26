@@ -2023,6 +2023,11 @@ async function loadAll({ scroll = false, resumeOperation = true, knownModelConfi
     renderSaves();
     return;
   }
+  if (!state.activeSave) {
+    setOperationMode("idle");
+    renderSaves();
+    return;
+  }
   ++navigationJumpSequence;
   cancelNavigationSettlement();
   pinnedNavigationKey = null;
@@ -2154,7 +2159,7 @@ async function bootstrap() {
   let saves;
   try { saves = await journeyLibrary.refresh(); }
   catch (_error) { setOperationMode(state.modelConfig.configured ? "error" : "needs_model"); return; }
-  if (state.modelConfig.configured) restorePlayerShell();
+  if (state.modelConfig.configured && saves.active) restorePlayerShell();
   await loadAll({ knownModelConfig: state.modelConfig, knownSaves: saves });
 }
 
@@ -2747,6 +2752,7 @@ const appNavigation = createAppNavigation({
   saveId: () => state.activeSave,
   beforeLeave: preparePageNavigation,
   onChange(previous) {
+    if (previous === "library") journeyLibrary.clearWelcomeAnimation();
     if (previous === "modelEditor") modelSettings.leaveEditor();
     if (["models", "modelEditor"].includes(previous) && !appNavigation.isModels()) { resumeJourney = null; resumeCreation = null; }
     ++navigationJumpSequence;
@@ -4275,12 +4281,16 @@ async function refreshGameView() {
   surfaces.forEach(element => { element.inert = true; });
   renderControls({ updateNavigation: false });
   try {
+    if (!state.activeSave) {
+      await loadAll();
+      showToast("旅程列表已更新");
+      return;
+    }
     if (!state.modelConfig?.configured) {
       state.modelConfig = await request("/api/player/model-config");
       if (!state.modelConfig.configured) {
         const saves = await request("/api/player/saves");
         journeyLibrary.update(saves);
-        if (!state.activeSave) state.activeSave = saves.active;
         showToast("旅程列表已更新");
         return;
       }
